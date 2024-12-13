@@ -25,7 +25,7 @@ import (
 // WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // ---------------------------------------------------------------------------------
-//      inter PCS conversions XYZ <-> CIE L* a* b*
+//      inter PCS conversions XYZ <. CIE L* a* b*
 /*
 
 
@@ -65,24 +65,24 @@ import (
 
 
 Interchange Space   Component     Actual Range        Encoded Range
-CIE XYZ             X             0 -> 1.99997        0x0000 -> 0xffff
-CIE XYZ             Y             0 -> 1.99997        0x0000 -> 0xffff
-CIE XYZ             Z             0 -> 1.99997        0x0000 -> 0xffff
+CIE XYZ             X             0 . 1.99997        0x0000 . 0xffff
+CIE XYZ             Y             0 . 1.99997        0x0000 . 0xffff
+CIE XYZ             Z             0 . 1.99997        0x0000 . 0xffff
 
 Version 2,3
 -----------
 
-CIELAB (16 bit)     L*            0 -> 100.0          0x0000 -> 0xff00
-CIELAB (16 bit)     a*            -128.0 -> +127.996  0x0000 -> 0x8000 -> 0xffff
-CIELAB (16 bit)     b*            -128.0 -> +127.996  0x0000 -> 0x8000 -> 0xffff
+CIELAB (16 bit)     L*            0 . 100.0          0x0000 . 0xff00
+CIELAB (16 bit)     a*            -128.0 . +127.996  0x0000 . 0x8000 . 0xffff
+CIELAB (16 bit)     b*            -128.0 . +127.996  0x0000 . 0x8000 . 0xffff
 
 
 Version 4
 ---------
 
-CIELAB (16 bit)     L*            0 -> 100.0          0x0000 -> 0xffff
-CIELAB (16 bit)     a*            -128.0 -> +127      0x0000 -> 0x8080 -> 0xffff
-CIELAB (16 bit)     b*            -128.0 -> +127      0x0000 -> 0x8080 -> 0xffff
+CIELAB (16 bit)     L*            0 . 100.0          0x0000 . 0xffff
+CIELAB (16 bit)     a*            -128.0 . +127      0x0000 . 0x8080 . 0xffff
+CIELAB (16 bit)     b*            -128.0 . +127      0x0000 . 0x8080 . 0xffff
 
 */
 
@@ -109,21 +109,21 @@ func xyY2XYZ(dest *cmsCIEXYZ, source *cmsCIExyY) {
    contribute to the perceived color directly.
 */
 // f(t) function used in Lab/XYZ conversions
-func f(t cmsFloat64Number) cmsFloat64Number {
-	limit := cmsFloat64Number(math.Pow(24.0/116.0, 3))
+func f(t float64) float64 {
+	limit := math.Pow(24.0/116.0, 3)
 	if t <= limit {
 		return (841.0/108.0)*t + (16.0 / 116.0)
 	}
-	return cmsFloat64Number(math.Cbrt(float64(t)))
+	return math.Cbrt(t)
 }
 
 // Inverse of f(t)
-func f_1(t cmsFloat64Number) cmsFloat64Number {
-	limit := cmsFloat64Number(24.0 / 116.0)
+func f_1(t float64) float64 {
+	limit := 24.0 / 116.0
 	if t <= limit {
 		return (108.0 / 841.0) * (t - (16.0 / 116.0))
 	}
-	return cmsFloat64Number(math.Pow(float64(t), 3))
+	return math.Pow(t, 3)
 }
 
 // Standard XYZ to Lab. it can handle negative XZY numbers in some cases
@@ -157,39 +157,39 @@ func cmsLab2XYZ(whitePoint *cmsCIEXYZ, xyz *cmsCIEXYZ, lab *cmsCIELab) {
 }
 
 // Helper functions to convert Lab values to float and back
-func L2float2(v cmsUInt16Number) cmsFloat64Number {
-	return cmsFloat64Number(v) / 652.800
+func L2float2(v uint16) float64 {
+	return float64(v) / 652.800
 }
 
-func ab2float2(v cmsUInt16Number) cmsFloat64Number {
-	return (cmsFloat64Number(v) / 256.0) - 128.0
+func ab2float2(v uint16) float64 {
+	return float64(v)/256.0 - 128.0
 }
 
 // Lab value to fixed-point encoding (Version 2)
-func L2Fix2(L cmsFloat64Number) cmsUInt16Number {
+func L2Fix2(L float64) uint16 {
 	return cmsQuickSaturateWord(L * 652.8)
 }
 
-func ab2Fix2(ab cmsFloat64Number) cmsUInt16Number {
+func ab2Fix2(ab float64) uint16 {
 	return cmsQuickSaturateWord((ab + 128.0) * 256.0)
 }
 
 // Lab value to float decoding (Version 4)
-func L2float4(v cmsUInt16Number) cmsFloat64Number {
-	return cmsFloat64Number(v) / 655.35
+func L2float4(v uint16) float64 {
+	return float64(v) / 655.35
 }
 
-func ab2float4(v cmsUInt16Number) cmsFloat64Number {
-	return (cmsFloat64Number(v) / 257.0) - 128.0
+func ab2float4(v uint16) float64 {
+	return (float64(v) / 257.0) - 128.0
 }
 
-func cmsLabEncoded2FloatV2(Lab *cmsCIELab, wLab [3]cmsUInt16Number) {
+func cmsLabEncoded2FloatV2(Lab *cmsCIELab, wLab [3]uint16) {
 	Lab.L = L2float2(wLab[0])
 	Lab.a = ab2float2(wLab[1])
 	Lab.b = ab2float2(wLab[2])
 }
 
-func cmsLabEncoded2Float(Lab *cmsCIELab, wLab [3]cmsUInt16Number) {
+func cmsLabEncoded2Float(Lab *cmsCIELab, wLab [3]uint16) {
 	Lab.L = L2float4(wLab[0])
 	Lab.a = ab2float4(wLab[1])
 	Lab.b = ab2float4(wLab[2])
@@ -198,8 +198,8 @@ func cmsLabEncoded2Float(Lab *cmsCIELab, wLab [3]cmsUInt16Number) {
 // Lab Encoding and Decoding Utilities
 
 // Clamp function for Lab L values (Version 2)
-func Clamp_L_doubleV2(L cmsFloat64Number) cmsFloat64Number {
-	LMax := (cmsFloat64Number(0xFFFF) * 100.0) / 0xFF00
+func Clamp_L_doubleV2(L float64) float64 {
+	LMax := (float64(0xFFFF) * 100.0) / 0xFF00
 	if L < 0 {
 		return 0
 	}
@@ -210,7 +210,7 @@ func Clamp_L_doubleV2(L cmsFloat64Number) cmsFloat64Number {
 }
 
 // Clamp function for Lab a/b values (Version 2)
-func Clamp_ab_doubleV2(ab cmsFloat64Number) cmsFloat64Number {
+func Clamp_ab_doubleV2(ab float64) float64 {
 	if ab < MIN_ENCODEABLE_ab2 {
 		return MIN_ENCODEABLE_ab2
 	}
@@ -220,7 +220,7 @@ func Clamp_ab_doubleV2(ab cmsFloat64Number) cmsFloat64Number {
 	return ab
 }
 
-func cmsFloat2LabEncodedV2(wLab [3]cmsUInt16Number, fLab *cmsCIELab) {
+func cmsFloat2LabEncodedV2(wLab [3]uint16, fLab *cmsCIELab) {
 	var Lab cmsCIELab
 
 	Lab.L = Clamp_L_doubleV2(fLab.L)
@@ -233,7 +233,7 @@ func cmsFloat2LabEncodedV2(wLab [3]cmsUInt16Number, fLab *cmsCIELab) {
 }
 
 // Lab encoding (Version 4)
-func Clamp_L_doubleV4(L cmsFloat64Number) cmsFloat64Number {
+func Clamp_L_doubleV4(L float64) float64 {
 	if L < 0 {
 		return 0
 	}
@@ -243,7 +243,7 @@ func Clamp_L_doubleV4(L cmsFloat64Number) cmsFloat64Number {
 	return L
 }
 
-func Clamp_ab_doubleV4(ab cmsFloat64Number) cmsFloat64Number {
+func Clamp_ab_doubleV4(ab float64) float64 {
 	if ab < MIN_ENCODEABLE_ab4 {
 		return MIN_ENCODEABLE_ab4
 	}
@@ -253,15 +253,15 @@ func Clamp_ab_doubleV4(ab cmsFloat64Number) cmsFloat64Number {
 	return ab
 }
 
-func L2Fix4(L cmsFloat64Number) cmsUInt16Number {
+func L2Fix4(L float64) uint16 {
 	return cmsQuickSaturateWord(L * 655.35)
 }
 
-func ab2Fix4(ab cmsFloat64Number) cmsUInt16Number {
+func ab2Fix4(ab float64) uint16 {
 	return cmsQuickSaturateWord((ab + 128.0) * 257.0)
 }
 
-func cmsFloat2LabEncoded(wLab [3]cmsUInt16Number, fLab *cmsCIELab) {
+func cmsFloat2LabEncoded(wLab [3]uint16, fLab *cmsCIELab) {
 	var Lab cmsCIELab
 
 	Lab.L = Clamp_L_doubleV4(fLab.L)
@@ -274,15 +274,15 @@ func cmsFloat2LabEncoded(wLab [3]cmsUInt16Number, fLab *cmsCIELab) {
 }
 
 // Utility Functions
-func RADIANS(deg cmsFloat64Number) cmsFloat64Number {
+func RADIANS(deg float64) float64 {
 	return (deg * math.Pi) / 180.0
 }
 
-func atan2deg(a, b cmsFloat64Number) cmsFloat64Number {
+func atan2deg(a, b float64) float64 {
 	if a == 0 && b == 0 {
 		return 0
 	}
-	h := cmsFloat64Number(math.Atan2(float64(a), float64(b)) * (180.0 / math.Pi))
+	h := math.Atan2(a, b) * (180.0 / math.Pi)
 	for h > 360.0 {
 		h -= 360.0
 	}
@@ -292,14 +292,14 @@ func atan2deg(a, b cmsFloat64Number) cmsFloat64Number {
 	return h
 }
 
-func Sqr(v cmsFloat64Number) cmsFloat64Number {
+func Sqr(v float64) float64 {
 	return v * v
 }
 
 // Lab to LCh Conversion
 func cmsLab2LCh(LCh *cmsCIELCh, Lab *cmsCIELab) {
 	LCh.L = Lab.L
-	LCh.C = cmsFloat64Number(math.Sqrt(float64(Sqr(Lab.a) + Sqr(Lab.b))))
+	LCh.C = math.Sqrt(Sqr(Lab.a) + Sqr(Lab.b))
 	LCh.h = atan2deg(Lab.b, Lab.a)
 }
 
@@ -307,16 +307,16 @@ func cmsLab2LCh(LCh *cmsCIELCh, Lab *cmsCIELab) {
 func cmsLCh2Lab(Lab *cmsCIELab, LCh *cmsCIELCh) {
 	hRadians := RADIANS(LCh.h)
 	Lab.L = LCh.L
-	Lab.a = LCh.C * cmsFloat64Number(math.Cos(float64(hRadians)))
-	Lab.b = LCh.C * cmsFloat64Number(math.Sin(float64(hRadians)))
+	Lab.a = LCh.C * math.Cos(hRadians)
+	Lab.b = LCh.C * math.Sin(hRadians)
 }
 
 // XYZ Encoding and Decoding
-func XYZ2Fix(d cmsFloat64Number) cmsUInt16Number {
+func XYZ2Fix(d float64) uint16 {
 	return cmsQuickSaturateWord(d * 32768.0)
 }
 
-func cmsFloat2XYZEncoded(XYZ [3]cmsUInt16Number, fXYZ *cmsCIEXYZ) {
+func cmsFloat2XYZEncoded(XYZ [3]uint16, fXYZ *cmsCIEXYZ) {
 	var xyz cmsCIEXYZ
 	xyz.X, xyz.Y, xyz.Z = fXYZ.X, fXYZ.Y, fXYZ.Z
 
@@ -324,20 +324,20 @@ func cmsFloat2XYZEncoded(XYZ [3]cmsUInt16Number, fXYZ *cmsCIEXYZ) {
 	if xyz.Y <= 0 {
 		xyz.X, xyz.Y, xyz.Z = 0, 0, 0
 	}
-	xyz.X = cmsFloat64Number(math.Min(math.Max(0, float64(xyz.X)), MAX_ENCODEABLE_XYZ))
-	xyz.Y = cmsFloat64Number(math.Min(math.Max(0, float64(xyz.Y)), MAX_ENCODEABLE_XYZ))
-	xyz.Z = cmsFloat64Number(math.Min(math.Max(0, float64(xyz.Z)), MAX_ENCODEABLE_XYZ))
+	xyz.X = math.Min(math.Max(0, xyz.X), MAX_ENCODEABLE_XYZ)
+	xyz.Y = math.Min(math.Max(0, xyz.Y), MAX_ENCODEABLE_XYZ)
+	xyz.Z = math.Min(math.Max(0, xyz.Z), MAX_ENCODEABLE_XYZ)
 
 	XYZ[0] = XYZ2Fix(xyz.X)
 	XYZ[1] = XYZ2Fix(xyz.Y)
 	XYZ[2] = XYZ2Fix(xyz.Z)
 }
 
-func XYZ2Float(v cmsUInt16Number) cmsFloat64Number {
-	return cmsFloat64Number(v) / 32768.0
+func XYZ2Float(v uint16) float64 {
+	return float64(v) / 32768.0
 }
 
-func cmsXYZEncoded2Float(fXYZ *cmsCIEXYZ, XYZ [3]cmsUInt16Number) {
+func cmsXYZEncoded2Float(fXYZ *cmsCIEXYZ, XYZ [3]uint16) {
 	fXYZ.X = XYZ2Float(XYZ[0])
 	fXYZ.Y = XYZ2Float(XYZ[1])
 	fXYZ.Z = XYZ2Float(XYZ[2])
@@ -346,38 +346,97 @@ func cmsXYZEncoded2Float(fXYZ *cmsCIEXYZ, XYZ [3]cmsUInt16Number) {
 // Delta-E Calculations
 
 // Standard Delta-E
-func cmsDeltaE(Lab1, Lab2 *cmsCIELab) cmsFloat64Number {
+func cmsDeltaE(Lab1, Lab2 *cmsCIELab) float64 {
 	dL := Lab1.L - Lab2.L
 	da := Lab1.a - Lab2.a
 	db := Lab1.b - Lab2.b
-	return cmsFloat64Number(math.Sqrt(float64(Sqr(dL) + Sqr(da) + Sqr(db))))
+	return math.Sqrt(Sqr(dL) + Sqr(da) + Sqr(db))
 }
 
 // CIE94 Delta-E
-func cmsCIE94DeltaE(Lab1, Lab2 *cmsCIELab) cmsFloat64Number {
+func cmsCIE94DeltaE(Lab1, Lab2 *cmsCIELab) float64 {
 	var LCh1, LCh2 cmsCIELCh
 
-	dL := cmsFloat64Number(math.Abs(float64(Lab1.L - Lab2.L)))
-	dC := cmsFloat64Number(math.Abs(float64(LCh1.C - LCh2.C)))
+	dL := math.Abs(Lab1.L - Lab2.L)
+	dC := math.Abs(LCh1.C - LCh2.C)
 	cmsLab2LCh(&LCh1, Lab1)
 	cmsLab2LCh(&LCh2, Lab2)
 	dE := cmsDeltaE(Lab1, Lab2)
 
 	dhsq := Sqr(dE) - Sqr(dL) - Sqr(dC)
-	var dh cmsFloat64Number
+	var dh float64
 	if dhsq > 0 {
-		dh = cmsFloat64Number(math.Sqrt(float64(dhsq)))
+		dh = math.Sqrt(dhsq)
 	}
 
-	c12 := math.Sqrt(float64(LCh1.C * LCh2.C))
-	sc := cmsFloat64Number(1.0 + (0.048 * c12))
-	sh := cmsFloat64Number(1.0 + (0.014 * c12))
+	c12 := math.Sqrt(LCh1.C * LCh2.C)
+	sc := 1.0 + (0.048 * c12)
+	sh := 1.0 + (0.014 * c12)
 
-	return cmsFloat64Number(math.Sqrt(float64(Sqr(dL) + Sqr(dC)/Sqr(sc) + Sqr(dh)/Sqr(sh))))
+	return math.Sqrt(Sqr(dL) + Sqr(dC)/Sqr(sc) + Sqr(dh)/Sqr(sh))
 }
 
-// CMC Delta-E
-func CMCdeltaE(Lab1, Lab2 *cmsCIELab, l, c cmsFloat64Number) cmsFloat64Number {
+// Auxiliary
+func ComputeLBFD(Lab *cmsCIELab) float64 {
+	var yt float64
+
+	if Lab.L > 7.996969 {
+		yt = (Sqr((Lab.L+16)/116) * ((Lab.L + 16) / 116)) * 100
+	} else {
+		yt = 100 * (Lab.L / 903.3)
+	}
+	return 54.6*(math.Log10E*math.Log(yt+1.5)) - 9.6
+}
+
+// bfd - gets BFD(1:1) difference between Lab1, Lab2
+func cmsBFDdeltaE(Lab1 *cmsCIELab, Lab2 *cmsCIELab) float64 {
+	var lbfd1, lbfd2, AveC, Aveh, dE, deltaL, deltaC, deltah, dc, t, g, dh, rh, rc, rt, bfd float64
+	var LCh1, LCh2 cmsCIELCh
+
+	lbfd1 = ComputeLBFD(Lab1)
+	lbfd2 = ComputeLBFD(Lab2)
+	deltaL = lbfd2 - lbfd1
+
+	cmsLab2LCh(&LCh1, Lab1)
+	cmsLab2LCh(&LCh2, Lab2)
+
+	deltaC = LCh2.C - LCh1.C
+	AveC = (LCh1.C + LCh2.C) / 2
+	Aveh = (LCh1.h + LCh2.h) / 2
+
+	dE = cmsDeltaE(Lab1, Lab2)
+
+	if Sqr(dE) > (Sqr(Lab2.L-Lab1.L) + Sqr(deltaC)) {
+		deltah = math.Sqrt(Sqr(dE) - Sqr(Lab2.L-Lab1.L) - Sqr(deltaC))
+	} else {
+		deltah = 0
+	}
+
+	dc = 0.035*AveC/(1+0.00365*AveC) + 0.521
+	g = math.Sqrt(Sqr(Sqr(AveC)) / (Sqr(Sqr(AveC)) + 14000))
+	t = 0.627 + (0.055*math.Cos((Aveh-254)/(180/math.Pi)) -
+		0.040*math.Cos((2*Aveh-136)/(180/math.Pi)) +
+		0.070*math.Cos((3*Aveh-31)/(180/math.Pi)) +
+		0.049*math.Cos((4*Aveh+114)/(180/math.Pi)) -
+		0.015*math.Cos((5*Aveh-103)/(180/math.Pi)))
+
+	dh = dc * (g*t + 1 - g)
+	rh = -0.260*math.Cos((Aveh-308)/(180/math.Pi)) -
+		0.379*math.Cos((2*Aveh-160)/(180/math.Pi)) -
+		0.636*math.Cos((3*Aveh+254)/(180/math.Pi)) +
+		0.226*math.Cos((4*Aveh+140)/(180/math.Pi)) -
+		0.194*math.Cos((5*Aveh+280)/(180/math.Pi))
+
+	rc = math.Sqrt((AveC * AveC * AveC * AveC * AveC * AveC) / ((AveC * AveC * AveC * AveC * AveC * AveC) + 70000000))
+	rt = rh * rc
+
+	bfd = math.Sqrt(Sqr(deltaL) + Sqr(deltaC/dc) + Sqr(deltah/dh) + (rt * (deltaC / dc) * (deltah / dh)))
+
+	return bfd
+}
+
+// cmc - CMC(l:c) difference between Lab1, Lab2
+func cmsCMCdeltaE(Lab1, Lab2 *cmsCIELab, l, c float64) float64 {
 	if Lab1.L == 0 && Lab2.L == 0 {
 		return 0
 	}
@@ -392,48 +451,48 @@ func CMCdeltaE(Lab1, Lab2 *cmsCIELab, l, c cmsFloat64Number) cmsFloat64Number {
 
 	var dh float64
 	if Sqr(dE) > (Sqr(dL) + Sqr(dC)) {
-		dh = math.Sqrt(float64(Sqr(dE) - Sqr(dL) - Sqr(dC)))
+		dh = math.Sqrt(Sqr(dE) - Sqr(dL) - Sqr(dC))
 	} else {
 		dh = 0
 	}
 
-	var t cmsFloat64Number
+	var t float64
 	if LCh1.h > 164 && LCh1.h < 345 {
-		t = cmsFloat64Number(0.56 + math.Abs(0.2*math.Cos(float64(RADIANS(LCh1.h+168)))))
+		t = 0.56 + math.Abs(0.2*math.Cos(RADIANS(LCh1.h+168)))
 	} else {
-		t = cmsFloat64Number(0.36 + math.Abs(0.4*math.Cos(float64(RADIANS(LCh1.h+35)))))
+		t = 0.36 + math.Abs(0.4*math.Cos(RADIANS(LCh1.h+35)))
 	}
 
-	sc := cmsFloat64Number(0.0638*LCh1.C/(1+0.0131*LCh1.C) + 0.638)
-	sl := cmsFloat64Number(0.040975 * Lab1.L / (1 + 0.01765*Lab1.L))
+	sc := 0.0638*LCh1.C/(1+0.0131*LCh1.C) + 0.638
+	sl := 0.040975 * Lab1.L / (1 + 0.01765*Lab1.L)
 
 	if Lab1.L < 16 {
 		sl = 0.511
 	}
 
-	f := cmsFloat64Number(math.Sqrt(float64(Sqr(LCh1.C) * Sqr(LCh1.C) / (Sqr(LCh1.C)*Sqr(LCh1.C) + 1900))))
-	sh := cmsFloat64Number(sc * (t*f + 1 - f))
+	f := math.Sqrt(Sqr(LCh1.C) * Sqr(LCh1.C) / (Sqr(LCh1.C)*Sqr(LCh1.C) + 1900))
+	sh := sc * (t*f + 1 - f)
 
-	return cmsFloat64Number(math.Sqrt(Sqr(dL/(l*sl)) + Sqr(dC/(c*sc)) + Sqr(dh/sh)))
+	return math.Sqrt(Sqr(dL/(l*sl)) + Sqr(dC/(c*sc)) + Sqr(dh/sh))
 }
 
 // CIE2000 Delta-E
-func CIE2000DeltaE(Lab1, Lab2 *CIELab, Kl, Kc, Kh float64) float64 {
+func CIE2000DeltaE(Lab1, Lab2 *cmsCIELab, Kl, Kc, Kh float64) float64 {
 	L1, a1, b1 := Lab1.L, Lab1.a, Lab1.b
-	C1 := math.Sqrt(sqr(a1) + sqr(b1))
+	C1 := math.Sqrt(Sqr(a1) + Sqr(b1))
 
 	L2, a2, b2 := Lab2.L, Lab2.a, Lab2.b
-	C2 := math.Sqrt(sqr(a2) + sqr(b2))
+	C2 := math.Sqrt(Sqr(a2) + Sqr(b2))
 
 	meanC := (C1 + C2) / 2.0
 	G := 0.5 * (1 - math.Sqrt(math.Pow(meanC, 7)/(math.Pow(meanC, 7)+math.Pow(25.0, 7))))
 
 	a1Prime := (1 + G) * a1
-	C1Prime := math.Sqrt(sqr(a1Prime) + sqr(b1))
+	C1Prime := math.Sqrt(Sqr(a1Prime) + Sqr(b1))
 	h1Prime := atan2deg(b1, a1Prime)
 
 	a2Prime := (1 + G) * a2
-	C2Prime := math.Sqrt(sqr(a2Prime) + sqr(b2))
+	C2Prime := math.Sqrt(Sqr(a2Prime) + Sqr(b2))
 	h2Prime := atan2deg(b2, a2Prime)
 
 	meanCPrime := (C1Prime + C2Prime) / 2.0
@@ -462,33 +521,33 @@ func CIE2000DeltaE(Lab1, Lab2 *CIELab, Kl, Kc, Kh float64) float64 {
 		deltaHPrime = h2Prime - h1Prime
 	}
 
-	deltaH := 2.0 * math.Sqrt(C1Prime*C2Prime) * math.Sin(radians(deltaHPrime/2.0))
-	Sl := 1 + (0.015*sqr((L1+L2)/2.0-50.0))/math.Sqrt(20.0+sqr((L1+L2)/2.0-50.0))
+	deltaH := 2.0 * math.Sqrt(C1Prime*C2Prime) * math.Sin(RADIANS(deltaHPrime/2.0))
+	Sl := 1 + (0.015*Sqr((L1+L2)/2.0-50.0))/math.Sqrt(20.0+Sqr((L1+L2)/2.0-50.0))
 	Sc := 1 + 0.045*meanCPrime
-	T := 1 - 0.17*math.Cos(radians(meanHPrime-30.0)) +
-		0.24*math.Cos(radians(2.0*meanHPrime)) +
-		0.32*math.Cos(radians(3.0*meanHPrime+6.0)) -
-		0.20*math.Cos(radians(4.0*meanHPrime-63.0))
+	T := 1 - 0.17*math.Cos(RADIANS(meanHPrime-30.0)) +
+		0.24*math.Cos(RADIANS(2.0*meanHPrime)) +
+		0.32*math.Cos(RADIANS(3.0*meanHPrime+6.0)) -
+		0.20*math.Cos(RADIANS(4.0*meanHPrime-63.0))
 	Sh := 1 + 0.015*meanCPrime*T
-	deltaTheta := 30.0 * math.Exp(-sqr((meanHPrime-275.0)/25.0))
+	deltaTheta := 30.0 * math.Exp(-Sqr((meanHPrime-275.0)/25.0))
 	Rc := 2.0 * math.Sqrt(math.Pow(meanCPrime, 7.0)/(math.Pow(meanCPrime, 7.0)+math.Pow(25.0, 7.0)))
-	Rt := -math.Sin(radians(2.0*deltaTheta)) * Rc
+	Rt := -math.Sin(RADIANS(2.0*deltaTheta)) * Rc
 
 	return math.Sqrt(
-		sqr(deltaLPrime/(Sl*Kl)) +
-			sqr(deltaCPrime/(Sc*Kc)) +
-			sqr(deltaH/(Sh*Kh)) +
+		Sqr(deltaLPrime/(Sl*Kl)) +
+			Sqr(deltaCPrime/(Sc*Kc)) +
+			Sqr(deltaH/(Sh*Kh)) +
 			Rt*(deltaCPrime/(Sc*Kc))*(deltaH/(Sh*Kh)),
 	)
 }
 
 // Gridpoints calculation based on color space
-func ReasonableGridpointsByColorspace(Colorspace cmsColorSpaceSignature, Flags uint32) uint32 {
+func cmsReasonableGridpointsByColorspace(Colorspace cmsColorSpaceSignature, Flags uint32) uint32 {
 	if Flags&0x00FF0000 != 0 {
 		return (Flags >> 16) & 0xFF
 	}
 
-	nChannels := ChannelsOf(Colorspace)
+	nChannels := cmsChannelsOf(Colorspace)
 
 	if Flags&cmsFLAGS_HIGHRESPRECALC != 0 {
 		if nChannels > 4 {
@@ -519,88 +578,159 @@ func ReasonableGridpointsByColorspace(Colorspace cmsColorSpaceSignature, Flags u
 	return 33
 }
 
-// Translate colorspace signature to ICC representation
-func ICCcolorSpace(OurNotation int) cmsColorSpaceSignature {
-	switch OurNotation {
-	case PT_GRAY:
-		return cmsSigGrayData
-	case PT_RGB:
-		return cmsSigRgbData
-	case PT_CMY:
-		return cmsSigCmyData
-	case PT_CMYK:
-		return cmsSigCmykData
-	case PT_XYZ:
-		return cmsSigXYZData
-	case PT_Lab:
-		return cmsSigLabData
-	default:
-		return cmsColorSpaceSignature(0)
-	}
-}
+// Predefined arrays for common spaces
 
-// Endpoints by color space
-func EndPointsBySpace(Space cmsColorSpaceSignature) (White, Black []uint16, nOutputs uint32, ok bool) {
+// _cmsEndPointsBySpace retrieves endpoints by color space
+func cmsEndPointsBySpace(
+	space cmsColorSpaceSignature,
+	white *[]uint16,
+	black *[]uint16,
+	nOutputs *uint32,
+) bool {
 	var (
 		RGBblack  = []uint16{0, 0, 0}
 		RGBwhite  = []uint16{0xffff, 0xffff, 0xffff}
-		CMYKblack = []uint16{0xffff, 0xffff, 0xffff, 0xffff}
+		CMYKblack = []uint16{0xffff, 0xffff, 0xffff, 0xffff} // 400% of ink
 		CMYKwhite = []uint16{0, 0, 0, 0}
 		LABblack  = []uint16{0, 0x8080, 0x8080} // V4 Lab encoding
 		LABwhite  = []uint16{0xffff, 0x8080, 0x8080}
 		CMYblack  = []uint16{0xffff, 0xffff, 0xffff}
 		CMYwhite  = []uint16{0, 0, 0}
 		Grayblack = []uint16{0}
-		Graywhite = []uint16{0xffff}
+		GrayWhite = []uint16{0xffff}
 	)
 
-	switch Space {
+	switch space {
 	case cmsSigGrayData:
-		return Graywhite, Grayblack, 1, true
+		if white != nil {
+			*white = GrayWhite
+		}
+		if black != nil {
+			*black = Grayblack
+		}
+		if nOutputs != nil {
+			*nOutputs = 1
+		}
+		return true
+
 	case cmsSigRgbData:
-		return RGBwhite, RGBblack, 3, true
+		if white != nil {
+			*white = RGBwhite
+		}
+		if black != nil {
+			*black = RGBblack
+		}
+		if nOutputs != nil {
+			*nOutputs = 3
+		}
+		return true
+
 	case cmsSigLabData:
-		return LABwhite, LABblack, 3, true
+		if white != nil {
+			*white = LABwhite
+		}
+		if black != nil {
+			*black = LABblack
+		}
+		if nOutputs != nil {
+			*nOutputs = 3
+		}
+		return true
+
 	case cmsSigCmykData:
-		return CMYKwhite, CMYKblack, 4, true
+		if white != nil {
+			*white = CMYKwhite
+		}
+		if black != nil {
+			*black = CMYKblack
+		}
+		if nOutputs != nil {
+			*nOutputs = 4
+		}
+		return true
+
 	case cmsSigCmyData:
-		return CMYwhite, CMYblack, 3, true
+		if white != nil {
+			*white = CMYwhite
+		}
+		if black != nil {
+			*black = CMYblack
+		}
+		if nOutputs != nil {
+			*nOutputs = 3
+		}
+		return true
+
 	default:
-		return nil, nil, 0, false
+		return false
 	}
 }
 
-// Translate from internal color space to ICC representation
-func ICCcolorSpaceFromInternal(OurNotation int) cmsColorSpaceSignature {
-	switch OurNotation {
-	case PT_GRAY:
+// Translate from our colorspace to ICC representation.
+func cmsICCcolorSpace(ourNotation int) cmsColorSpaceSignature {
+	switch ourNotation {
+	case 1, PT_GRAY:
 		return cmsSigGrayData
-	case PT_RGB:
+	case 2, PT_RGB:
 		return cmsSigRgbData
 	case PT_CMY:
 		return cmsSigCmyData
 	case PT_CMYK:
 		return cmsSigCmykData
-	case PT_XYZ:
-		return cmsSigXYZData
-	case PT_Lab:
-		return cmsSigLabData
 	case PT_YCbCr:
 		return cmsSigYCbCrData
+	case PT_YUV:
+		return cmsSigLuvData
+	case PT_XYZ:
+		return cmsSigXYZData
+	case PT_LabV2, PT_Lab:
+		return cmsSigLabData
+	case PT_YUVK:
+		return cmsSigLuvKData
 	case PT_HSV:
 		return cmsSigHsvData
 	case PT_HLS:
 		return cmsSigHlsData
 	case PT_Yxy:
 		return cmsSigYxyData
+	case PT_MCH1:
+		return cmsSigMCH1Data
+	case PT_MCH2:
+		return cmsSigMCH2Data
+	case PT_MCH3:
+		return cmsSigMCH3Data
+	case PT_MCH4:
+		return cmsSigMCH4Data
+	case PT_MCH5:
+		return cmsSigMCH5Data
+	case PT_MCH6:
+		return cmsSigMCH6Data
+	case PT_MCH7:
+		return cmsSigMCH7Data
+	case PT_MCH8:
+		return cmsSigMCH8Data
+	case PT_MCH9:
+		return cmsSigMCH9Data
+	case PT_MCH10:
+		return cmsSigMCHAData
+	case PT_MCH11:
+		return cmsSigMCHBData
+	case PT_MCH12:
+		return cmsSigMCHCData
+	case PT_MCH13:
+		return cmsSigMCHDData
+	case PT_MCH14:
+		return cmsSigMCHEData
+	case PT_MCH15:
+		return cmsSigMCHFData
 	default:
 		return cmsColorSpaceSignature(0)
 	}
 }
 
-// Translate from ICC representation to internal color space
-func LCMSColorSpace(ProfileSpace cmsColorSpaceSignature) int {
-	switch ProfileSpace {
+// Translate from ICC representation to our colorspace.
+func cmsLCMScolorSpace(profileSpace cmsColorSpaceSignature) int {
+	switch profileSpace {
 	case cmsSigGrayData:
 		return PT_GRAY
 	case cmsSigRgbData:
@@ -609,25 +739,59 @@ func LCMSColorSpace(ProfileSpace cmsColorSpaceSignature) int {
 		return PT_CMY
 	case cmsSigCmykData:
 		return PT_CMYK
+	case cmsSigYCbCrData:
+		return PT_YCbCr
+	case cmsSigLuvData:
+		return PT_YUV
 	case cmsSigXYZData:
 		return PT_XYZ
 	case cmsSigLabData:
 		return PT_Lab
-	case cmsSigYCbCrData:
-		return PT_YCbCr
+	case cmsSigLuvKData:
+		return PT_YUVK
 	case cmsSigHsvData:
 		return PT_HSV
 	case cmsSigHlsData:
 		return PT_HLS
 	case cmsSigYxyData:
 		return PT_Yxy
+	case cmsSigMCH1Data, cmsSig1colorData:
+		return PT_MCH1
+	case cmsSigMCH2Data, cmsSig2colorData:
+		return PT_MCH2
+	case cmsSigMCH3Data, cmsSig3colorData:
+		return PT_MCH3
+	case cmsSigMCH4Data, cmsSig4colorData:
+		return PT_MCH4
+	case cmsSigMCH5Data, cmsSig5colorData:
+		return PT_MCH5
+	case cmsSigMCH6Data, cmsSig6colorData:
+		return PT_MCH6
+	case cmsSigMCH7Data, cmsSig7colorData:
+		return PT_MCH7
+	case cmsSigMCH8Data, cmsSig8colorData:
+		return PT_MCH8
+	case cmsSigMCH9Data, cmsSig9colorData:
+		return PT_MCH9
+	case cmsSigMCHAData, cmsSig10colorData:
+		return PT_MCH10
+	case cmsSigMCHBData, cmsSig11colorData:
+		return PT_MCH11
+	case cmsSigMCHCData, cmsSig12colorData:
+		return PT_MCH12
+	case cmsSigMCHDData, cmsSig13colorData:
+		return PT_MCH13
+	case cmsSigMCHEData, cmsSig14colorData:
+		return PT_MCH14
+	case cmsSigMCHFData, cmsSig15colorData:
+		return PT_MCH15
 	default:
 		return 0
 	}
 }
 
 // Get the number of channels in a color space
-func ChannelsOfColorSpace(ColorSpace cmsColorSpaceSignature) int {
+func cmsChannelsOfColorSpace(ColorSpace cmsColorSpaceSignature) int32 {
 	switch ColorSpace {
 	case cmsSigGrayData, cmsSig1colorData, cmsSigMCH1Data:
 		return 1
@@ -665,8 +829,8 @@ func ChannelsOfColorSpace(ColorSpace cmsColorSpaceSignature) int {
 }
 
 // Deprecated function for getting the number of channels
-func ChannelsOf(ColorSpace cmsColorSpaceSignature) uint32 {
-	n := ChannelsOfColorSpace(ColorSpace)
+func cmsChannelsOf(ColorSpace cmsColorSpaceSignature) uint32 {
+	n := cmsChannelsOfColorSpace(ColorSpace)
 	if n < 0 {
 		return 3
 	}

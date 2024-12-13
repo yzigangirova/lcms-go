@@ -2,36 +2,37 @@ package golcms
 
 import (
 	"math"
-	"reflect"
+	//"reflect"
 	"unsafe"
 )
 
 // Base types
-type (
-	cmsUInt8Number   uint8
-	cmsInt8Number    int8
-	cmsFloat32Number float32
-	cmsFloat64Number float64
+/*type (
+	uint8   uint8
+	int8    int8
+	float32 float32
+	float64 float64
 )
 
 // 16-bit base types
 type (
-	cmsUInt16Number uint16
-	cmsInt16Number  int16
+	uint16 uint16
+	int16  int16
 )
 
 // 32-bit base types
 type (
-	cmsUInt32Number uint32
-	cmsInt32Number  int32
+	uint32 uint32
+	int32  int32
 )
 
 // 64-bit base types
 // These are defined only if Go's types natively support 64-bit integers.
 type (
-	cmsUInt64Number uint64
-	cmsInt64Number  int64
-)
+	uint64 uint64
+	int64  int64
+)*/
+const LCMS_VERSION = 2150
 
 // //////////////////LCMS placeholders////////////////////////
 // ICC Intents
@@ -40,6 +41,16 @@ const (
 	INTENT_RELATIVE_COLORIMETRIC
 	INTENT_SATURATION
 	INTENT_ABSOLUTE_COLORIMETRIC
+)
+
+// Non-ICC intents
+const (
+	INTENT_PRESERVE_K_ONLY_PERCEPTUAL             = 10
+	INTENT_PRESERVE_K_ONLY_RELATIVE_COLORIMETRIC  = 11
+	INTENT_PRESERVE_K_ONLY_SATURATION             = 12
+	INTENT_PRESERVE_K_PLANE_PERCEPTUAL            = 13
+	INTENT_PRESERVE_K_PLANE_RELATIVE_COLORIMETRIC = 14
+	INTENT_PRESERVE_K_PLANE_SATURATION            = 15
 )
 
 // Some common definitions
@@ -53,7 +64,7 @@ type cmsInfoType int
 type cmsHPROFILE unsafe.Pointer
 type cmsHANDLE unsafe.Pointer // Generic handle
 type cmsHTRANSFORM unsafe.Pointer
-type cmsToneCurve unsafe.Pointer
+type cmsToneCurve cms_curve_struct
 
 // cmsCreateContext creates a new context with the given plugin and user data.
 func cmsCreateContext(plugin unsafe.Pointer, userData unsafe.Pointer) cmsContext
@@ -67,16 +78,7 @@ func cmsDupContext(contextID cmsContext, newUserData unsafe.Pointer) cmsContext
 // cmsGetContextUserData retrieves the user data associated with the given context.
 func cmsGetContextUserData(contextID cmsContext) unsafe.Pointer
 
-// Plug-In Registering Functions
-
-// cmsPlugin registers a global plugin.
-func cmsPlugin(plugin unsafe.Pointer) bool
-
-// cmsPluginTHR registers a plugin for a specific context.
-func cmsPluginTHR(contextID cmsContext, plugin unsafe.Pointer) bool
-
-// cmsUnregisterPlugins unregisters all global plugins.
-func cmsUnregisterPlugins()
+// Plug-In Registering Functions - see cmsplugin
 
 // cmsUnregisterPluginsTHR unregisters plugins for a specific context.
 func cmsUnregisterPluginsTHR(contextID cmsContext)
@@ -104,7 +106,7 @@ const (
 // chance to know which thread is responsible for the warning and any environment associated
 // with it. Non-multithreading applications may safely ignore this parameter.
 // Note that under certain special circumstances, ContextID may be NULL.
-type cmsLogErrorHandlerFunction func(ContextID cmsContext, ErrorCode cmsUInt32Number, Text string)
+type cmsLogErrorHandlerFunction func(ContextID cmsContext, ErrorCode uint32, Text string)
 
 // Allows user to set any specific logger
 func cmsSetLogErrorHandler(fn cmsLogErrorHandlerFunction) {
@@ -406,6 +408,155 @@ const (
 	cmsFLAGS_NODEFAULTRESOURCEDEF = 0x01000000 // No default resource definitions
 )
 
+// Common structures in ICC tags
+type cmsICCData struct {
+	len  uint32
+	flag uint32
+	data [1]uint8
+}
+
+// ICC date time
+type cmsDateTimeNumber struct {
+	year    uint16
+	month   uint16
+	day     uint16
+	hours   uint16
+	minutes uint16
+	seconds uint16
+}
+
+// ICC XYZ
+type cmsEncodedXYZNumber struct {
+	X cmsS15Fixed16Number
+	Y cmsS15Fixed16Number
+	Z cmsS15Fixed16Number
+}
+
+// Profile ID as computed by MD5 algorithm
+type cmsProfileID struct {
+	ID8  [16]uint8
+	ID16 [8]uint16
+	ID32 [4]uint32
+}
+
+// cmsTagTypeSignature represents the base ICC type definitions.
+// Base ICC type definitions
+const (
+	cmsSigChromaticityType          cmsTagTypeSignature = 0x6368726D // 'chrm'
+	cmsSigcicpType                  cmsTagTypeSignature = 0x63696370 // 'cicp'
+	cmsSigColorantOrderType         cmsTagTypeSignature = 0x636C726F // 'clro'
+	cmsSigColorantTableType         cmsTagTypeSignature = 0x636C7274 // 'clrt'
+	cmsSigCrdInfoType               cmsTagTypeSignature = 0x63726469 // 'crdi'
+	cmsSigCurveType                 cmsTagTypeSignature = 0x63757276 // 'curv'
+	cmsSigDataType                  cmsTagTypeSignature = 0x64617461 // 'data'
+	cmsSigDictType                  cmsTagTypeSignature = 0x64696374 // 'dict'
+	cmsSigDateTimeType              cmsTagTypeSignature = 0x6474696D // 'dtim'
+	cmsSigDeviceSettingsType        cmsTagTypeSignature = 0x64657673 // 'devs'
+	cmsSigLut16Type                 cmsTagTypeSignature = 0x6d667432 // 'mft2'
+	cmsSigLut8Type                  cmsTagTypeSignature = 0x6d667431 // 'mft1'
+	cmsSigLutAtoBType               cmsTagTypeSignature = 0x6d414220 // 'mAB '
+	cmsSigLutBtoAType               cmsTagTypeSignature = 0x6d424120 // 'mBA '
+	cmsSigMeasurementType           cmsTagTypeSignature = 0x6D656173 // 'meas'
+	cmsSigMultiLocalizedUnicodeType cmsTagTypeSignature = 0x6D6C7563 // 'mluc'
+	cmsSigMultiProcessElementType   cmsTagTypeSignature = 0x6D706574 // 'mpet'
+	cmsSigNamedColorType            cmsTagTypeSignature = 0x6E636f6C // 'ncol' -- DEPRECATED!
+	cmsSigNamedColor2Type           cmsTagTypeSignature = 0x6E636C32 // 'ncl2'
+	cmsSigParametricCurveType       cmsTagTypeSignature = 0x70617261 // 'para'
+	cmsSigProfileSequenceDescType   cmsTagTypeSignature = 0x70736571 // 'pseq'
+	cmsSigProfileSequenceIdType     cmsTagTypeSignature = 0x70736964 // 'psid'
+	cmsSigResponseCurveSet16Type    cmsTagTypeSignature = 0x72637332 // 'rcs2'
+	cmsSigS15Fixed16ArrayType       cmsTagTypeSignature = 0x73663332 // 'sf32'
+	cmsSigScreeningType             cmsTagTypeSignature = 0x7363726E // 'scrn'
+	cmsSigSignatureType             cmsTagTypeSignature = 0x73696720 // 'sig '
+	cmsSigTextType                  cmsTagTypeSignature = 0x74657874 // 'text'
+	cmsSigTextDescriptionType       cmsTagTypeSignature = 0x64657363 // 'desc'
+	cmsSigU16Fixed16ArrayType       cmsTagTypeSignature = 0x75663332 // 'uf32'
+	cmsSigUcrBgType                 cmsTagTypeSignature = 0x62666420 // 'bfd '
+	cmsSigUInt16ArrayType           cmsTagTypeSignature = 0x75693136 // 'ui16'
+	cmsSigUInt32ArrayType           cmsTagTypeSignature = 0x75693332 // 'ui32'
+	cmsSigUInt64ArrayType           cmsTagTypeSignature = 0x75693634 // 'ui64'
+	cmsSigUInt8ArrayType            cmsTagTypeSignature = 0x75693038 // 'ui08'
+	cmsSigVcgtType                  cmsTagTypeSignature = 0x76636774 // 'vcgt'
+	cmsSigViewingConditionsType     cmsTagTypeSignature = 0x76696577 // 'view'
+	cmsSigXYZType                   cmsTagTypeSignature = 0x58595A20 // 'XYZ '
+)
+
+// Base ICC tag definitions
+const (
+	cmsSigAToB0Tag                          cmsTagSignature = 0x41324230 // 'A2B0'
+	cmsSigAToB1Tag                          cmsTagSignature = 0x41324231 // 'A2B1'
+	cmsSigAToB2Tag                          cmsTagSignature = 0x41324232 // 'A2B2'
+	cmsSigBlueColorantTag                   cmsTagSignature = 0x6258595A // 'bXYZ'
+	cmsSigBlueMatrixColumnTag               cmsTagSignature = 0x6258595A // 'bXYZ'
+	cmsSigBlueTRCTag                        cmsTagSignature = 0x62545243 // 'bTRC'
+	cmsSigBToA0Tag                          cmsTagSignature = 0x42324130 // 'B2A0'
+	cmsSigBToA1Tag                          cmsTagSignature = 0x42324131 // 'B2A1'
+	cmsSigBToA2Tag                          cmsTagSignature = 0x42324132 // 'B2A2'
+	cmsSigCalibrationDateTimeTag            cmsTagSignature = 0x63616C74 // 'calt'
+	cmsSigCharTargetTag                     cmsTagSignature = 0x74617267 // 'targ'
+	cmsSigChromaticAdaptationTag            cmsTagSignature = 0x63686164 // 'chad'
+	cmsSigChromaticityTag                   cmsTagSignature = 0x6368726D // 'chrm'
+	cmsSigColorantOrderTag                  cmsTagSignature = 0x636C726F // 'clro'
+	cmsSigColorantTableTag                  cmsTagSignature = 0x636C7274 // 'clrt'
+	cmsSigColorantTableOutTag               cmsTagSignature = 0x636C6F74 // 'clot'
+	cmsSigColorimetricIntentImageStateTag   cmsTagSignature = 0x63696973 // 'ciis'
+	cmsSigCopyrightTag                      cmsTagSignature = 0x63707274 // 'cprt'
+	cmsSigCrdInfoTag                        cmsTagSignature = 0x63726469 // 'crdi'
+	cmsSigDataTag                           cmsTagSignature = 0x64617461 // 'data'
+	cmsSigDateTimeTag                       cmsTagSignature = 0x6474696D // 'dtim'
+	cmsSigDeviceMfgDescTag                  cmsTagSignature = 0x646D6E64 // 'dmnd'
+	cmsSigDeviceModelDescTag                cmsTagSignature = 0x646D6464 // 'dmdd'
+	cmsSigDeviceSettingsTag                 cmsTagSignature = 0x64657673 // 'devs'
+	cmsSigDToB0Tag                          cmsTagSignature = 0x44324230 // 'D2B0'
+	cmsSigDToB1Tag                          cmsTagSignature = 0x44324231 // 'D2B1'
+	cmsSigDToB2Tag                          cmsTagSignature = 0x44324232 // 'D2B2'
+	cmsSigDToB3Tag                          cmsTagSignature = 0x44324233 // 'D2B3'
+	cmsSigBToD0Tag                          cmsTagSignature = 0x42324430 // 'B2D0'
+	cmsSigBToD1Tag                          cmsTagSignature = 0x42324431 // 'B2D1'
+	cmsSigBToD2Tag                          cmsTagSignature = 0x42324432 // 'B2D2'
+	cmsSigBToD3Tag                          cmsTagSignature = 0x42324433 // 'B2D3'
+	cmsSigGamutTag                          cmsTagSignature = 0x67616D74 // 'gamt'
+	cmsSigGrayTRCTag                        cmsTagSignature = 0x6b545243 // 'kTRC'
+	cmsSigGreenColorantTag                  cmsTagSignature = 0x6758595A // 'gXYZ'
+	cmsSigGreenMatrixColumnTag              cmsTagSignature = 0x6758595A // 'gXYZ'
+	cmsSigGreenTRCTag                       cmsTagSignature = 0x67545243 // 'gTRC'
+	cmsSigLuminanceTag                      cmsTagSignature = 0x6C756D69 // 'lumi'
+	cmsSigMeasurementTag                    cmsTagSignature = 0x6D656173 // 'meas'
+	cmsSigMediaBlackPointTag                cmsTagSignature = 0x626B7074 // 'bkpt'
+	cmsSigMediaWhitePointTag                cmsTagSignature = 0x77747074 // 'wtpt'
+	cmsSigNamedColorTag                     cmsTagSignature = 0x6E636F6C // 'ncol' // Deprecated by the ICC
+	cmsSigNamedColor2Tag                    cmsTagSignature = 0x6E636C32 // 'ncl2'
+	cmsSigOutputResponseTag                 cmsTagSignature = 0x72657370 // 'resp'
+	cmsSigPerceptualRenderingIntentGamutTag cmsTagSignature = 0x72696730 // 'rig0'
+	cmsSigPreview0Tag                       cmsTagSignature = 0x70726530 // 'pre0'
+	cmsSigPreview1Tag                       cmsTagSignature = 0x70726531 // 'pre1'
+	cmsSigPreview2Tag                       cmsTagSignature = 0x70726532 // 'pre2'
+	cmsSigProfileDescriptionTag             cmsTagSignature = 0x64657363 // 'desc'
+	cmsSigProfileDescriptionMLTag           cmsTagSignature = 0x6473636D // 'dscm'
+	cmsSigProfileSequenceDescTag            cmsTagSignature = 0x70736571 // 'pseq'
+	cmsSigProfileSequenceIdTag              cmsTagSignature = 0x70736964 // 'psid'
+	cmsSigPs2CRD0Tag                        cmsTagSignature = 0x70736430 // 'psd0'
+	cmsSigPs2CRD1Tag                        cmsTagSignature = 0x70736431 // 'psd1'
+	cmsSigPs2CRD2Tag                        cmsTagSignature = 0x70736432 // 'psd2'
+	cmsSigPs2CRD3Tag                        cmsTagSignature = 0x70736433 // 'psd3'
+	cmsSigPs2CSATag                         cmsTagSignature = 0x70733273 // 'ps2s'
+	cmsSigPs2RenderingIntentTag             cmsTagSignature = 0x70733269 // 'ps2i'
+	cmsSigRedColorantTag                    cmsTagSignature = 0x7258595A // 'rXYZ'
+	cmsSigRedMatrixColumnTag                cmsTagSignature = 0x7258595A // 'rXYZ'
+	cmsSigRedTRCTag                         cmsTagSignature = 0x72545243 // 'rTRC'
+	cmsSigSaturationRenderingIntentGamutTag cmsTagSignature = 0x72696732 // 'rig2'
+	cmsSigScreeningDescTag                  cmsTagSignature = 0x73637264 // 'scrd'
+	cmsSigScreeningTag                      cmsTagSignature = 0x7363726E // 'scrn'
+	cmsSigTechnologyTag                     cmsTagSignature = 0x74656368 // 'tech'
+	cmsSigUcrBgTag                          cmsTagSignature = 0x62666420 // 'bfd '
+	cmsSigViewingCondDescTag                cmsTagSignature = 0x76756564 // 'vued'
+	cmsSigViewingConditionsTag              cmsTagSignature = 0x76696577 // 'view'
+	cmsSigVcgtTag                           cmsTagSignature = 0x76636774 // 'vcgt'
+	cmsSigMetaTag                           cmsTagSignature = 0x6D657461 // 'meta'
+	cmsSigcicpTag                           cmsTagSignature = 0x63696370 // 'cicp'
+	cmsSigArgyllArtsTag                     cmsTagSignature = 0x61727473 // 'arts'
+)
+
 type cmsColorSpaceSignature uint32
 
 const (
@@ -460,6 +611,7 @@ const (
 
 type cmsTechnologySignature uint32
 
+// ICC Technology tag
 const (
 	cmsSigDigitalCamera              cmsTechnologySignature = 0x6463616D // 'dcam'
 	cmsSigFilmScanner                cmsTechnologySignature = 0x6673636E // 'fscn'
@@ -517,6 +669,19 @@ const (
 	cmsSigClipNegativesElemType cmsStageSignature = 0x636c7020 // 'clp '
 )
 
+// cmsProfileClassSignature represents ICC Profile Classes
+type cmsProfileClassSignature uint32
+
+const (
+	cmsSigInputClass      cmsProfileClassSignature = 0x73636E72 // 'scnr'
+	cmsSigDisplayClass    cmsProfileClassSignature = 0x6D6E7472 // 'mntr'
+	cmsSigOutputClass     cmsProfileClassSignature = 0x70727472 // 'prtr'
+	cmsSigLinkClass       cmsProfileClassSignature = 0x6C696E6B // 'link'
+	cmsSigAbstractClass   cmsProfileClassSignature = 0x61627374 // 'abst'
+	cmsSigColorSpaceClass cmsProfileClassSignature = 0x73706163 // 'spac'
+	cmsSigNamedColorClass cmsProfileClassSignature = 0x6E6D636C // 'nmcl'
+)
+
 // Helper to calculate grid points
 func cmsFLAGS_GRIDPOINTS(n int) int {
 	return (n & cmsFLAGS_GRIDPOINTS_MASK) << cmsFLAGS_GRIDPOINTS_SHIFT
@@ -524,38 +689,38 @@ func cmsFLAGS_GRIDPOINTS(n int) int {
 
 // cmsCIEXYZ represents a color in the CIE XYZ color space
 type cmsCIEXYZ struct {
-	X cmsFloat64Number
-	Y cmsFloat64Number
-	Z cmsFloat64Number
+	X float64
+	Y float64
+	Z float64
 }
 
 // cmsCIExyY represents a color in the CIE xyY color space
 
 type cmsCIExyY struct {
-	x cmsFloat64Number
-	y cmsFloat64Number
-	Y cmsFloat64Number //
+	x float64
+	y float64
+	Y float64 //
 }
 
 // cmsCIELab represents a color in the CIE Lab color space
 type cmsCIELab struct {
-	L cmsFloat64Number
-	a cmsFloat64Number
-	b cmsFloat64Number
+	L float64
+	a float64
+	b float64
 }
 
 // cmsCIELCh represents a color in the CIE LCh color space
 type cmsCIELCh struct {
-	L cmsFloat64Number
-	C cmsFloat64Number
-	h cmsFloat64Number
+	L float64
+	C float64
+	h float64
 }
 
 // cmsJCh represents a color in the JCh color space
 type cmsJCh struct {
-	J cmsFloat64Number
-	C cmsFloat64Number
-	h cmsFloat64Number
+	J float64
+	C float64
+	h float64
 }
 
 // cmsCIEXYZTRIPLE represents a set of primary colors (Red, Green, Blue) in the CIE XYZ color space
@@ -573,7 +738,7 @@ type cmsCIExyYTRIPLE struct {
 }
 
 type cmsSEQ struct {
-	n         cmsUInt32Number
+	n         uint32
 	ContextID cmsContext
 	seq       *cmsPSEQDESC
 }
@@ -581,7 +746,7 @@ type cmsSEQ struct {
 type cmsPSEQDESC struct {
 	deviceMfg    cmsSignature
 	deviceModel  cmsSignature
-	attributes   cmsUInt64Number
+	attributes   uint64
 	technology   cmsTechnologySignature
 	ProfileID    cmsProfileID
 	Manufacturer *cmsMLU
@@ -589,26 +754,20 @@ type cmsPSEQDESC struct {
 	Description  *cmsMLU
 }
 
-type cmsProfileID struct {
-	ID8  [16]cmsUInt8Number
-	ID16 [8]cmsUInt16Number
-	ID32 [4]cmsUInt32Number
-}
-
 const cmsMAXCHANNELS = 16
 
 // Fallback for 64-bit types if not supported (Go inherently supports 64-bit integers, so this is rarely needed).
 type (
-	cmsUInt64Array [2]cmsUInt32Number
-	cmsInt64Array  [2]cmsInt32Number
+	cmsUInt64Array [2]uint32
+	cmsInt64Array  [2]int32
 )
 
 // Derivative types
 type (
-	cmsSignature        cmsUInt32Number
-	cmsU8Fixed8Number   cmsUInt16Number
-	cmsS15Fixed16Number cmsInt32Number
-	cmsU16Fixed16Number cmsUInt32Number
+	cmsSignature        uint32
+	cmsU8Fixed8Number   uint16
+	cmsS15Fixed16Number int32
+	cmsU16Fixed16Number uint32
 )
 
 // Boolean type
@@ -712,31 +871,25 @@ func T_BYTES(b uint32) uint32 {
 }
 
 // FROM_8_TO_16 converts an 8-bit value to a 16-bit value
-func FROM_8_TO_16(rgb cmsUInt8Number) cmsUInt16Number {
-	return cmsUInt16Number(rgb)<<8 | cmsUInt16Number(rgb)
+func FROM_8_TO_16(rgb uint8) uint16 {
+	return uint16(rgb)<<8 | uint16(rgb)
 }
 
 // FROM_16_TO_8 converts a 16-bit value to an 8-bit value
-func FROM_16_TO_8(rgb cmsUInt16Number) cmsUInt8Number {
-	return cmsUInt8Number(((cmsUInt32Number(rgb)*65281 + 8388608) >> 24) & 0xFF)
+func FROM_16_TO_8(rgb uint16) uint8 {
+	return uint8(((uint32(rgb)*65281 + 8388608) >> 24) & 0xFF)
 }
 
-// memmove copies `n` bytes from `src` to `dst`.
-// It works like C's memmove, supporting overlapping memory regions.
-func memmove(dst, src unsafe.Pointer, n uintptr) {
-	// Create byte slices from the pointers
-	dstSlice := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(dst),
-		Len:  int(n),
-		Cap:  int(n),
-	}))
+// cmsIOHANDLER is an alias for _cmsIOHandler.
+type cmsIOHANDLER cms_io_handler
+type cmsContext *cmsContextStruct
 
-	srcSlice := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(src),
-		Len:  int(n),
-		Cap:  int(n),
-	}))
-
-	// Use Go's copy function which handles overlapping memory safely
-	copy(dstSlice, srcSlice)
+// cmsCurveSegment represents the curve segment structure.
+type cmsCurveSegment struct {
+	X0            float32
+	X1            float32
+	Type          int32
+	Params        [10]float64
+	NGridPoints   uint32
+	SampledPoints []float32
 }

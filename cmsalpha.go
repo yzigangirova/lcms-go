@@ -7,12 +7,12 @@ import (
 )
 
 // Utility to change endianness of a 16-bit number
-func changeEndian(w cmsUInt16Number) cmsUInt16Number {
+func changeEndian(w uint16) uint16 {
 	return (w<<8 | w>>8)
 }
 
 // Saturates a float64 to a byte value
-func cmsQuickSaturateByte(d cmsFloat64Number) cmsUInt8Number {
+func cmsQuickSaturateByte(d float64) uint8 {
 	d += 0.5
 	if d <= 0 {
 		return 0
@@ -20,16 +20,16 @@ func cmsQuickSaturateByte(d cmsFloat64Number) cmsUInt8Number {
 	if d >= 255.0 {
 		return 255
 	}
-	return cmsUInt8Number(math.Floor(float64(d)))
+	return uint8(math.Floor(d))
 }
 
 // Computes the true size in bytes for a format
-func trueBytesSize(format cmsUInt32Number) cmsUInt32Number {
-	fmtBytes := T_BYTES(uint32(format)) // T_BYTES is assumed to extract byte information from `format`
+func trueBytesSize(format uint32) uint32 {
+	fmtBytes := T_BYTES(format) // T_BYTES is assumed to extract byte information from `format`
 	if fmtBytes == 0 {
-		return cmsUInt32Number(unsafe.Sizeof(float64(0)))
+		return uint32(unsafe.Sizeof(float64(0)))
 	}
-	return cmsUInt32Number(fmtBytes)
+	return uint32(fmtBytes)
 }
 
 // Formatter function type
@@ -41,42 +41,42 @@ func copy8(dst, src unsafe.Pointer) {
 }
 
 func from8to16(dst, src unsafe.Pointer) {
-	n := *(*cmsUInt8Number)(src)
-	*(*cmsUInt16Number)(dst) = cmsUInt16Number(FROM_8_TO_16(n)) // FROM_8_TO_16(n)
+	n := *(*uint8)(src)
+	*(*uint16)(dst) = uint16(FROM_8_TO_16(n)) // FROM_8_TO_16(n)
 }
 
 func from8to16SE(dst, src unsafe.Pointer) {
-	n := *(*cmsUInt8Number)(src)
-	*(*cmsUInt16Number)(dst) = changeEndian(FROM_8_TO_16(n))
+	n := *(*uint8)(src)
+	*(*uint16)(dst) = changeEndian(FROM_8_TO_16(n))
 }
 
 func from8toFLT(dst, src unsafe.Pointer) {
-	*(*cmsFloat32Number)(dst) = cmsFloat32Number(*(*cmsUInt8Number)(src) / 255.0)
+	*(*float32)(dst) = float32(*(*uint8)(src) / 255.0)
 }
 
 // Converts from 8-bit to double (64-bit float)
 func from8toDBL(dst, src unsafe.Pointer) {
-	*(*cmsFloat64Number)(dst) = cmsFloat64Number(*(*cmsUInt8Number)(src) / 255.0)
+	*(*float64)(dst) = float64(*(*uint8)(src) / 255.0)
 }
 
 // Converts from 8-bit to half-precision float
 func from8toHLF(dst, src unsafe.Pointer) {
 
-	n := cmsFloat32Number(*(*cmsUInt8Number)(src) / 255.0)
-	*(*cmsUInt16Number)(dst) = cmsFloat2Half(n) // Assumes FloatToHalf is implemented
+	n := float32(*(*uint8)(src) / 255.0)
+	*(*uint16)(dst) = cmsFloat2Half(n) // Assumes FloatToHalf is implemented
 
 }
 
 // Converts from 16-bit to 8-bit
 func from16to8(dst, src unsafe.Pointer) {
-	n := *(*cmsUInt16Number)(src)
-	*(*cmsUInt8Number)(dst) = FROM_16_TO_8(n) // Uses previously defined From16To8 function
+	n := *(*uint16)(src)
+	*(*uint8)(dst) = FROM_16_TO_8(n) // Uses previously defined From16To8 function
 }
 
 // Converts from 16-bit (big-endian) to 8-bit
 func from16SEto8(dst, src unsafe.Pointer) {
-	n := *(*cmsUInt16Number)(src)
-	*(*cmsUInt8Number)(dst) = FROM_16_TO_8(changeEndian(n)) // Uses changeEndian function
+	n := *(*uint16)(src)
+	*(*uint8)(dst) = FROM_16_TO_8(changeEndian(n)) // Uses changeEndian function
 }
 
 // Copies 2 bytes from src to dst
@@ -86,151 +86,151 @@ func copy16(dst, src unsafe.Pointer) {
 
 // Converts from 16-bit to 16-bit with endian swap
 func from16to16(dst, src unsafe.Pointer) {
-	n := *(*cmsUInt16Number)(src)
-	*(*cmsUInt16Number)(dst) = changeEndian(n)
+	n := *(*uint16)(src)
+	*(*uint16)(dst) = changeEndian(n)
 }
 
 // Converts from 16-bit to 32-bit float
 func from16toFLT(dst, src unsafe.Pointer) {
-	*(*cmsFloat32Number)(dst) = cmsFloat32Number(*(*cmsUInt16Number)(src) / 65535.0)
+	*(*float32)(dst) = float32(*(*uint16)(src) / 65535.0)
 }
 
 func from16SEtoFLT(dst, src unsafe.Pointer) {
-	*(*cmsFloat32Number)(dst) = cmsFloat32Number(changeEndian(*(*cmsUInt16Number)(src)) / 65535.0)
+	*(*float32)(dst) = float32(changeEndian(*(*uint16)(src)) / 65535.0)
 }
 
 func from16toDBL(dst, src unsafe.Pointer) {
-	*(*cmsFloat64Number)(dst) = cmsFloat64Number(*(*cmsUInt16Number)(src) / 65535.0)
+	*(*float64)(dst) = float64(*(*uint16)(src) / 65535.0)
 }
 
 func from16SEtoDBL(dst, src unsafe.Pointer) {
-	*(*cmsFloat64Number)(dst) = cmsFloat64Number(changeEndian(*(*cmsUInt16Number)(src)) / 65535.0)
+	*(*float64)(dst) = float64(changeEndian(*(*uint16)(src)) / 65535.0)
 }
 
 func from16toHLF(dst, src unsafe.Pointer) {
-	n := cmsFloat32Number((*(*cmsUInt16Number)(src) / 65535.0))
-	*(*cmsUInt16Number)(dst) = cmsFloat2Half(n)
+	n := float32((*(*uint16)(src) / 65535.0))
+	*(*uint16)(dst) = cmsFloat2Half(n)
 }
 
 func from16SEtoHLF(dst, src unsafe.Pointer) {
-	n := cmsFloat32Number(changeEndian(*(*cmsUInt16Number)(src) / 65535.0))
-	*(*cmsUInt16Number)(dst) = cmsFloat2Half(n)
+	n := float32(changeEndian(*(*uint16)(src) / 65535.0))
+	*(*uint16)(dst) = cmsFloat2Half(n)
 
 }
 
 // From Float
 
 func fromFLTto8(dst, src unsafe.Pointer) {
-	n := *(*cmsFloat64Number)(src)
-	*(*cmsUInt8Number)(dst) = cmsQuickSaturateByte(n * 255.0)
+	n := *(*float64)(src)
+	*(*uint8)(dst) = cmsQuickSaturateByte(n * 255.0)
 }
 
 func fromFLTto16(dst, src unsafe.Pointer) {
-	n := *(*cmsFloat64Number)(src)
-	*(*cmsUInt16Number)(dst) = cmsQuickSaturateWord(n * 65535.0)
+	n := *(*float64)(src)
+	*(*uint16)(dst) = cmsQuickSaturateWord(n * 65535.0)
 }
 
 func fromFLTto16SE(dst, src unsafe.Pointer) {
-	n := *(*cmsFloat64Number)(src)
+	n := *(*float64)(src)
 	i := cmsQuickSaturateWord(n * 65535.0)
 
-	*(*cmsUInt16Number)(dst) = changeEndian(i)
+	*(*uint16)(dst) = changeEndian(i)
 }
 
 func copy32(dst, src unsafe.Pointer) {
-	memmove(dst, src, unsafe.Sizeof(cmsFloat32Number(0)))
+	memmove(dst, src, unsafe.Sizeof(float32(0)))
 }
 
 func fromFLTtoDBL(dst, src unsafe.Pointer) {
-	n := *(*cmsFloat32Number)(src)
-	*(*cmsFloat64Number)(dst) = cmsFloat64Number(n)
+	n := *(*float32)(src)
+	*(*float64)(dst) = float64(n)
 }
 
 func fromFLTtoHLF(dst, src unsafe.Pointer) {
-	n := *(*cmsFloat32Number)(src)
-	*(*cmsUInt16Number)(dst) = cmsFloat2Half(n)
+	n := *(*float32)(src)
+	*(*uint16)(dst) = cmsFloat2Half(n)
 }
 
 // From HALF
 
 func fromHLFto8(dst, src unsafe.Pointer) {
-	n := cmsHalf2Float(*(*cmsUInt16Number)(src))
-	*(*cmsUInt8Number)(dst) = cmsQuickSaturateByte(cmsFloat64Number(n) * 255.0)
+	n := cmsHalf2Float(*(*uint16)(src))
+	*(*uint8)(dst) = cmsQuickSaturateByte(float64(n) * 255.0)
 }
 
 func fromHLFto16(dst, src unsafe.Pointer) {
-	n := cmsHalf2Float(*(*cmsUInt16Number)(src))
-	*(*cmsUInt16Number)(dst) = cmsQuickSaturateWord(cmsFloat64Number(n) * 65535.0)
+	n := cmsHalf2Float(*(*uint16)(src))
+	*(*uint16)(dst) = cmsQuickSaturateWord(float64(n) * 65535.0)
 }
 
 func fromHLFto16SE(dst, src unsafe.Pointer) {
-	n := cmsHalf2Float(*(*cmsUInt16Number)(src))
-	i := cmsQuickSaturateWord(cmsFloat64Number(n) * 65535.0)
-	*(*cmsUInt16Number)(dst) = changeEndian(i)
+	n := cmsHalf2Float(*(*uint16)(src))
+	i := cmsQuickSaturateWord(float64(n) * 65535.0)
+	*(*uint16)(dst) = changeEndian(i)
 }
 
 func fromHLFtoFLT(dst, src unsafe.Pointer) {
-	*(*cmsFloat32Number)(dst) = cmsHalf2Float(*(*cmsUInt16Number)(src))
+	*(*float32)(dst) = cmsHalf2Float(*(*uint16)(src))
 
 }
 
 func fromHLFtoDBL(dst, src unsafe.Pointer) {
-	*(*cmsFloat64Number)(dst) = cmsFloat64Number(cmsHalf2Float(*(*cmsUInt16Number)(src)))
+	*(*float64)(dst) = float64(cmsHalf2Float(*(*uint16)(src)))
 
 }
 
 // From double
 func fromDBLto8(dst, src unsafe.Pointer) {
-	n := *(*cmsFloat64Number)(src)
-	*(*cmsUInt8Number)(dst) = cmsQuickSaturateByte(n * 255.0)
+	n := *(*float64)(src)
+	*(*uint8)(dst) = cmsQuickSaturateByte(n * 255.0)
 }
 
 func fromDBLto16(dst, src unsafe.Pointer) {
-	n := *(*cmsFloat64Number)(src)
-	*(*cmsUInt16Number)(dst) = cmsQuickSaturateWord(n * 65535.0)
+	n := *(*float64)(src)
+	*(*uint16)(dst) = cmsQuickSaturateWord(n * 65535.0)
 }
 
 func fromDBLto16SE(dst, src unsafe.Pointer) {
-	n := *(*cmsFloat64Number)(src)
+	n := *(*float64)(src)
 	i := cmsQuickSaturateWord(n * 65535.0)
-	*(*cmsUInt16Number)(dst) = changeEndian(i)
+	*(*uint16)(dst) = changeEndian(i)
 }
 
 func fromDBLtoFLT(dst, src unsafe.Pointer) {
-	n := *(*cmsFloat64Number)(src)
-	*(*cmsFloat32Number)(dst) = cmsFloat32Number(n)
+	n := *(*float64)(src)
+	*(*float32)(dst) = float32(n)
 }
 
 func fromDBLtoHLF(dst, src unsafe.Pointer) {
-	n := cmsFloat32Number(*(*cmsFloat64Number)(src))
-	*(*cmsUInt16Number)(dst) = cmsFloat2Half(n)
+	n := float32(*(*float64)(src))
+	*(*uint16)(dst) = cmsFloat2Half(n)
 }
 
 func copy64(dst, src unsafe.Pointer) {
-	memmove(dst, src, unsafe.Sizeof(cmsFloat64Number(0)))
+	memmove(dst, src, unsafe.Sizeof(float64(0)))
 }
 
 // Returns the position (x or y) of the formatter in the table of functions
-func FormatterPos(frm cmsUInt32Number) int32 {
-	b := cmsUInt32Number(T_BYTES(uint32(frm)))
+func FormatterPos(frm uint32) int32 {
+	b := T_BYTES(frm)
 
-	if b == 0 && T_FLOAT(uint32(frm)) != 0 {
+	if b == 0 && T_FLOAT(frm) != 0 {
 		return 5 // DBL
 	}
-	if b == 2 && T_FLOAT(uint32(frm)) != 0 {
+	if b == 2 && T_FLOAT(frm) != 0 {
 		return 3 // HLF
 	}
-	if b == 4 && T_FLOAT(uint32(frm)) != 0 {
+	if b == 4 && T_FLOAT(frm) != 0 {
 		return 4 // FLT
 	}
-	if b == 2 && T_FLOAT(uint32(frm)) == 0 {
-		if T_ENDIAN16(uint32(frm)) != 0 {
+	if b == 2 && T_FLOAT(frm) == 0 {
+		if T_ENDIAN16(frm) != 0 {
 			return 2 // 16SE
 		} else {
 			return 1 // 16
 		}
 	}
-	if b == 1 && T_FLOAT(uint32(frm)) == 0 {
+	if b == 1 && T_FLOAT(frm) == 0 {
 		return 0 // 8
 	}
 	return -1 // not recognized
@@ -250,7 +250,7 @@ var FormatterAlpha = [6][6]cmsFormatterAlphaFn{
 }
 
 // cmsGetFormatterAlpha implements the logic
-func cmsGetFormatterAlpha(id interface{}, in, out cmsUInt32Number) (cmsFormatterAlphaFn, error) {
+func cmsGetFormatterAlpha(id unsafe.Pointer, in, out uint32) (cmsFormatterAlphaFn, error) {
 	inN := FormatterPos(in)
 	outN := FormatterPos(out)
 
@@ -263,13 +263,13 @@ func cmsGetFormatterAlpha(id interface{}, in, out cmsUInt32Number) (cmsFormatter
 }
 
 // Compute increments for chunky formats
-func ComputeIncrementsForChunky(format cmsUInt32Number, componentStartingOrder, componentPointerIncrements []cmsUInt32Number) {
-	var channels [cmsMAXCHANNELS]cmsUInt32Number
-	extra := T_EXTRA(uint32(format))
-	nchannels := T_CHANNELS(uint32(format))
+func ComputeIncrementsForChunky(format uint32, componentStartingOrder, componentPointerIncrements []uint32) {
+	var channels [cmsMAXCHANNELS]uint32
+	extra := T_EXTRA(format)
+	nchannels := T_CHANNELS(format)
 	totalChans := nchannels + extra
 	channelSize := trueBytesSize(format)
-	pixelSize := uint32(channelSize) * totalChans
+	pixelSize := channelSize * totalChans
 
 	// Sanity check
 	if totalChans <= 0 || totalChans >= cmsMAXCHANNELS {
@@ -278,43 +278,43 @@ func ComputeIncrementsForChunky(format cmsUInt32Number, componentStartingOrder, 
 
 	// Initialize increments
 	for i := uint32(0); i < extra; i++ {
-		componentPointerIncrements[i] = cmsUInt32Number(pixelSize)
+		componentPointerIncrements[i] = pixelSize
 	}
 
 	// Handle swap logic
-	for i := cmsUInt32Number(0); i < cmsUInt32Number(totalChans); i++ {
-		if T_DOSWAP(uint32(format)) != 0 {
-			channels[i] = cmsUInt32Number(totalChans) - i - 1
+	for i := uint32(0); i < totalChans; i++ {
+		if T_DOSWAP(format) != 0 {
+			channels[i] = totalChans - i - 1
 		} else {
 			channels[i] = i
 		}
 	}
 
 	// Handle swap first
-	if T_SWAPFIRST(uint32(format)) != 0 && totalChans > 1 {
+	if T_SWAPFIRST(format) != 0 && totalChans > 1 {
 		tmp := channels[0]
-		for i := cmsUInt32Number(0); i < cmsUInt32Number(totalChans)-1; i++ {
+		for i := uint32(0); i < totalChans-1; i++ {
 			channels[i] = channels[i+1]
 		}
 		channels[totalChans-1] = tmp
 	}
 
 	// Apply channel size
-	for i := cmsUInt32Number(0); i < cmsUInt32Number(totalChans); i++ {
+	for i := uint32(0); i < totalChans; i++ {
 		channels[i] *= channelSize
 	}
 
 	// Set component starting order
-	for i := cmsUInt32Number(0); i < cmsUInt32Number(extra); i++ {
-		componentStartingOrder[i] = channels[i+cmsUInt32Number(nchannels)]
+	for i := uint32(0); i < uint32(extra); i++ {
+		componentStartingOrder[i] = channels[i+nchannels]
 	}
 }
 
 // Compute increments for planar formats
-func ComputeIncrementsForPlanar(format cmsUInt32Number, bytesPerPlane cmsUInt32Number, componentStartingOrder, componentPointerIncrements []cmsUInt32Number) {
-	var channels [cmsMAXCHANNELS]cmsUInt32Number
-	extra := T_EXTRA(uint32(format))
-	nchannels := T_CHANNELS(uint32(format))
+func ComputeIncrementsForPlanar(format uint32, bytesPerPlane uint32, componentStartingOrder, componentPointerIncrements []uint32) {
+	var channels [cmsMAXCHANNELS]uint32
+	extra := T_EXTRA(format)
+	nchannels := T_CHANNELS(format)
 	totalChans := nchannels + extra
 	channelSize := trueBytesSize(format)
 
@@ -324,42 +324,42 @@ func ComputeIncrementsForPlanar(format cmsUInt32Number, bytesPerPlane cmsUInt32N
 	}
 
 	// Initialize increments
-	for i := cmsUInt32Number(0); i < cmsUInt32Number(extra); i++ {
+	for i := uint32(0); i < uint32(extra); i++ {
 		componentPointerIncrements[i] = channelSize
 	}
 
 	// Handle swap logic
-	for i := cmsUInt32Number(0); i < cmsUInt32Number(totalChans); i++ {
-		if T_DOSWAP(uint32(format)) != 0 {
-			channels[i] = cmsUInt32Number(totalChans) - i - 1
+	for i := uint32(0); i < uint32(totalChans); i++ {
+		if T_DOSWAP(format) != 0 {
+			channels[i] = totalChans - i - 1
 		} else {
 			channels[i] = i
 		}
 	}
 
 	// Handle swap first
-	if T_SWAPFIRST(uint32(format)) != 0 && totalChans > 0 {
+	if T_SWAPFIRST(format) != 0 && totalChans > 0 {
 		tmp := channels[0]
-		for i := cmsUInt32Number(0); i < cmsUInt32Number(totalChans)-1; i++ {
+		for i := uint32(0); i < uint32(totalChans)-1; i++ {
 			channels[i] = channels[i+1]
 		}
 		channels[totalChans-1] = tmp
 	}
 
 	// Apply channel size
-	for i := cmsUInt32Number(0); i < cmsUInt32Number(totalChans); i++ {
+	for i := uint32(0); i < uint32(totalChans); i++ {
 		channels[i] *= bytesPerPlane
 	}
 
 	// Set component starting order
-	for i := cmsUInt32Number(0); i < cmsUInt32Number(extra); i++ {
-		componentStartingOrder[i] = channels[i+cmsUInt32Number(nchannels)]
+	for i := uint32(0); i < uint32(extra); i++ {
+		componentStartingOrder[i] = channels[i+nchannels]
 	}
 }
 
 // Dispatcher for chunky and planar formats
-func ComputeComponentIncrements(format, bytesPerPlane cmsUInt32Number, componentStartingOrder, componentPointerIncrements []cmsUInt32Number) {
-	if T_PLANAR(uint32(format)) != 0 {
+func ComputeComponentIncrements(format, bytesPerPlane uint32, componentStartingOrder, componentPointerIncrements []uint32) {
+	if T_PLANAR(format) != 0 {
 		ComputeIncrementsForPlanar(format, bytesPerPlane, componentStartingOrder, componentPointerIncrements)
 	} else {
 		ComputeIncrementsForChunky(format, componentStartingOrder, componentPointerIncrements)
@@ -371,15 +371,15 @@ func cmsHandleExtraChannels(
 	p *cmsTRANSFORM,
 	in unsafe.Pointer,
 	out unsafe.Pointer,
-	PixelsPerLine cmsUInt32Number,
-	LineCount cmsUInt32Number,
+	PixelsPerLine uint32,
+	LineCount uint32,
 	Stride *cmsStride,
 ) {
 	var (
-		SourceStartingOrder [cmsMAXCHANNELS]cmsUInt32Number
-		SourceIncrements    [cmsMAXCHANNELS]cmsUInt32Number
-		DestStartingOrder   [cmsMAXCHANNELS]cmsUInt32Number
-		DestIncrements      [cmsMAXCHANNELS]cmsUInt32Number
+		SourceStartingOrder [cmsMAXCHANNELS]uint32
+		SourceIncrements    [cmsMAXCHANNELS]uint32
+		DestStartingOrder   [cmsMAXCHANNELS]uint32
+		DestIncrements      [cmsMAXCHANNELS]uint32
 	)
 
 	// Check if alpha copying is needed
@@ -393,8 +393,8 @@ func cmsHandleExtraChannels(
 	}
 
 	// Ensure the same number of alpha channels
-	nExtra := T_EXTRA(uint32(p.InputFormat))
-	if nExtra != T_EXTRA(uint32(p.OutputFormat)) {
+	nExtra := T_EXTRA(p.InputFormat)
+	if nExtra != T_EXTRA(p.OutputFormat) {
 		return
 	}
 
@@ -414,14 +414,14 @@ func cmsHandleExtraChannels(
 	}
 
 	if nExtra == 1 { // Optimized routine for single extra channel
-		var SourceStrideIncrement, DestStrideIncrement cmsUInt32Number
+		var SourceStrideIncrement, DestStrideIncrement uint32
 
-		for i := cmsUInt32Number(0); i < LineCount; i++ {
+		for i := uint32(0); i < LineCount; i++ {
 			// Prepare pointers
 			SourcePtr := uintptr(in) + uintptr(SourceStartingOrder[0]+SourceStrideIncrement)
 			DestPtr := uintptr(out) + uintptr(DestStartingOrder[0]+DestStrideIncrement)
 
-			for j := cmsUInt32Number(0); j < PixelsPerLine; j++ {
+			for j := uint32(0); j < PixelsPerLine; j++ {
 				copyValueFn(unsafe.Pointer(DestPtr), unsafe.Pointer(SourcePtr))
 
 				SourcePtr += uintptr(SourceIncrements[0])
@@ -435,19 +435,19 @@ func cmsHandleExtraChannels(
 		var (
 			SourcePtr              [cmsMAXCHANNELS]uintptr
 			DestPtr                [cmsMAXCHANNELS]uintptr
-			SourceStrideIncrements [cmsMAXCHANNELS]cmsUInt32Number
-			DestStrideIncrements   [cmsMAXCHANNELS]cmsUInt32Number
+			SourceStrideIncrements [cmsMAXCHANNELS]uint32
+			DestStrideIncrements   [cmsMAXCHANNELS]uint32
 		)
 
-		for i := cmsUInt32Number(0); i < LineCount; i++ {
+		for i := uint32(0); i < LineCount; i++ {
 			// Prepare pointers
-			for j := cmsUInt32Number(0); j < cmsUInt32Number(nExtra); j++ {
+			for j := uint32(0); j < uint32(nExtra); j++ {
 				SourcePtr[j] = uintptr(in) + uintptr(SourceStartingOrder[j]+SourceStrideIncrements[j])
 				DestPtr[j] = uintptr(out) + uintptr(DestStartingOrder[j]+DestStrideIncrements[j])
 			}
 
-			for j := cmsUInt32Number(0); j < PixelsPerLine; j++ {
-				for k := cmsUInt32Number(0); k < cmsUInt32Number(nExtra); k++ {
+			for j := uint32(0); j < PixelsPerLine; j++ {
+				for k := uint32(0); k < uint32(nExtra); k++ {
 					copyValueFn(unsafe.Pointer(DestPtr[k]), unsafe.Pointer(SourcePtr[k]))
 
 					SourcePtr[k] += uintptr(SourceIncrements[k])
@@ -455,7 +455,7 @@ func cmsHandleExtraChannels(
 				}
 			}
 
-			for j := cmsUInt32Number(0); j < cmsUInt32Number(nExtra); j++ {
+			for j := uint32(0); j < uint32(nExtra); j++ {
 				SourceStrideIncrements[j] += Stride.BytesPerLineIn
 				DestStrideIncrements[j] += Stride.BytesPerLineOut
 			}
