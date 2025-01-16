@@ -585,6 +585,96 @@ func cmsDupNamedColorList(v *cmsNAMEDCOLORLIST) *cmsNAMEDCOLORLIST {
 	return newNC
 }
 
+// FreeNamedColorList releases the resources for the named color list.
+func FreeNamedColorList(mpe *cmsStage) {
+	list := (*cmsNAMEDCOLORLIST)(mpe.Data)
+	cmsFreeNamedColorList(list)
+}
+
+// DupNamedColorList duplicates the named color list.
+func DupNamedColorList(mpe *cmsStage) unsafe.Pointer {
+	list := (*cmsNAMEDCOLORLIST)(mpe.Data)
+	return unsafe.Pointer(cmsDupNamedColorList(list))
+}
+
+// EvalNamedColorPCS evaluates the named color in PCS (Profile Connection Space).
+
+// EvalNamedColorPCS evaluates named color in PCS (Lab) space.
+func EvalNamedColorPCS(in []float32, out []float32, mpe *cmsStage) {
+	namedColorList := (*cmsNAMEDCOLORLIST)(mpe.Data)
+	index := uint16(cmsQuickSaturateWord(float64(in[0]) * 65535.0))
+
+	if uint32(index) >= namedColorList.nColors {
+		cmsSignalError(unsafe.Pointer(namedColorList.ContextID), cmsERROR_RANGE, "Color out of range")
+		out[0], out[1], out[2] = 0.0, 0.0, 0.0
+		return
+	}
+
+	// Interpret the `List` pointer as a slice of cmsNAMEDCOLOR.
+	list := unsafe.Slice(namedColorList.List, namedColorList.nColors)
+
+	// Access PCS values for the selected color.
+	out[0] = float32(list[index].PCS[0]) / 65535.0
+	out[1] = float32(list[index].PCS[1]) / 65535.0
+	out[2] = float32(list[index].PCS[2]) / 65535.0
+}
+
+// EvalNamedColor evaluates named color in device colorant space.
+func EvalNamedColor(in []float32, out []float32, mpe *cmsStage) {
+	namedColorList := (*cmsNAMEDCOLORLIST)(mpe.Data)
+	index := uint16(cmsQuickSaturateWord(float64(in[0]) * 65535.0))
+
+	if uint32(index) >= namedColorList.nColors {
+		cmsSignalError(unsafe.Pointer(namedColorList.ContextID), cmsERROR_RANGE, "Color out of range")
+
+		// Zero-out the output for all colorants.
+		for j := uint32(0); j < namedColorList.ColorantCount; j++ {
+			out[j] = 0.0
+		}
+		return
+	}
+
+	// Interpret the `List` pointer as a slice of cmsNAMEDCOLOR.
+	list := unsafe.Slice(namedColorList.List, namedColorList.nColors)
+
+	// Access DeviceColorant values for the selected color.
+	for j := uint32(0); j < namedColorList.ColorantCount; j++ {
+		out[j] = float32(list[index].DeviceColorant[j]) / 65535.0
+	}
+}
+
+// Named color lookup element
+// _cmsStageAllocNamedColor allocates a named color lookup element.
+func cmsStageAllocNamedColor(namedColorList *cmsNAMEDCOLORLIST, usePCS bool) *cmsStage {
+	// Determine the output channel count based on the `usePCS` condition.
+	outputChannels := uint32(1)
+	if usePCS {
+		outputChannels = 3
+	} else {
+		outputChannels = namedColorList.ColorantCount
+	}
+
+	// Select the evaluation function based on the `usePCS` condition.
+	var evalFunc cmsStageEvalFn
+	if usePCS {
+		evalFunc = EvalNamedColorPCS
+	} else {
+		evalFunc = EvalNamedColor
+	}
+
+	// Allocate the placeholder stage.
+	return cmsStageAllocPlaceholder(
+		namedColorList.ContextID,
+		cmsSigNamedColorElemType,
+		1,                  // Input channels are always 1.
+		outputChannels,     // Output channels depend on `usePCS`.
+		evalFunc,           // Evaluation function depends on `usePCS`.
+		DupNamedColorList,  // Duplication function.
+		FreeNamedColorList, // Freeing function.
+		unsafe.Pointer(cmsDupNamedColorList(namedColorList)), // Duplicate the named color list.
+	)
+}
+
 func cmsAppendNamedColor(namedColorList *cmsNAMEDCOLORLIST, name string, PCS *[3]uint16, Colorant *[cmsMAXCHANNELS]uint16) bool {
 	if namedColorList == nil {
 		return false
@@ -804,7 +894,6 @@ func cmsDupProfileSequenceDescription(pseq *cmsSEQ) *cmsSEQ {
 	return newSeq
 }
 
-
 // Dictionary structure
 type cmsDICT struct {
 	head      *cmsDICTentry
@@ -813,7 +902,7 @@ type cmsDICT struct {
 
 // Allocate an empty dictionary
 func cmsDictAlloc(contextID cmsContext) cmsHANDLE {
-	dict := (*cmsDICT) (cmsMallocZero(contextID, uint32(unsafe.Sizeof(cmsDICT{}))))
+	dict := (*cmsDICT)(cmsMallocZero(contextID, uint32(unsafe.Sizeof(cmsDICT{}))))
 	return cmsHANDLE(unsafe.Pointer(dict))
 }
 
@@ -832,7 +921,7 @@ func cmsDictFree(hDict cmsHANDLE) {
 		if entry.DisplayValue != nil {
 			cmsMLUfree(entry.DisplayValue)
 		}
-	
+
 		next := entry.Next
 		cmsFree(dict.ContextID, unsafe.Pointer(entry))
 		entry = next

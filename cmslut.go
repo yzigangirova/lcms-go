@@ -485,17 +485,19 @@ func cmsStageAllocLabV2ToV4curves(ContextID cmsContext) *cmsStage {
 			cmsFreeToneCurveTriple(LabTable)
 			return nil
 		}
+		// Convert Table16 pointer to a slice of uint16
+		table16 := unsafe.Slice(LabTable[j].Table16, 258)
 
 		// Populate tone curve entries
 		// We need to map * (0xffff / 0xff00), that's same as (257 / 256)
 		// So we can use 258-entry tables to do the trick:
 		// (i / 257) * (255 * 257) * (257 / 256)
 		for i = 0; i < 257; i++ {
-			LabTable[j].Table16[i] = uint16((i*0xffff + 0x80) >> 8)
+			table16[i] = uint16((i*0xffff + 0x80) >> 8)
 		}
 
 		// Set the last entry to 0xffff
-		LabTable[j].Table16[257] = 0xffff
+		table16[257] = 0xffff
 	}
 
 	// Allocate the tone curve stage
@@ -508,7 +510,39 @@ func cmsStageAllocLabV2ToV4curves(ContextID cmsContext) *cmsStage {
 	}
 
 	// Set the implementation signature
-	mpe.Implements = cmsSigLabV2toV4
+	mpe.Implements = cmsStageSignature(cmsSigLabV2toV4)
+	return mpe
+}
+
+// _cmsStageAllocLabV2ToV4 allocates a matrix-based stage for Lab v2 to v4 conversion.
+func cmsStageAllocLabV2ToV4(ContextID cmsContext) *cmsStage {
+	var v2ToV4 = []float64{
+		65535.0 / 65280.0, 0, 0,
+		0, 65535.0 / 65280.0, 0,
+		0, 0, 65535.0 / 65280.0,
+	}
+
+	mpe := cmsStageAllocMatrix(ContextID, 3, 3, v2ToV4, nil)
+	if mpe == nil {
+		return nil
+	}
+	mpe.Implements = cmsStageSignature(cmsSigLabV2toV4)
+	return mpe
+}
+
+// _cmsStageAllocLabV4ToV2 allocates a matrix-based stage for Lab v4 to v2 conversion.
+func cmsStageAllocLabV4ToV2(ContextID cmsContext) *cmsStage {
+	var v4ToV2 = []float64{
+		65280.0 / 65535.0, 0, 0,
+		0, 65280.0 / 65535.0, 0,
+		0, 0, 65280.0 / 65535.0,
+	}
+
+	mpe := cmsStageAllocMatrix(ContextID, 3, 3, v4ToV2, nil)
+	if mpe == nil {
+		return nil
+	}
+	mpe.Implements = cmsStageSignature(cmsSigLabV4toV2)
 	return mpe
 }
 
@@ -1049,7 +1083,7 @@ func cmsPipelineEvalReverseFloat(Target, Result, Hint []float32, lut *cmsPipelin
 // EvaluateCLUTfloat evaluates a CLUT in true floating point.
 func EvaluateCLUTfloat(In []float32, Out []float32, mpe *cmsStage) {
 	data := (*cmsStageCLutData)(mpe.Data)
-	data.Params.Interpolation.LerpFloat(In, Out, data.Params)
+	data.Params.Interpolation.LerpFloat(&In[0], &Out[0], data.Params)
 }
 
 // EvaluateCLUTfloatIn16 converts to 16 bits, evaluates, and back to floating point.
@@ -1064,7 +1098,7 @@ func EvaluateCLUTfloatIn16(In []float32, Out []float32, mpe *cmsStage) {
 	}
 
 	FromFloatTo16(In, In16[:len(In)], mpe.InputChannels)
-	data.Params.Interpolation.Lerp16(In16[:len(In)], Out16[:len(Out)], data.Params)
+	data.Params.Interpolation.Lerp16(&In16[0], &Out16[0], data.Params)
 	From16ToFloat(Out16[:len(Out)], Out[:len(Out)], mpe.OutputChannels)
 }
 

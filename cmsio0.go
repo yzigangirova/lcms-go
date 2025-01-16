@@ -1,10 +1,14 @@
 package golcms
 
 import (
+	"fmt"
+	"math"
+	"os"
 	"time"
 	"unsafe"
-	"os"
-	"io"
+
+	//"io"
+	"sync"
 )
 
 // Generic I/O, tag dictionary management, profile struct
@@ -109,20 +113,20 @@ func cmsOpenIOhandlerFromNULL(ContextID cmsContext) *cmsIOHANDLER {
 
 func cmsOpenIOhandlerFromStream(ContextID cmsContext, stream *os.File) *cmsIOHANDLER {
 	if stream == nil {
-		cmsSignalError( unsafe.Pointer(ContextID), cmsERROR_FILE, "Stream cannot be nil")
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_FILE, "Stream cannot be nil")
 		return nil
 	}
 
 	// Determine the size of the stream
 	fileInfo, err := stream.Stat()
 	if err != nil {
-		cmsSignalError( unsafe.Pointer(ContextID), cmsERROR_FILE, "Cannot get size of stream")
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_FILE, "Cannot get size of stream")
 		return nil
 	}
 	fileSize := fileInfo.Size()
 
 	if fileSize < 0 {
-		cmsSignalError( unsafe.Pointer(ContextID), cmsERROR_FILE, "Cannot get size of stream")
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_FILE, "Cannot get size of stream")
 		return nil
 	}
 
@@ -151,7 +155,7 @@ func cmsOpenIOhandlerFromStream(ContextID cmsContext, stream *os.File) *cmsIOHAN
 
 // Close an open IO handler
 func cmsCloseIOhandler(io *cmsIOHANDLER) bool {
-    return io.Close((*cms_io_handler)(io))
+	return io.Close((*cms_io_handler)(io))
 }
 
 // cmsGetHeaderRenderingIntent retrieves the rendering intent from the profile
@@ -288,6 +292,38 @@ func cmsSetEncodedICCversion(hProfile unsafe.Pointer, Version uint32) {
 	icc.Version = Version
 }
 
+// BaseToBase converts a number from one base to another.
+func BaseToBase(input uint32, baseIn, baseOut int) uint32 {
+	var buff []int
+	for input > 0 {
+		buff = append(buff, int(input%uint32(baseIn)))
+		input /= uint32(baseIn)
+	}
+
+	output := uint32(0)
+	for i := len(buff) - 1; i >= 0; i-- {
+		output = output*uint32(baseOut) + uint32(buff[i])
+	}
+
+	return output
+}
+
+// cmsSetProfileVersion sets the profile version in the ICC profile.
+func cmsSetProfileVersion(hProfile cmsHPROFILE, version float64) {
+	icc := (*cmsICCPROFILE)(hProfile)
+
+	// Convert version (e.g., 4.2) to 0x42000000 format.
+	icc.Version = BaseToBase(uint32(math.Floor(version*100.0+0.5)), 10, 16) << 16
+}
+
+// cmsGetProfileVersion retrieves the profile version from the ICC profile.
+func cmsGetProfileVersion(hProfile cmsHPROFILE) float64 {
+	icc := (*cmsICCPROFILE)(hProfile)
+
+	// Extract version from the 16 most significant bits.
+	versionPart := icc.Version >> 16
+	return float64(BaseToBase(versionPart, 16, 10)) / 100.0
+}
 
 func cmsSaveProfileToIOhandler(hProfile cmsHPROFILE, io *cmsIOHANDLER) uint32 {
 	Icc := (*cmsICCPROFILE)(hProfile)
@@ -299,13 +335,13 @@ func cmsSaveProfileToIOhandler(hProfile cmsHPROFILE, io *cmsIOHANDLER) uint32 {
 	if !cmsLockMutex(ContextID, unsafe.Pointer(Icc.UsrMutex)) {
 		return 0
 	}
-    memmove(unsafe.Pointer(&Keep), unsafe.Pointer(Icc), unsafe.Sizeof(cmsICCPROFILE{}));
+	memmove(unsafe.Pointer(&Keep), unsafe.Pointer(Icc), unsafe.Sizeof(cmsICCPROFILE{}))
 
-    ContextID = cmsGetProfileContextID(hProfile);
+	ContextID = cmsGetProfileContextID(hProfile)
 	Icc.IOhandler = cmsOpenIOhandlerFromNULL(ContextID)
 	PrevIO = Icc.IOhandler
 	if PrevIO == nil {
-		cmsUnlockMutex(ContextID, unsafe.Pointer(Icc.UsrMutex)) 
+		cmsUnlockMutex(ContextID, unsafe.Pointer(Icc.UsrMutex))
 		return 0
 	}
 
@@ -331,18 +367,18 @@ func cmsSaveProfileToIOhandler(hProfile cmsHPROFILE, io *cmsIOHANDLER) uint32 {
 		}
 	}
 
-	memmove(unsafe.Pointer(&Keep), unsafe.Pointer(Icc), unsafe.Sizeof(cmsICCPROFILE{}));
+	memmove(unsafe.Pointer(&Keep), unsafe.Pointer(Icc), unsafe.Sizeof(cmsICCPROFILE{}))
 	if !cmsCloseIOhandler(PrevIO) {
 		UsedSpace = 0
 	}
 
-	cmsUnlockMutex(ContextID, unsafe.Pointer(Icc.UsrMutex)) 
+	cmsUnlockMutex(ContextID, unsafe.Pointer(Icc.UsrMutex))
 	return UsedSpace
 
 Error:
 	cmsCloseIOhandler(PrevIO)
 	*Icc = Keep
-	cmsUnlockMutex(ContextID, unsafe.Pointer(Icc.UsrMutex)) 
+	cmsUnlockMutex(ContextID, unsafe.Pointer(Icc.UsrMutex))
 	return 0
 }
 
@@ -377,7 +413,6 @@ func cmsSaveProfileToStream(hProfile cmsHPROFILE, stream *os.File) bool {
 	rc = rc && cmsCloseIOhandler(io)
 	return rc
 }
-
 
 func cmsSaveProfileToMem(hProfile cmsHPROFILE, MemPtr unsafe.Pointer, BytesNeeded *uint32) bool {
 	ContextID := cmsGetProfileContextID(hProfile)
@@ -432,27 +467,26 @@ func cmsCloseProfile(hProfile cmsHPROFILE) bool {
 		rc = rc && cmsCloseIOhandler(Icc.IOhandler)
 	}
 
-	cmsDestroyMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex)) 
+	cmsDestroyMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
 	cmsFree(Icc.ContextID, unsafe.Pointer(Icc))
 	return rc
 }
 
-
 // Returns TRUE if a given tag is supported by a plug-in
-func  IsTypeSupported(TagDescriptor *cmsTagDescriptor, Type cmsTagTypeSignature ) bool {
-    var  nMaxTypes uint32
+func IsTypeSupported(TagDescriptor *cmsTagDescriptor, Type cmsTagTypeSignature) bool {
+	var nMaxTypes uint32
 
-    nMaxTypes = TagDescriptor.NSupportedTypes
-    if nMaxTypes >= MAX_TYPES_IN_LCMS_PLUGIN {
-        nMaxTypes = MAX_TYPES_IN_LCMS_PLUGIN;
+	nMaxTypes = TagDescriptor.NSupportedTypes
+	if nMaxTypes >= MAX_TYPES_IN_LCMS_PLUGIN {
+		nMaxTypes = MAX_TYPES_IN_LCMS_PLUGIN
 	}
-    for i := 0; i < int(nMaxTypes); i++ {
-        if (Type == TagDescriptor.SupportedTypes[i]) {
-		return true
+	for i := 0; i < int(nMaxTypes); i++ {
+		if Type == TagDescriptor.SupportedTypes[i] {
+			return true
+		}
 	}
-    }
 
-    return false
+	return false
 }
 
 func cmsReadTag(hProfile cmsHPROFILE, sig cmsTagSignature) unsafe.Pointer {
@@ -466,7 +500,7 @@ func cmsReadTag(hProfile cmsHPROFILE, sig cmsTagSignature) unsafe.Pointer {
 	var n int
 
 	// Lock the mutex
-	if !cmsLockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))  {
+	if !cmsLockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex)) {
 		return nil
 	}
 
@@ -474,7 +508,7 @@ func cmsReadTag(hProfile cmsHPROFILE, sig cmsTagSignature) unsafe.Pointer {
 	n = cmsSearchTag(Icc, sig, true)
 	if n < 0 {
 		// Tag not found
-		cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex)) 
+		cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
 		return nil
 	}
 
@@ -503,7 +537,7 @@ func cmsReadTag(hProfile cmsHPROFILE, sig cmsTagSignature) unsafe.Pointer {
 			goto Error // Reading raw tags as cooked is not supported
 		}
 
-		cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex)) 
+		cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
 		return Icc.TagPtrs[n]
 	}
 
@@ -579,15 +613,16 @@ func cmsReadTag(hProfile cmsHPROFILE, sig cmsTagSignature) unsafe.Pointer {
 	}
 
 	// Unlock and return
-	cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex)) 
+	cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
 	return Icc.TagPtrs[n]
 
 Error:
-	freeOneTag(Icc, n)
+	freeOneTag(Icc, uint32(n))
 	Icc.TagPtrs[n] = nil
-	cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex)) 
+	cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
 	return nil
 }
+
 // Creates an empty structure holding all required parameters
 func cmsCreateProfilePlaceholder(ContextID cmsContext) cmsHPROFILE {
 	Icc := (*cmsICCPROFILE)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsICCPROFILE{}))))
@@ -612,7 +647,7 @@ func cmsCreateProfilePlaceholder(ContextID cmsContext) cmsHPROFILE {
 	}
 
 	// Create a mutex if the user provided a proper plugin, NULL otherwise
-	Icc.UsrMutex = cmsCreateMutex(ContextID)
+	Icc.UsrMutex = (*sync.Mutex)(cmsCreateMutex(ContextID))
 
 	// Return the handle
 	return (cmsHPROFILE)(unsafe.Pointer(Icc))
@@ -696,8 +731,8 @@ func cmsSearchTag(Icc *cmsICCPROFILE, sig cmsTagSignature, followLinks bool) int
 
 // Deletes a tag entry
 func cmsDeleteTagByPos(Icc *cmsICCPROFILE, i int) {
-	cmsAssert(Icc != nil)
-	cmsAssert(i >= 0)
+	cmsAssert(Icc != nil, "")
+	cmsAssert(i >= 0, "")
 
 	if Icc.TagPtrs[i] != nil {
 		// Free previous version
@@ -709,7 +744,7 @@ func cmsDeleteTagByPos(Icc *cmsICCPROFILE, i int) {
 				LocalTypeHandler := *TypeHandler
 				LocalTypeHandler.ContextID = Icc.ContextID
 				LocalTypeHandler.ICCVersion = Icc.Version
-				LocalTypeHandler.FreePtr(&LocalTypeHandler, Icc.TagPtrs[i])
+				LocalTypeHandler.FreeFn(&LocalTypeHandler, Icc.TagPtrs[i])
 				Icc.TagPtrs[i] = nil
 			}
 		}
@@ -744,6 +779,80 @@ func cmsIsTag(hProfile cmsHPROFILE, sig cmsTagSignature) bool {
 	return cmsSearchTag(Icc, sig, false) >= 0
 }
 
+// Checks for link compatibility
+func CompatibleTypes(desc1 *cmsTagDescriptor, desc2 *cmsTagDescriptor) bool {
+
+	if desc1 == nil || desc2 == nil {
+		return false
+	}
+
+	if desc1.NSupportedTypes != desc2.NSupportedTypes {
+		return false
+	}
+	if desc1.ElemCount != desc2.ElemCount {
+		return false
+	}
+
+	for i := uint32(0); i < desc1.NSupportedTypes; i++ {
+		if desc1.SupportedTypes[i] != desc2.SupportedTypes[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// _validatedVersion enforces that the profile version adheres to the specification.
+func validatedVersion(dWord uint32) uint32 {
+	pBytes := []byte{
+		byte(dWord >> 24),
+		byte((dWord >> 16) & 0xFF),
+		byte((dWord >> 8) & 0xFF),
+		byte(dWord & 0xFF),
+	}
+
+	if pBytes[0] > 0x09 {
+		pBytes[0] = 0x09
+	}
+
+	temp1 := pBytes[1] & 0xF0
+	temp2 := pBytes[1] & 0x0F
+
+	if temp1 > 0x90 {
+		temp1 = 0x90
+	}
+	if temp2 > 0x09 {
+		temp2 = 0x09
+	}
+
+	pBytes[1] = temp1 | temp2
+	pBytes[2] = 0x00
+	pBytes[3] = 0x00
+
+	return uint32(pBytes[0])<<24 | uint32(pBytes[1])<<16 | uint32(pBytes[2])<<8 | uint32(pBytes[3])
+}
+
+// validDeviceClass checks if the given device class is valid.
+func validDeviceClass(cl uint32) bool {
+	if cl == 0 {
+		return true // Allow zero for older compatibility.
+	}
+
+	switch cl {
+	case 0x73636E72: // cmsSigInputClass
+	case 0x64697370: // cmsSigDisplayClass
+	case 0x70727472:
+	case 0x6C696E6B: // cmsSigLinkClass
+	case 0x61627374: // cmsSigAbstractClass
+	case 0x73706163: // cmsSigColorSpaceClass
+	case 0x6E6D636C: // cmsSigNamedColorClass
+		return true
+	default:
+		return false
+	}
+	return false
+}
+
 // cmsReadHeader reads and validates the profile header.
 func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 	var Tag cmsTagEntry
@@ -752,35 +861,35 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 	io := Icc.IOhandler
 
 	// Read the header
-	if io.Read(unsafe.Pointer(&Header), uint32(unsafe.Sizeof(cmsICCHeader{})), 1) != 1 {
+	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&Header), uint32(unsafe.Sizeof(cmsICCHeader{})), 1) != 1 {
 		return false
 	}
 
 	// Validate file as an ICC profile
-	if cmsAdjustEndianess32(Header.Magic) != cmsMagicNumber {
+	if cmsAdjustEndianess32(uint32(Header.Magic)) != cmsMagicNumber {
 		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_BAD_SIGNATURE, "not an ICC profile, invalid signature")
 		return false
 	}
 
 	// Adjust endianness of the used parameters
-	Icc.DeviceClass = cmsProfileClassSignature(cmsAdjustEndianess32(Header.DeviceClass))
-	Icc.ColorSpace = cmsColorSpaceSignature(cmsAdjustEndianess32(Header.ColorSpace))
-	Icc.PCS = cmsColorSpaceSignature(cmsAdjustEndianess32(Header.PCS))
+	Icc.DeviceClass = cmsProfileClassSignature(cmsAdjustEndianess32(uint32(Header.DeviceClass)))
+	Icc.ColorSpace = cmsColorSpaceSignature(cmsAdjustEndianess32(uint32(Header.ColorSpace)))
+	Icc.PCS = cmsColorSpaceSignature(cmsAdjustEndianess32(uint32(Header.PCS)))
 	Icc.RenderingIntent = cmsAdjustEndianess32(Header.RenderingIntent)
 	Icc.Flags = cmsAdjustEndianess32(Header.Flags)
-	Icc.Manufacturer = cmsAdjustEndianess32(Header.Manufacturer)
+	Icc.Manufacturer = cmsAdjustEndianess32(uint32(Header.Manufacturer))
 	Icc.Model = cmsAdjustEndianess32(Header.Model)
-	Icc.Creator = cmsAdjustEndianess32(Header.Creator)
-	cmsAdjustEndianess64(&Icc.Attributes, &Header.Attributes)
-	Icc.Version = cmsAdjustEndianess32(_validatedVersion(Header.Version))
+	Icc.Creator = cmsAdjustEndianess32(uint32(Header.Creator))
+	Icc.Attributes = cmsAdjustEndianess64(Header.Attributes)
+	Icc.Version = cmsAdjustEndianess32(validatedVersion(Header.Version))
 
 	if Icc.Version > 0x5000000 {
-		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported profile version '0x%x'", Icc.Version)
+		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported profile version")
 		return false
 	}
 
-	if !validDeviceClass(Icc.DeviceClass) {
-		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported device class '0x%x'", Icc.DeviceClass)
+	if !validDeviceClass(uint32(Icc.DeviceClass)) {
+		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported device class")
 		return false
 	}
 
@@ -791,17 +900,17 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 	}
 
 	// Get creation date/time
-	cmsDecodeDateTimeNumber(&Header.Date, &Icc.Created)
+	Icc.Created = cmsDecodeDateTimeNumber(&Header.Date)
 
 	// The profile ID are 32 raw bytes
-	copy(Icc.ProfileID.ID32[:], Header.ProfileID.ID32[:16])
+	memmove(unsafe.Pointer(&Icc.ProfileID.ID32[0]), unsafe.Pointer(&Header.ProfileID.ID32[0]), 16)
 
 	// Read tag directory
 	if !cmsReadUInt32Number(io, &TagCount) {
 		return false
 	}
 	if TagCount > MAX_TABLE_TAG {
-		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_RANGE, "Too many tags (%d)", TagCount)
+		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_RANGE, "Too many tags")
 		return false
 	}
 
@@ -858,30 +967,30 @@ func cmsWriteHeader(Icc *cmsICCPROFILE, UsedSpace uint32) bool {
 	var Count uint32
 
 	Header.Size = cmsAdjustEndianess32(UsedSpace)
-	Header.CmmID = cmsAdjustEndianess32(lcmsSignature)
+	Header.CmmId = cmsSignature(cmsAdjustEndianess32(lcmsSignature))
 	Header.Version = cmsAdjustEndianess32(Icc.Version)
 	Header.DeviceClass = cmsProfileClassSignature(cmsAdjustEndianess32(uint32(Icc.DeviceClass)))
 	Header.ColorSpace = cmsColorSpaceSignature(cmsAdjustEndianess32(uint32(Icc.ColorSpace)))
 	Header.PCS = cmsColorSpaceSignature(cmsAdjustEndianess32(uint32(Icc.PCS)))
-	cmsEncodeDateTimeNumber(&Header.Date, &Icc.Created)
-	Header.Magic = cmsAdjustEndianess32(cmsMagicNumber)
+	cmsEncodeDateTimeNumber(&Header.Date, Icc.Created)
+	Header.Magic = cmsSignature(cmsAdjustEndianess32(cmsMagicNumber))
 
-	Header.Platform = cmsAdjustEndianess32(cmsSigMicrosoft)
+	Header.Platform = cmsPlatformSignature(cmsAdjustEndianess32(uint32(cmsSigMicrosoft)))
 	Header.Flags = cmsAdjustEndianess32(Icc.Flags)
-	Header.Manufacturer = cmsAdjustEndianess32(Icc.Manufacturer)
+	Header.Manufacturer = cmsSignature(cmsAdjustEndianess32(Icc.Manufacturer))
 	Header.Model = cmsAdjustEndianess32(Icc.Model)
-	cmsAdjustEndianess64(&Header.Attributes, &Icc.Attributes)
+	Icc.Attributes = cmsAdjustEndianess64(Header.Attributes)
 	Header.RenderingIntent = cmsAdjustEndianess32(Icc.RenderingIntent)
 	Header.Illuminant.X = cmsS15Fixed16Number(cmsAdjustEndianess32(uint32(cmsDoubleTo15Fixed16(cmsD50_XYZ().X))))
 	Header.Illuminant.Y = cmsS15Fixed16Number(cmsAdjustEndianess32(uint32(cmsDoubleTo15Fixed16(cmsD50_XYZ().Y))))
 	Header.Illuminant.Z = cmsS15Fixed16Number(cmsAdjustEndianess32(uint32(cmsDoubleTo15Fixed16(cmsD50_XYZ().Z))))
-	Header.Creator = cmsAdjustEndianess32(lcmsSignature)
+	Header.Creator = cmsSignature(cmsAdjustEndianess32(lcmsSignature))
 
-	memset(unsafe.Pointer(&Header.Reserved), 0, uint32(len(Header.Reserved)))
-	copy(Header.ProfileID[:], Icc.ProfileID.ID32[:])
+	// Set profile ID. Endianness is always big endian
+	memmove(unsafe.Pointer(&Header.ProfileID), unsafe.Pointer(&Icc.ProfileID), 16)
 
 	// Write header
-	if !Icc.IOhandler.Write(unsafe.Pointer(&Header), uint32(unsafe.Sizeof(Header))) {
+	if !Icc.IOhandler.Write((*cms_io_handler)(Icc.IOhandler), uint32(unsafe.Sizeof(Header)), unsafe.Pointer(&Header)) {
 		return false
 	}
 
@@ -906,13 +1015,14 @@ func cmsWriteHeader(Icc *cmsICCPROFILE, UsedSpace uint32) bool {
 		Tag.Offset = cmsAdjustEndianess32(Icc.TagOffsets[i])
 		Tag.Size = cmsAdjustEndianess32(Icc.TagSizes[i])
 
-		if !Icc.IOhandler.Write(unsafe.Pointer(&Tag), uint32(unsafe.Sizeof(Tag))) {
+		if !Icc.IOhandler.Write((*cms_io_handler)(Icc.IOhandler), uint32(unsafe.Sizeof(Tag)), unsafe.Pointer(&Tag)) {
 			return false
 		}
 	}
 
 	return true
 }
+
 // SaveTags dumps tag contents. If the profile is being modified, untouched tags are copied from FileOrig.
 func SaveTags(Icc *cmsICCPROFILE, FileOrig *cmsICCPROFILE) bool {
 	io := Icc.IOhandler
@@ -943,9 +1053,9 @@ func SaveTags(Icc *cmsICCPROFILE, FileOrig *cmsICCPROFILE) bool {
 						return false
 					}
 
-					if !FileOrig.IOhandler.Seek(tagOffset) ||
-						FileOrig.IOhandler.Read(mem, tagSize, 1) != 1 ||
-						!io.Write(tagSize, mem) {
+					if !FileOrig.IOhandler.Seek((*cms_io_handler)(FileOrig.IOhandler), tagOffset) ||
+						FileOrig.IOhandler.Read((*cms_io_handler)(FileOrig.IOhandler), mem, tagSize, 1) != 1 ||
+						!io.Write((*cms_io_handler)(io), tagSize, mem) {
 						cmsFree(Icc.ContextID, mem)
 						return false
 					}
@@ -964,7 +1074,7 @@ func SaveTags(Icc *cmsICCPROFILE, FileOrig *cmsICCPROFILE) bool {
 
 		// Save tag as RAW if specified
 		if Icc.TagSaveAsRaw[i] {
-			if io.Write(Icc.TagSizes[i], data) != 1 {
+			if !io.Write((*cms_io_handler)(io), Icc.TagSizes[i], unsafe.Pointer(data)) {
 				return false
 			}
 		} else {
@@ -983,7 +1093,7 @@ func SaveTags(Icc *cmsICCPROFILE, FileOrig *cmsICCPROFILE) bool {
 
 			typeHandler := cmsGetTagTypeHandler(Icc.ContextID, tagType)
 			if typeHandler == nil {
-				cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_INTERNAL, "(Internal) no handler for tag %x", Icc.TagNames[i])
+				cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_INTERNAL, "(Internal) no handler for tag")
 				continue
 			}
 
@@ -995,10 +1105,10 @@ func SaveTags(Icc *cmsICCPROFILE, FileOrig *cmsICCPROFILE) bool {
 			localTypeHandler := *typeHandler
 			localTypeHandler.ContextID = Icc.ContextID
 			localTypeHandler.ICCVersion = Icc.Version
-			if !localTypeHandler.WritePtr(&localTypeHandler, io, unsafe.Pointer(data), tagDescriptor.ElemCount) {
+			if !localTypeHandler.WriteFn(&localTypeHandler, io, unsafe.Pointer(data), tagDescriptor.ElemCount) {
 				var str [5]byte
-				cmsTagSignature2String((*uint8)(unsafe.Pointer(&str)), typeBase)
-				cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_WRITE, "Couldn't write type '%s'", string(str[:]))
+				cmsTagSignature2String(str, (cmsTagSignature)(typeBase))
+				cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_WRITE, "Couldn't write type")
 				return false
 			}
 		}
@@ -1028,27 +1138,29 @@ func SetLinks(Icc *cmsICCPROFILE) bool {
 	}
 	return true
 }
+
 // FILEMEM represents the memory-based stream structure.
 type FILEMEM struct {
-	Block           []byte // Points to allocated memory
-	Size            uint32 // Size of allocated memory
-	Pointer         uint32 // Points to current location
+	Block            *byte  // Points to allocated memory
+	Size             uint32 // Size of allocated memory
+	Pointer          uint32 // Points to current location
 	FreeBlockOnClose bool   // Indicates if the block should be freed on close
 }
 
-// MemoryRead reads data from the memory block.
-func MemoryRead(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32 {
+func MemoryRead(iohandler *cms_io_handler, buffer unsafe.Pointer, size, count uint32) uint32 {
 	resData := (*FILEMEM)(iohandler.Stream)
 	length := size * count
 
 	if resData.Pointer+length > resData.Size {
 		length = resData.Size - resData.Pointer
-		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_READ, "Read from memory error. Got bytes, block should be of %d bytes")
+		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_READ, "Read from memory error. Got bytes, block should be of bytes")
 		return 0
 	}
 
-	ptr := resData.Block[resData.Pointer:]
-	copy(buffer, ptr[:length])
+	src := unsafe.Add(unsafe.Pointer(resData.Block), uintptr(resData.Pointer))
+	dest := unsafe.Slice((*byte)(buffer), length)
+
+	copy(dest, unsafe.Slice((*byte)(src), length))
 	resData.Pointer += length
 
 	return count
@@ -1074,23 +1186,25 @@ func MemoryTell(iohandler *cms_io_handler) uint32 {
 }
 
 // MemoryWrite writes data to the memory block and updates the used space.
-func MemoryWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
+func MemoryWrite(iohandler *cms_io_handler, size uint32, ptr unsafe.Pointer) bool {
 	resData := (*FILEMEM)(iohandler.Stream)
-
 	if resData == nil {
 		return false
 	}
 
-	// Check for available space and clip if necessary.
+	// Check for available space
 	if resData.Pointer+size > resData.Size {
 		size = resData.Size - resData.Pointer
 	}
 
 	if size == 0 {
-		return true // Writing zero bytes is valid but does nothing
+		return true // Writing zero bytes is okay but does nothing
 	}
 
-	copy(resData.Block[resData.Pointer:], ptr[:size])
+	dest := unsafe.Add(unsafe.Pointer(resData.Block), uintptr(resData.Pointer))
+	src := unsafe.Slice((*byte)(ptr), size)
+
+	copy(unsafe.Slice((*byte)(dest), size), src)
 	resData.Pointer += size
 
 	if resData.Pointer > iohandler.UsedSpace {
@@ -1104,78 +1218,89 @@ func MemoryWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 func MemoryClose(iohandler *cms_io_handler) bool {
 	resData := (*FILEMEM)(iohandler.Stream)
 
-	if resData.FreeBlockOnClose && resData.Block != nil {
-		cmsFree(iohandler.ContextID, resData.Block)
+	if resData.FreeBlockOnClose {
+		if resData.Block != nil {
+			cmsFree(iohandler.ContextID, unsafe.Pointer(resData.Block))
+		}
 	}
 
-	cmsFree(iohandler.ContextID, resData)
-	cmsFree(iohandler.ContextID, iohandler)
+	cmsFree(iohandler.ContextID, unsafe.Pointer(resData))
+	cmsFree(iohandler.ContextID, unsafe.Pointer(iohandler))
 
 	return true
 }
 func cmsOpenIOhandlerFromMem(ContextID cmsContext, Buffer unsafe.Pointer, size uint32, AccessMode string) *cmsIOHANDLER {
 	if AccessMode == "" {
-		cmsSignalError(ContextID, cmsERROR_READ, "Access mode cannot be empty")
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_READ, "Access mode cannot be empty")
 		return nil
 	}
 
-	var iohandler *cmsIOHANDLER
-	var fm *FILEMEM
-
-	iohandler = cmsMallocZero(ContextID, cmsIOHANDLER{}).(*cmsIOHANDLER)
+	// Allocate memory for cmsIOHANDLER
+	iohandler := (*cmsIOHANDLER)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsIOHANDLER{}))))
 	if iohandler == nil {
 		return nil
 	}
 
+	var fm *FILEMEM
+
 	switch AccessMode[0] {
 	case 'r': // Read mode
-		fm = cmsMallocZero(ContextID, FILEMEM{}).(*FILEMEM)
+		fm = (*FILEMEM)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(FILEMEM{}))))
 		if fm == nil {
 			goto Error
 		}
 
 		if Buffer == nil {
-			cmsSignalError(ContextID, cmsERROR_READ, "Couldn't read profile from nil pointer")
+			cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_READ, "Couldn't read profile from nil pointer")
 			goto Error
 		}
 
-		fm.Block = make([]byte, size)
+		// Allocate memory for Block
+		fm.Block = (*byte)(cmsMalloc(ContextID, size))
 		if fm.Block == nil {
-			cmsFree(ContextID, fm)
-			cmsFree(ContextID, iohandler)
-			cmsSignalError(ContextID, cmsERROR_READ, "Couldn't allocate %d bytes for profile", size)
-			return nil
+			goto Error
 		}
 
-		copy(fm.Block, Buffer)
+		// Copy data from Buffer to Block
+		src := unsafe.Slice((*byte)(Buffer), size)
+		dst := unsafe.Slice(fm.Block, size)
+		copy(dst, src)
+
 		fm.FreeBlockOnClose = true
 		fm.Size = size
 		fm.Pointer = 0
 		iohandler.ReportedSize = size
 
 	case 'w': // Write mode
-		fm = cmsMallocZero(ContextID, FILEMEM{}).(*FILEMEM)
+		fm = (*FILEMEM)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(FILEMEM{}))))
 		if fm == nil {
 			goto Error
 		}
 
-		fm.Block = Buffer
+		if Buffer == nil {
+			cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_READ, "Buffer cannot be nil for write mode")
+			goto Error
+		}
+
+		// Assign Buffer directly as the Block
+		fm.Block = (*byte)(Buffer)
 		fm.FreeBlockOnClose = false
 		fm.Size = size
 		fm.Pointer = 0
 		iohandler.ReportedSize = 0
 
 	default:
-		cmsSignalError(ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unknown access mode '%c'", AccessMode[0])
-		cmsFree(ContextID, iohandler)
-		return nil
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unknown access mode")
+		goto Error
 	}
 
+	// Initialize iohandler fields
 	iohandler.ContextID = ContextID
-	iohandler.stream = fm
+	iohandler.Stream = unsafe.Pointer(fm)
 	iohandler.UsedSpace = 0
 	iohandler.PhysicalFile = ""
 
+	// Assign function pointers
 	iohandler.Read = MemoryRead
 	iohandler.Seek = MemorySeek
 	iohandler.Close = MemoryClose
@@ -1186,88 +1311,86 @@ func cmsOpenIOhandlerFromMem(ContextID cmsContext, Buffer unsafe.Pointer, size u
 
 Error:
 	if fm != nil {
-		cmsFree(ContextID, fm)
+		if fm.Block != nil {
+			cmsFree(ContextID, unsafe.Pointer(fm.Block))
+		}
+		cmsFree(ContextID, unsafe.Pointer(fm))
 	}
 	if iohandler != nil {
-		cmsFree(ContextID, iohandler)
+		cmsFree(ContextID, unsafe.Pointer(iohandler))
 	}
 	return nil
 }
 
-// cmsOpenIOhandlerFromFile creates an IO handler for disk-based files.
 func cmsOpenIOhandlerFromFile(ContextID cmsContext, FileName string, AccessMode string) *cmsIOHANDLER {
-	var iohandler *cmsIOHANDLER
-	var file *os.File
-	var err error
-
-	// Validate inputs
 	if FileName == "" || AccessMode == "" {
-		cmsSignalError(ContextID, cmsERROR_FILE, "Invalid file name or access mode")
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_FILE, "Invalid file name or access mode")
 		return nil
 	}
 
-	// Allocate memory for IO handler
-	iohandler = cmsMallocZero(ContextID, unsafe.Sizeof(cmsIOHANDLER{})).(*cmsIOHANDLER)
+	iohandler := (*cmsIOHANDLER)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsIOHANDLER{}))))
 	if iohandler == nil {
 		return nil
 	}
 
-	// Parse access mode
+	var file *os.File
+	var err error
+
 	mode := ""
 	for _, ch := range AccessMode {
 		switch ch {
 		case 'r', 'w':
 			if mode != "" {
-				cmsFree(ContextID, iohandler)
-				cmsSignalError(ContextID, cmsERROR_FILE, "Access mode already specified '%c'", ch)
+				cmsFree(ContextID, unsafe.Pointer(iohandler))
+				cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_FILE, "Access mode already specified")
 				return nil
 			}
 			mode = string(ch)
 		case 'e': // Ignored in Go, no direct equivalent for "close-on-exec"
 			continue
 		default:
-			cmsFree(ContextID, iohandler)
-			cmsSignalError(ContextID, cmsERROR_FILE, "Wrong access mode '%c'", ch)
+			cmsFree(ContextID, unsafe.Pointer(iohandler))
+			cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_FILE, "Wrong access mode")
 			return nil
 		}
 	}
 
-	// Open file based on access mode
 	switch mode {
 	case "r":
 		file, err = os.Open(FileName)
 		if err != nil {
-			cmsFree(ContextID, iohandler)
-			cmsSignalError(ContextID, cmsERROR_FILE, "File '%s' not found", FileName)
+			cmsFree(ContextID, unsafe.Pointer(iohandler))
+			cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_FILE, "File  not found")
 			return nil
 		}
 		info, err := file.Stat()
 		if err != nil {
 			file.Close()
-			cmsFree(ContextID, iohandler)
-			cmsSignalError(ContextID, cmsERROR_FILE, "Cannot get size of file '%s'", FileName)
+			cmsFree(ContextID, unsafe.Pointer(iohandler))
+			cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_FILE, "Cannot get size of file ")
 			return nil
 		}
 		iohandler.ReportedSize = uint32(info.Size())
+
 	case "w":
 		file, err = os.Create(FileName)
 		if err != nil {
-			cmsFree(ContextID, iohandler)
-			cmsSignalError(ContextID, cmsERROR_FILE, "Couldn't create '%s'", FileName)
+			cmsFree(ContextID, unsafe.Pointer(iohandler))
+			cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_FILE, "Couldn't create ")
 			return nil
 		}
 		iohandler.ReportedSize = 0
+
 	default:
 		cmsFree(ContextID, unsafe.Pointer(iohandler))
-		return nil // Unreachable
+		return nil
 	}
 
 	iohandler.ContextID = ContextID
-	iohandler.Stream = file
+	iohandler.Stream = unsafe.Pointer(file)
 	iohandler.UsedSpace = 0
 	iohandler.PhysicalFile = FileName
 
-	// Assign functions for I/O operations
 	iohandler.Read = FileRead
 	iohandler.Seek = FileSeek
 	iohandler.Close = FileClose
@@ -1277,39 +1400,83 @@ func cmsOpenIOhandlerFromFile(ContextID cmsContext, FileName string, AccessMode 
 	return iohandler
 }
 
-// Mock implementations of file I/O functions
+// FileRead reads count elements of size bytes each from the file stream. Returns the number of elements read.
 func FileRead(iohandler *cms_io_handler, buffer unsafe.Pointer, size, count uint32) uint32 {
-	data := make([]byte, size*count)
-	n, err := iohandler.Stream.Read(data)
+	file := (*os.File)(iohandler.Stream)
+	totalBytes := int(size * count)
+	readBuffer := make([]byte, totalBytes)
+
+	nRead, err := file.Read(readBuffer)
 	if err != nil {
+		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_FILE, "Read error. Got  bytes, block should be of  bytes")
 		return 0
 	}
-	copy((*(*[1 << 30]byte)(buffer))[:n], data)
-	return uint32(n) / size
+
+	// Copy the read data into the provided buffer
+	memmove(buffer, unsafe.Pointer(&readBuffer[0]), uintptr(nRead))
+
+	if nRead < totalBytes {
+		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_FILE, "Read error. Got  bytes, block should be of  bytes")
+		return 0
+	}
+
+	return uint32(nRead / int(size))
 }
 
+// FileSeek repositions the file pointer within the file. Returns true on success, false otherwise.
 func FileSeek(iohandler *cms_io_handler, offset uint32) bool {
-	_, err := iohandler.Stream.Seek(int64(offset), 0)
-	return err == nil
-}
+	file := (*os.File)(iohandler.Stream)
 
-func FileClose(iohandler *cms_io_handler) bool {
-	err := iohandler.Stream.Close()
-	cmsFree(iohandler.ContextID, iohandler)
-	return err == nil
-}
-
-func FileTell(iohandler *cms_io_handler) uint32 {
-	pos, err := iohandler.Stream.Seek(0, os.SEEK_CUR)
+	_, err := file.Seek(int64(offset), 0) // Equivalent to SEEK_SET
 	if err != nil {
+		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_FILE, "Seek error; probably corrupted file")
+		return false
+	}
+
+	return true
+}
+
+// FileTell returns the current position of the file pointer within the file. Returns 0 on error, which is also a valid position.
+func FileTell(iohandler *cms_io_handler) uint32 {
+	file := (*os.File)(iohandler.Stream)
+
+	pos, err := file.Seek(0, 1) // Equivalent to SEEK_CUR
+	if err != nil {
+		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_FILE, "Tell error; probably corrupted file")
 		return 0
 	}
+
 	return uint32(pos)
 }
 
-func FileWrite(iohandler *cms_io_handler, size uint32, data unsafe.Pointer) bool {
-	bytes := (*(*[1 << 30]byte)(data))[:size]
-	n, err := iohandler.Stream.Write(bytes)
-	iohandler.UsedSpace += uint32(n)
-	return err == nil && uint32(n) == size
+// FileWrite writes data to the stream. Returns true on success, false otherwise.
+func FileWrite(iohandler *cms_io_handler, size uint32, buffer unsafe.Pointer) bool {
+	if size == 0 {
+		return true // We allow writing 0 bytes, but nothing is written
+	}
+
+	file := (*os.File)(iohandler.Stream)
+	data := unsafe.Slice((*byte)(buffer), size)
+
+	nWritten, err := file.Write(data)
+	if err != nil || uint32(nWritten) != size {
+		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_FILE, "Write error; expected to write  bytes")
+		return false
+	}
+
+	iohandler.UsedSpace += size
+	return true
+}
+
+// FileClose closes the file stream. Returns true on success, false otherwise.
+func FileClose(iohandler *cms_io_handler) bool {
+	file := (*os.File)(iohandler.Stream)
+
+	if err := file.Close(); err != nil {
+		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_FILE, "Close error; unable to close the file")
+		return false
+	}
+
+	cmsFree(iohandler.ContextID, unsafe.Pointer(iohandler))
+	return true
 }

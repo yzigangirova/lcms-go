@@ -61,15 +61,55 @@ const cmsMAX_PATH = 256
 type cmsInfoType int
 
 type cmsDICTentry struct {
+	Next *cmsDICTentry
 
-    Next *cmsDICTentry
+	DisplayName  *cmsMLU
+	DisplayValue *cmsMLU
+	Name         string
+	Value        string
+}
 
-    DisplayName *cmsMLU 
-    DisplayValue *cmsMLU
-    Name string
-    Value string
+// ----------------------------------------------------------------------------------------------
+// ICC profile internal base types. Strictly, shouldn't be declared in this header, but maybe
+// somebody want to use this info for accessing profile header directly, so here it is.
 
-} ;
+// Profile header -- it is 32-bit aligned, so no issues are expected on alignment
+type cmsICCHeader struct {
+	Size            uint32                   // Profile size in bytes
+	CmmId           cmsSignature             // CMM for this profile
+	Version         uint32                   // Format version number
+	DeviceClass     cmsProfileClassSignature // Type of profile
+	ColorSpace      cmsColorSpaceSignature   // Color space of data
+	PCS             cmsColorSpaceSignature   // PCS, XYZ or Lab only
+	Date            cmsDateTimeNumber        // Date profile was created
+	Magic           cmsSignature             // Magic Number to identify an ICC profile
+	Platform        cmsPlatformSignature     // Primary Platform
+	Flags           uint32                   // Various bit settings
+	Manufacturer    cmsSignature             // Device manufacturer
+	Model           uint32                   // Device model number
+	Attributes      uint64                   // Device attributes
+	RenderingIntent uint32                   // Rendering intent
+	Illuminant      cmsEncodedXYZNumber      // Profile illuminant
+	Creator         cmsSignature             // Profile creator
+	ProfileID       cmsProfileID             // Profile ID using MD5
+	Reserved        [28]uint8                // Reserved for future use
+
+}
+
+// ICC base tag
+type cmsTagBase struct {
+	Sig      cmsTagTypeSignature
+	Reserved [4]int8
+}
+
+// A tag entry in directory
+type cmsTagEntry struct {
+	Sig    cmsTagSignature // The tag signature
+	Offset uint32          // Start of tag
+	Size   uint32          // Size in bytes
+
+}
+
 // Define cmsHPROFILE as unsafe.Pointer to represent a void pointer
 type cmsHPROFILE unsafe.Pointer
 type cmsHANDLE unsafe.Pointer // Generic handle
@@ -100,6 +140,10 @@ func cmsGetContextUserData(contextID cmsContext) unsafe.Pointer
 
 // cmsUnregisterPluginsTHR unregisters plugins for a specific context.
 func cmsUnregisterPluginsTHR(contextID cmsContext)
+
+// Definitions in ICC spec
+const cmsMagicNumber = 0x61637370 // 'acsp'
+const lcmsSignature = 0x6c636d73  // 'lcms'
 
 // Error Codes
 const (
@@ -686,13 +730,14 @@ const (
 	cmsSigFloatPCS2XYZ          cmsStageSignature = 0x78326420 // 'x2d '
 	cmsSigClipNegativesElemType cmsStageSignature = 0x636c7020 // 'clp '
 )
+
 // Types of CurveElements
 type cmsCurveSegSignature uint32
 
 const (
-	cmsSigFormulaCurveSeg   cmsCurveSegSignature = 0x70617266 // 'parf'
-	cmsSigSampledCurveSeg   cmsCurveSegSignature = 0x73616D66 // 'samf'
-	cmsSigSegmentedCurve    cmsCurveSegSignature = 0x63757266 // 'curf'
+	cmsSigFormulaCurveSeg cmsCurveSegSignature = 0x70617266 // 'parf'
+	cmsSigSampledCurveSeg cmsCurveSegSignature = 0x73616D66 // 'samf'
+	cmsSigSegmentedCurve  cmsCurveSegSignature = 0x63757266 // 'curf'
 )
 
 // Used in ResponseCurveType
@@ -715,6 +760,18 @@ const (
 	cmsTransparency uint32 = 1
 	cmsGlossy       uint32 = 0
 	cmsMatte        uint32 = 2
+)
+
+type cmsPlatformSignature uint32
+
+const (
+	cmsSigMacintosh cmsPlatformSignature = 0x4150504C // 'APPL'
+	cmsSigMicrosoft cmsPlatformSignature = 0x4D534654 // 'MSFT'
+	cmsSigSolaris   cmsPlatformSignature = 0x53554E57 // 'SUNW'
+	cmsSigSGI       cmsPlatformSignature = 0x53474920 // 'SGI '
+	cmsSigTaligent  cmsPlatformSignature = 0x54474E54 // 'TGNT'
+	cmsSigUnices    cmsPlatformSignature = 0x2A6E6978 // '*nix'   // From argyll -- Not official
+
 )
 
 // cmsProfileClassSignature represents ICC Profile Classes

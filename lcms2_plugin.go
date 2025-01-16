@@ -43,11 +43,6 @@ type cmsTagTypeSignature uint32
 
 type cmsTagSignature uint32
 
-type cmsTagBase struct {
-	Sig      cmsTagTypeSignature
-	Reserved [4]int8
-}
-
 // Vectors and Matrices Operations
 func _cmsVEC3Init(r *cmsVEC3, x, y, z float64) {
 	r.N[0] = x

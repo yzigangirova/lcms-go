@@ -6,123 +6,122 @@ import (
 
 // LUT tags
 var (
-    Device2PCS16 = []cmsTagSignature{
-        cmsSigAToB0Tag, // Perceptual
-        cmsSigAToB1Tag, // Relative colorimetric
-        cmsSigAToB2Tag, // Saturation
-        cmsSigAToB1Tag, // Absolute colorimetric
-    }
+	Device2PCS16 = []cmsTagSignature{
+		cmsSigAToB0Tag, // Perceptual
+		cmsSigAToB1Tag, // Relative colorimetric
+		cmsSigAToB2Tag, // Saturation
+		cmsSigAToB1Tag, // Absolute colorimetric
+	}
 
-    Device2PCSFloat = []cmsTagSignature{
-        cmsSigDToB0Tag, // Perceptual
-        cmsSigDToB1Tag, // Relative colorimetric
-        cmsSigDToB2Tag, // Saturation
-        cmsSigDToB3Tag, // Absolute colorimetric
-    }
+	Device2PCSFloat = []cmsTagSignature{
+		cmsSigDToB0Tag, // Perceptual
+		cmsSigDToB1Tag, // Relative colorimetric
+		cmsSigDToB2Tag, // Saturation
+		cmsSigDToB3Tag, // Absolute colorimetric
+	}
 
-    PCS2Device16 = []cmsTagSignature{
-        cmsSigBToA0Tag, // Perceptual
-        cmsSigBToA1Tag, // Relative colorimetric
-        cmsSigBToA2Tag, // Saturation
-        cmsSigBToA1Tag, // Absolute colorimetric
-    }
+	PCS2Device16 = []cmsTagSignature{
+		cmsSigBToA0Tag, // Perceptual
+		cmsSigBToA1Tag, // Relative colorimetric
+		cmsSigBToA2Tag, // Saturation
+		cmsSigBToA1Tag, // Absolute colorimetric
+	}
 
-    PCS2DeviceFloat = []cmsTagSignature{
-        cmsSigBToD0Tag, // Perceptual
-        cmsSigBToD1Tag, // Relative colorimetric
-        cmsSigBToD2Tag, // Saturation
-        cmsSigBToD3Tag, // Absolute colorimetric
-    }
+	PCS2DeviceFloat = []cmsTagSignature{
+		cmsSigBToD0Tag, // Perceptual
+		cmsSigBToD1Tag, // Relative colorimetric
+		cmsSigBToD2Tag, // Saturation
+		cmsSigBToD3Tag, // Absolute colorimetric
+	}
 )
 
 // Factors to convert from 1.15 fixed point to 0..1.0 range and vice-versa
 const (
-    InpAdj = 1.0 / MAX_ENCODEABLE_XYZ // (65536.0 / (65535.0 * 2.0))
-    OutpAdj = MAX_ENCODEABLE_XYZ      // ((2.0 * 65535.0) / 65536.0)
+	InpAdj  = 1.0 / MAX_ENCODEABLE_XYZ // (65536.0 / (65535.0 * 2.0))
+	OutpAdj = MAX_ENCODEABLE_XYZ       // ((2.0 * 65535.0) / 65536.0)
 )
 
 // Several resources for gray conversions
 var (
-    GrayInputMatrix = []float64{
-        InpAdj * cmsD50X,
-        InpAdj * cmsD50Y,
-        InpAdj * cmsD50Z,
-    }
+	GrayInputMatrix = []float64{
+		InpAdj * cmsD50X,
+		InpAdj * cmsD50Y,
+		InpAdj * cmsD50Z,
+	}
 
-    OneToThreeInputMatrix = []float64{
-        1, 1, 1,
-    }
+	OneToThreeInputMatrix = []float64{
+		1, 1, 1,
+	}
 
-    PickYMatrix = []float64{
-        0,
-        OutpAdj * cmsD50Y,
-        0,
-    }
+	PickYMatrix = []float64{
+		0,
+		OutpAdj * cmsD50Y,
+		0,
+	}
 
-    PickLstarMatrix = []float64{
-        1, 0, 0,
-    }
+	PickLstarMatrix = []float64{
+		1, 0, 0,
+	}
 )
 
 // cmsReadMediaWhitePoint retrieves the media white point and addresses issues in old profiles.
 func cmsReadMediaWhitePoint(Dest *cmsCIEXYZ, hProfile cmsHPROFILE) bool {
-    // Ensure Dest is not nil
-    if Dest == nil {
-        return false
-    }
+	// Ensure Dest is not nil
+	if Dest == nil {
+		return false
+	}
 
-    // Read the media white point tag
-    Tag := (*cmsCIEXYZ)(cmsReadTag(hProfile, cmsSigMediaWhitePointTag))
+	// Read the media white point tag
+	Tag := (*cmsCIEXYZ)(cmsReadTag(hProfile, cmsSigMediaWhitePointTag))
 
-    // If no white point, use D50 as default
-    if Tag == nil {
-        *Dest = *cmsD50_XYZ()
-        return true
-    }
+	// If no white point, use D50 as default
+	if Tag == nil {
+		*Dest = *cmsD50_XYZ()
+		return true
+	}
 
-    // For V2 display profiles, return D50 as the white point
-    if cmsGetEncodedICCversion(unsafe.Pointer(hProfile)) < 0x4000000 {
-        if cmsGetDeviceClass(unsafe.Pointer(hProfile)) == cmsSigDisplayClass {
-            *Dest = *cmsD50_XYZ()
-            return true
-        }
-    }
+	// For V2 display profiles, return D50 as the white point
+	if cmsGetEncodedICCversion(unsafe.Pointer(hProfile)) < 0x4000000 {
+		if cmsGetDeviceClass(unsafe.Pointer(hProfile)) == cmsSigDisplayClass {
+			*Dest = *cmsD50_XYZ()
+			return true
+		}
+	}
 
-    // Assign the retrieved tag to Dest
-    *Dest = *Tag
-    return true
+	// Assign the retrieved tag to Dest
+	*Dest = *Tag
+	return true
 }
 func cmsReadCHAD(Dest *cmsMAT3, hProfile cmsHPROFILE) bool {
-    if Dest == nil {
-        panic("Destination matrix cannot be nil") // Replace cmsAssert
-    }
+	if Dest == nil {
+		panic("Destination matrix cannot be nil") // Replace cmsAssert
+	}
 
-    // Attempt to read the Chromatic Adaptation Tag
-    Tag := cmsReadTag(hProfile, cmsSigChromaticAdaptationTag).(*cmsMAT3)
-    if Tag != nil {
-        *Dest = *Tag
-        return true
-    }
+	// Attempt to read the Chromatic Adaptation Tag
+	Tag := (*cmsMAT3)(cmsReadTag(hProfile, cmsSigChromaticAdaptationTag))
+	if Tag != nil {
+		*Dest = *Tag
+		return true
+	}
 
-    // No CHAD available, default it to identity
-    cmsMAT3identity(Dest)
+	// No CHAD available, default it to identity
+	cmsMAT3identity(Dest)
 
-    // For V2 display profiles, ensure D50 as the white point
-    if cmsGetEncodedICCversion(unsafe.Pointer(hProfile)) < 0x4000000 {
-        if cmsGetDeviceClass(unsafe.Pointer(hProfile)) == cmsSigDisplayClass {
-            White := cmsReadTag(hProfile, cmsSigMediaWhitePointTag).(*cmsCIEXYZ)
-            if White == nil {
-                cmsMAT3identity(Dest)
-                return true
-            }
+	// For V2 display profiles, ensure D50 as the white point
+	if cmsGetEncodedICCversion(unsafe.Pointer(hProfile)) < 0x4000000 {
+		if cmsGetDeviceClass(unsafe.Pointer(hProfile)) == cmsSigDisplayClass {
+			White := (*cmsCIEXYZ)(cmsReadTag(hProfile, cmsSigMediaWhitePointTag))
+			if White == nil {
+				cmsMAT3identity(Dest)
+				return true
+			}
 
-            return cmsAdaptationMatrix(Dest, nil, White, cmsD50_XYZ())
-        }
-    }
+			return cmsAdaptationMatrix(Dest, nil, White, cmsD50_XYZ())
+		}
+	}
 
-    return true
+	return true
 }
-
 
 func cmsReadDevicelinkLUT(hProfile cmsHPROFILE, Intent uint32) *cmsPipeline {
 	ContextID := cmsGetProfileContextID(hProfile)
@@ -396,6 +395,7 @@ func cmsReadOutputLUT(hProfile cmsHPROFILE, Intent uint32) *cmsPipeline {
 
 	return BuildRGBOutputMatrixShaper(hProfile)
 }
+
 // cmsReadProfileSequence reads both profile sequence description and profile sequence ID if present,
 // then combines them into a unique structure holding both.
 func cmsReadProfileSequence(hProfile *cmsHPROFILE) *cmsSEQ {

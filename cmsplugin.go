@@ -639,3 +639,24 @@ func cmsContextGetClientChunk(ContextID cmsContext, mc cmsMemoryClient) unsafe.P
 	// A null ptr means no special settings for that context, and this reverts to globalContext globals
 	return globalContext.chunks[mc]
 }
+
+
+// _cmsGetTime provides thread-safe time retrieval and populates the given *time.Time with UTC time.
+func cmsGetTime(ptrTime *time.Time) bool {
+	// Get the current time
+	now := time.Now()
+
+	// Ensure thread safety with a mutex
+	contextMutex.Lock()
+	defer contextMutex.Unlock()
+
+	// Convert to UTC
+	utcTime := now.UTC()
+
+	if ptrTime == nil {
+		return false
+	}
+
+	*ptrTime = utcTime
+	return true
+}
