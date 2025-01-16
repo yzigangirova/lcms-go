@@ -5,8 +5,6 @@ import (
 	"unsafe"
 )
 
-// cmsIntentFn represents a function type for intents.
-
 // cmsIntentsList represents the structure holding implementations for all supported intents.
 type cmsIntentsList struct {
 	Intent      uint32
@@ -41,6 +39,177 @@ func initDefaultIntents() {
 func init() {
 	initDefaultIntents()
 }
+
+// ComputeBlackPointCompensation calculates the black point compensation matrix and offset.
+// Black points should come relative to the white point. Fills a matrix `m` and an offset `off`,
+// organized as a 4x4 matrix.
+//
+// Implementation details:
+// The function computes a linear scaling in XYZ such that:
+// - [m]*bpin + off = bpout
+// - [m]*D50 + off = D50
+//
+// This linear scaling takes the form: ax+b, where:
+// - a = (bpout - D50) / (bpin - D50)
+// - b = -D50 * (bpout - bpin) / (bpin - D50)
+func ComputeBlackPointCompensation(BlackPointIn *cmsCIEXYZ, BlackPointOut *cmsCIEXYZ, m *cmsMAT3, off *cmsVEC3) {
+	var ax, ay, az, bx, by, bz, tx, ty, tz float64
+
+	// Compute differences between black points and D50
+	tx = BlackPointIn.X - cmsD50_XYZ().X
+	ty = BlackPointIn.Y - cmsD50_XYZ().Y
+	tz = BlackPointIn.Z - cmsD50_XYZ().Z
+
+	// Calculate scaling factors (a) for each channel
+	ax = (BlackPointOut.X - cmsD50_XYZ().X) / tx
+	ay = (BlackPointOut.Y - cmsD50_XYZ().Y) / ty
+	az = (BlackPointOut.Z - cmsD50_XYZ().Z) / tz
+
+	// Calculate offset factors (b) for each channel
+	bx = -cmsD50_XYZ().X * (BlackPointOut.X - BlackPointIn.X) / tx
+	by = -cmsD50_XYZ().Y * (BlackPointOut.Y - BlackPointIn.Y) / ty
+	bz = -cmsD50_XYZ().Z * (BlackPointOut.Z - BlackPointIn.Z) / tz
+
+	// Initialize the transformation matrix with scaling factors
+	cmsVEC3init(&m.V[0], ax, 0, 0)
+	cmsVEC3init(&m.V[1], 0, ay, 0)
+	cmsVEC3init(&m.V[2], 0, 0, az)
+
+	// Initialize the offset vector
+	cmsVEC3init(off, bx, by, bz)
+}
+
+// Approximate a blackbody illuminant based on CHAD information
+// Approximate a blackbody illuminant based on CHAD information
+func CHAD2Temp(Chad *cmsMAT3) float64 {
+	var d, s cmsVEC3
+	var Dest cmsCIEXYZ
+	var DestChromaticity cmsCIExyY
+	var TempK float64
+	var m1, m2 cmsMAT3
+
+	// Copy CHAD into m1
+	m1 = *Chad
+
+	// Invert the CHAD matrix
+	if !cmsMAT3inverse(&m1, &m2) {
+		return -1.0
+	}
+
+	// Convert D50 across inverse CHAD to get the absolute white point
+	s.N[VX] = cmsD50_XYZ().X
+	s.N[VY] = cmsD50_XYZ().Y
+	s.N[VZ] = cmsD50_XYZ().Z
+
+	cmsMAT3eval(&d, &m2, &s)
+
+	// Populate the destination XYZ values
+	Dest.X = d.N[VX]
+	Dest.Y = d.N[VY]
+	Dest.Z = d.N[VZ]
+
+	// Convert XYZ to chromaticity
+	cmsXYZ2xyY(&DestChromaticity, &Dest)
+
+	// Compute the temperature from the white point
+	if !cmsTempFromWhitePoint(&TempK, &DestChromaticity) {
+		return -1.0 // Return an invalid temperature if the conversion fails
+	}
+
+	return TempK
+}
+
+// Compute a CHAD based on a given temperature
+func Temp2CHAD(Chad *cmsMAT3, Temp float64) {
+	var White cmsCIEXYZ
+	var ChromaticityOfWhite cmsCIExyY
+
+	// Compute chromaticity from the given temperature
+	cmsWhitePointFromTemp(&ChromaticityOfWhite, Temp)
+
+	// Convert chromaticity to XYZ
+	cmsxyY2XYZ(&White, &ChromaticityOfWhite)
+
+	// Compute the chromatic adaptation matrix (CHAD) for the given white point
+	cmsAdaptationMatrix(Chad, nil, &White, cmsD50_XYZ())
+}
+
+// Join scalings to obtain relative input to absolute and then to relative output.
+// Result is stored in a 3x3 matrix
+func ComputeAbsoluteIntent(
+	AdaptationState float64,
+	WhitePointIn *cmsCIEXYZ,
+	ChromaticAdaptationMatrixIn *cmsMAT3,
+	WhitePointOut *cmsCIEXYZ,
+	ChromaticAdaptationMatrixOut *cmsMAT3,
+	m *cmsMAT3,
+) bool {
+	var Scale, m1, m2, m3, m4 cmsMAT3
+
+	// TODO: Follow Marc Mahy's recommendation to check if CHAD is same by using M1*M2 == M2*M1. If so, do nothing.
+	// TODO: Add support for ArgyllArts tag
+
+	// Adaptation state
+	if AdaptationState == 1.0 {
+		// Observer is fully adapted. Keep chromatic adaptation.
+		// That is the standard V4 behaviour
+		cmsVEC3init(&m.V[0], WhitePointIn.X/WhitePointOut.X, 0, 0)
+		cmsVEC3init(&m.V[1], 0, WhitePointIn.Y/WhitePointOut.Y, 0)
+		cmsVEC3init(&m.V[2], 0, 0, WhitePointIn.Z/WhitePointOut.Z)
+	} else {
+		// Incomplete adaptation. This is an advanced feature.
+		cmsVEC3init(&Scale.V[0], WhitePointIn.X/WhitePointOut.X, 0, 0)
+		cmsVEC3init(&Scale.V[1], 0, WhitePointIn.Y/WhitePointOut.Y, 0)
+		cmsVEC3init(&Scale.V[2], 0, 0, WhitePointIn.Z/WhitePointOut.Z)
+
+		if AdaptationState == 0.0 {
+			m1 = *ChromaticAdaptationMatrixOut
+			cmsMAT3per(&m2, &m1, &Scale)
+			// m2 holds CHAD from output white to D50 times abs. col. scaling
+
+			// Observer is not adapted, undo the chromatic adaptation
+			cmsMAT3per(m, &m2, ChromaticAdaptationMatrixOut)
+
+			m3 = *ChromaticAdaptationMatrixIn
+			if !cmsMAT3inverse(&m3, &m4) {
+				return false
+			}
+			cmsMAT3per(m, &m2, &m4)
+		} else {
+			var MixedCHAD cmsMAT3
+			var TempSrc, TempDest, Temp float64
+
+			m1 = *ChromaticAdaptationMatrixIn
+			if !cmsMAT3inverse(&m1, &m2) {
+				return false
+			}
+			cmsMAT3per(&m3, &m2, &Scale)
+			// m3 holds CHAD from input white to D50 times abs. col. scaling
+
+			TempSrc = CHAD2Temp(ChromaticAdaptationMatrixIn)
+			TempDest = CHAD2Temp(ChromaticAdaptationMatrixOut)
+
+			if TempSrc < 0.0 || TempDest < 0.0 {
+				return false // Something went wrong
+			}
+
+			if cmsMAT3isIdentity(&Scale) && math.Abs(TempSrc-TempDest) < 0.01 {
+				cmsMAT3identity(m)
+				return true
+			}
+
+			Temp = (1.0-AdaptationState)*TempDest + AdaptationState*TempSrc
+
+			// Get a CHAD from whatever output temperature to D50. This replaces output CHAD
+			Temp2CHAD(&MixedCHAD, Temp)
+
+			cmsMAT3per(m, &m3, &MixedCHAD)
+		}
+	}
+	return true
+}
+
+// cmsIntentFn represents a function type for intents.
 
 // Default handler for ICC-style intents
 
@@ -77,13 +246,13 @@ func DefaultICCintents(
 		return nil
 	}
 
-	CurrentColorSpace = cmsGetColorSpace(hProfiles[0])
+	CurrentColorSpace = cmsGetColorSpace(unsafe.Pointer(hProfiles[0]))
 
 	for i := uint32(0); i < nProfiles; i++ {
 		var lIsDeviceLink, lIsInput bool
 
 		hProfile = hProfiles[i]
-		ClassSig = cmsGetDeviceClass(hProfile)
+		ClassSig = cmsGetDeviceClass(unsafe.Pointer(hProfile))
 		lIsDeviceLink = (ClassSig == cmsSigLinkClass || ClassSig == cmsSigAbstractClass)
 
 		// Determine if the profile is input
@@ -97,15 +266,15 @@ func DefaultICCintents(
 		Intent = TheIntents[i]
 
 		if lIsInput || lIsDeviceLink {
-			ColorSpaceIn = cmsGetColorSpace(hProfile)
-			ColorSpaceOut = cmsGetPCS(hProfile)
+			ColorSpaceIn = cmsGetColorSpace(unsafe.Pointer(hProfile))
+			ColorSpaceOut = cmsGetPCS(unsafe.Pointer(hProfile))
 		} else {
-			ColorSpaceIn = cmsGetPCS(hProfile)
-			ColorSpaceOut = cmsGetColorSpace(hProfile)
+			ColorSpaceIn = cmsGetPCS(unsafe.Pointer(hProfile))
+			ColorSpaceOut = cmsGetColorSpace(unsafe.Pointer(hProfile))
 		}
 
 		if !ColorSpaceIsCompatible(ColorSpaceIn, CurrentColorSpace) {
-			cmsSignalError(ContextID, cmsERROR_COLORSPACE_CHECK, "ColorSpace mismatch")
+			cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_COLORSPACE_CHECK, "ColorSpace mismatch")
 			goto Error
 		}
 
@@ -162,7 +331,7 @@ func DefaultICCintents(
 	// Handle non-negatives clip
 	if dwFlags&cmsFLAGS_NONEGATIVES != 0 {
 		if ColorSpaceOut == cmsSigGrayData || ColorSpaceOut == cmsSigRgbData || ColorSpaceOut == cmsSigCmykData {
-			clip := cmsStageClipNegatives(Result.ContextID, cmsChannelsOfColorSpace(ColorSpaceOut))
+			clip := cmsStageClipNegatives(Result.ContextID, uint32(cmsChannelsOfColorSpace(ColorSpaceOut)))
 			if clip == nil {
 				goto Error
 			}
@@ -185,6 +354,169 @@ Error:
 	return nil
 }
 
+// IsEmptyLayer checks if the given matrix `m` and offset `off` represent an empty layer.
+// Returns true if the layer is effectively empty, false otherwise.
+//
+// An empty layer is defined as:
+// - Both `m` and `off` are NULL (allowed as an empty layer).
+// - `m` is NULL but `off` is not (this indicates an internal error).
+// - `m` is the identity matrix and `off` is a zero vector.
+//
+// Tolerance for differences is set to 0.002.
+func IsEmptyLayer(m *cmsMAT3, off *cmsVEC3) bool {
+	var diff float64 = 0
+	var Ident cmsMAT3
+	var i int
+
+	// If both m and off are NULL, it's an empty layer.
+	if m == nil && off == nil {
+		return true
+	}
+
+	// If m is NULL but off is not, it's an internal error.
+	if m == nil && off != nil {
+		return false
+	}
+
+	// Initialize the identity matrix for comparison.
+	cmsMAT3identity(&Ident)
+
+	// Compare the matrix `m` with the identity matrix.
+	for i = 0; i < 3*3; i++ {
+		diff += math.Abs((*(*[9]float64)(unsafe.Pointer(m)))[i] -
+			(*(*[9]float64)(unsafe.Pointer(&Ident)))[i])
+	}
+
+	// Compare the offset `off` with a zero vector.
+	for i = 0; i < 3; i++ {
+		diff += math.Abs((*(*[3]float64)(unsafe.Pointer(off)))[i])
+	}
+
+	// If the total difference is below the threshold, consider the layer empty.
+	return diff < 0.002
+}
+
+func ComputeConversion(i uint32, hProfiles []cmsHPROFILE, Intent uint32, BPC bool, AdaptationState float64, m *cmsMAT3, off *cmsVEC3) bool {
+	// Initialize m and off to identity
+	cmsMAT3identity(m)
+	cmsVEC3init(off, 0, 0, 0)
+
+	// Handle absolute colorimetric intent
+	if Intent == INTENT_ABSOLUTE_COLORIMETRIC {
+		var (
+			WhitePointIn, WhitePointOut                               cmsCIEXYZ
+			ChromaticAdaptationMatrixIn, ChromaticAdaptationMatrixOut cmsMAT3
+		)
+
+		if !cmsReadMediaWhitePoint(&WhitePointIn, hProfiles[i-1]) || !cmsReadCHAD(&ChromaticAdaptationMatrixIn, hProfiles[i-1]) {
+			return false
+		}
+		if !cmsReadMediaWhitePoint(&WhitePointOut, hProfiles[i]) || !cmsReadCHAD(&ChromaticAdaptationMatrixOut, hProfiles[i]) {
+			return false
+		}
+		if !ComputeAbsoluteIntent(AdaptationState, &WhitePointIn, &ChromaticAdaptationMatrixIn, &WhitePointOut, &ChromaticAdaptationMatrixOut, m) {
+			return false
+		}
+	} else if BPC {
+		// Handle black point compensation
+		var BlackPointIn, BlackPointOut cmsCIEXYZ
+
+		cmsDetectBlackPoint(&BlackPointIn, hProfiles[i-1], Intent, 0)
+		cmsDetectDestinationBlackPoint(&BlackPointOut, hProfiles[i], Intent, 0)
+
+		// Skip if black points are equal
+		if BlackPointIn.X != BlackPointOut.X || BlackPointIn.Y != BlackPointOut.Y || BlackPointIn.Z != BlackPointOut.Z {
+			ComputeBlackPointCompensation(&BlackPointIn, &BlackPointOut, m, off)
+		}
+	}
+
+	// Adjust offset for encoding
+	for k := 0; k < 3; k++ {
+		off.N[k] /= MAX_ENCODEABLE_XYZ
+	}
+
+	return true
+}
+func AddConversion(Result *cmsPipeline, InPCS cmsColorSpaceSignature, OutPCS cmsColorSpaceSignature, m *cmsMAT3, off *cmsVEC3) bool {
+	mAsDbl := (*[9]float64)(unsafe.Pointer(m))[:]
+	offAsDbl := (*[3]float64)(unsafe.Pointer(off))[:]
+
+	// Handle PCS mismatches
+	switch InPCS {
+	case cmsSigXYZData: // Input profile operates in XYZ
+		switch OutPCS {
+		case cmsSigXYZData: // XYZ -> XYZ
+			if !IsEmptyLayer(m, off) {
+				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
+					return false
+				}
+			}
+		case cmsSigLabData: // XYZ -> Lab
+			if !IsEmptyLayer(m, off) {
+				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
+					return false
+				}
+			}
+			if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocXYZ2Lab(Result.ContextID)) {
+				return false
+			}
+		default:
+			return false // Colorspace mismatch
+		}
+
+	case cmsSigLabData: // Input profile operates in Lab
+		switch OutPCS {
+		case cmsSigXYZData: // Lab -> XYZ
+			if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocLab2XYZ(Result.ContextID)) {
+				return false
+			}
+			if !IsEmptyLayer(m, off) {
+				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
+					return false
+				}
+			}
+		case cmsSigLabData: // Lab -> Lab
+			if !IsEmptyLayer(m, off) {
+				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocLab2XYZ(Result.ContextID)) ||
+					!cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) ||
+					!cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocXYZ2Lab(Result.ContextID)) {
+					return false
+				}
+			}
+		default:
+			return false // Mismatch
+		}
+
+	default:
+		// Non-PCS colorspaces must match
+		if InPCS != OutPCS {
+			return false
+		}
+	}
+
+	return true
+}
+
+// ColorSpaceIsCompatible checks if two color spaces are compatible.
+func ColorSpaceIsCompatible(a, b cmsColorSpaceSignature) bool {
+	// If they are the same, they are compatible.
+	if a == b {
+		return true
+	}
+
+	// Check for MCH4 substitution of CMYK.
+	if (a == cmsSig4colorData && b == cmsSigCmykData) || (a == cmsSigCmykData && b == cmsSig4colorData) {
+		return true
+	}
+
+	// Check for XYZ/Lab compatibility.
+	if (a == cmsSigXYZData && b == cmsSigLabData) || (a == cmsSigLabData && b == cmsSigXYZData) {
+		return true
+	}
+
+	// If none of the above conditions are met, they are not compatible.
+	return false
+}
 func cmsDefaultICCintents(
 	ContextID cmsContext,
 	nProfiles uint32,
@@ -267,8 +599,8 @@ func BlackPreservingKOnlyIntents(
 		hLastProfile = hProfiles[lastProfilePos-1]
 		lastProfilePos--
 
-		if cmsGetColorSpace(hLastProfile) != cmsSigCmykData ||
-			cmsGetDeviceClass(hLastProfile) != cmsSigLinkClass {
+		if cmsGetColorSpace(unsafe.Pointer(hLastProfile)) != cmsSigCmykData ||
+			cmsGetDeviceClass(unsafe.Pointer(hLastProfile)) != cmsSigLinkClass {
 			break
 		}
 	}
@@ -276,9 +608,9 @@ func BlackPreservingKOnlyIntents(
 	preservationProfilesCount = lastProfilePos + 1
 
 	// Check for non-CMYK profiles
-	if cmsGetColorSpace(hProfiles[0]) != cmsSigCmykData ||
-		!(cmsGetColorSpace(hLastProfile) == cmsSigCmykData ||
-			cmsGetDeviceClass(hLastProfile) == cmsSigOutputClass) {
+	if cmsGetColorSpace(unsafe.Pointer(hProfiles[0])) != cmsSigCmykData ||
+		!(cmsGetColorSpace(unsafe.Pointer(hLastProfile)) == cmsSigCmykData ||
+			cmsGetDeviceClass(unsafe.Pointer(hLastProfile)) == cmsSigOutputClass) {
 		return DefaultICCintents(ContextID, nProfiles, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
 	}
 
@@ -287,7 +619,7 @@ func BlackPreservingKOnlyIntents(
 	if Result == nil {
 		return nil
 	}
-
+	var nGridPoints uint32
 	// Create a LUT holding normal ICC transform
 	bp.Cmyk2Cmyk = DefaultICCintents(ContextID, preservationProfilesCount, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
 	if bp.Cmyk2Cmyk == nil {
@@ -301,7 +633,7 @@ func BlackPreservingKOnlyIntents(
 	}
 
 	// Determine the number of gridpoints
-	nGridPoints := cmsReasonableGridpointsByColorspace(cmsSigCmykData, dwFlags)
+	nGridPoints = cmsReasonableGridpointsByColorspace(cmsSigCmykData, dwFlags)
 
 	// Create the CLUT
 	CLUT = cmsStageAllocCLut16bit(ContextID, nGridPoints, 4, 4, nil)
@@ -379,16 +711,16 @@ func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) bool {
 	// If going across black only, keep black only
 	if In[0] == 0 && In[1] == 0 && In[2] == 0 {
 		Out[0], Out[1], Out[2] = 0, 0, 0
-		Out[3] = cmsQuickSaturateWord(LabK[3] * 65535.0)
+		Out[3] = cmsQuickSaturateWord(float64(LabK[3] * 65535.0))
 		return true
 	}
 
 	// Try the original transform
-	cmsPipelineEvalFloat(bp.Cmyk2Cmyk, Inf[:], Outf[:])
+	cmsPipelineEvalFloat(Inf[:], Outf[:], bp.Cmyk2Cmyk)
 
 	// Store a copy of the floating-point result into 16-bit
 	for i := 0; i < 4; i++ {
-		Out[i] = cmsQuickSaturateWord(Outf[i] * 65535.0)
+		Out[i] = cmsQuickSaturateWord(float64(Outf[i] * 65535.0))
 	}
 
 	// Check if K is already OK
@@ -397,13 +729,13 @@ func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) bool {
 	}
 
 	// Measure and keep Lab measurement for further usage
-	cmsDoTransform(bp.HProofOutput, Out, &ColorimetricLab, 1)
+	cmsDoTransform(bp.HProofOutput, unsafe.Pointer(&Out[0]), unsafe.Pointer(&ColorimetricLab), 1)
 
 	// Transform to Lab
-	cmsDoTransform(bp.Cmyk2Lab, Outf[:], LabK[:], 1)
+	cmsDoTransform(bp.Cmyk2Lab, unsafe.Pointer(&Outf[0]), unsafe.Pointer(&LabK[0]), 1)
 
 	// Reverse interpolation to obtain CMY with fixed K
-	if !cmsPipelineEvalReverseFloat(bp.LabK2Cmyk, LabK[:], Outf[:], Outf[:]) {
+	if !cmsPipelineEvalReverseFloat(LabK[:], Outf[:], Outf[:], bp.LabK2Cmyk) {
 		// Use colorimetric transform if reverse interpolation fails
 		return true
 	}
@@ -424,13 +756,13 @@ func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) bool {
 		Ratio = 1.0
 	}
 
-	Out[0] = cmsQuickSaturateWord(Outf[0] * float32(Ratio) * 65535.0)
-	Out[1] = cmsQuickSaturateWord(Outf[1] * float32(Ratio) * 65535.0)
-	Out[2] = cmsQuickSaturateWord(Outf[2] * float32(Ratio) * 65535.0)
-	Out[3] = cmsQuickSaturateWord(Outf[3] * 65535.0)
+	Out[0] = cmsQuickSaturateWord(float64(Outf[0] * float32(Ratio) * 65535.0))
+	Out[1] = cmsQuickSaturateWord(float64(Outf[1] * float32(Ratio) * 65535.0))
+	Out[2] = cmsQuickSaturateWord(float64(Outf[2] * float32(Ratio) * 65535.0))
+	Out[3] = cmsQuickSaturateWord(float64(Outf[3] * 65535.0))
 
 	// Estimate the error
-	cmsDoTransform(bp.HProofOutput, Out, &BlackPreservingLab, 1)
+	cmsDoTransform(bp.HProofOutput, unsafe.Pointer(&Out[0]), unsafe.Pointer(&BlackPreservingLab), 1)
 	Error = cmsDeltaE(&ColorimetricLab, &BlackPreservingLab)
 	if Error > bp.MaxError {
 		bp.MaxError = Error
@@ -474,7 +806,7 @@ func BlackPreservingKPlaneIntents(
 		hLastProfile = hProfiles[lastProfilePos-1]
 		lastProfilePos--
 
-		if cmsGetColorSpace(hLastProfile) != cmsSigCmykData || cmsGetDeviceClass(hLastProfile) != cmsSigLinkClass {
+		if cmsGetColorSpace(unsafe.Pointer(hLastProfile)) != cmsSigCmykData || cmsGetDeviceClass(unsafe.Pointer(hLastProfile)) != cmsSigLinkClass {
 			break
 		}
 	}
@@ -482,8 +814,8 @@ func BlackPreservingKPlaneIntents(
 	preservationProfilesCount = lastProfilePos + 1
 
 	// Check for non-CMYK profiles
-	if cmsGetColorSpace(hProfiles[0]) != cmsSigCmykData ||
-		!(cmsGetColorSpace(hLastProfile) == cmsSigCmykData || cmsGetDeviceClass(hLastProfile) == cmsSigOutputClass) {
+	if cmsGetColorSpace(unsafe.Pointer(hProfiles[0])) != cmsSigCmykData ||
+		!(cmsGetColorSpace(unsafe.Pointer(hLastProfile)) == cmsSigCmykData || cmsGetDeviceClass(unsafe.Pointer(hLastProfile)) == cmsSigOutputClass) {
 		return DefaultICCintents(ContextID, nProfiles, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
 	}
 
@@ -492,7 +824,7 @@ func BlackPreservingKPlaneIntents(
 	if Result == nil {
 		return nil
 	}
-
+	var nGridPoints uint32
 	// Read input LUT
 	bp.LabK2Cmyk = cmsReadInputLUT(hLastProfile, INTENT_RELATIVE_COLORIMETRIC)
 	if bp.LabK2Cmyk == nil {
@@ -532,7 +864,7 @@ func BlackPreservingKPlaneIntents(
 	cmsCloseProfile(hLab)
 
 	// Create CLUT
-	nGridPoints := cmsReasonableGridpointsByColorspace(cmsSigCmykData, dwFlags)
+	nGridPoints = cmsReasonableGridpointsByColorspace(cmsSigCmykData, dwFlags)
 	CLUT = cmsStageAllocCLut16bit(ContextID, nGridPoints, 4, 4, nil)
 	if CLUT == nil {
 		goto Cleanup
@@ -571,7 +903,53 @@ Cleanup:
 	return Result
 }
 
-// _cmsRegisterRenderingIntentPlugin registers a rendering intent plugin.
+// Link routines ------------------------------------------------------------------------------------------------------
+
+// Chain several profiles into a single LUT. It just checks the parameters and then calls the handler
+// for the first intent in chain. The handler may be user-defined. Is up to the handler to deal with the
+// rest of intents in chain. A maximum of 255 profiles at time are supported, which is pretty reasonable.
+func cmsLinkProfiles(
+	ContextID cmsContext,
+	nProfiles uint32,
+	TheIntents []uint32,
+	hProfiles []cmsHPROFILE,
+	BPC []bool,
+	AdaptationStates []float64,
+	dwFlags uint32,
+) *cmsPipeline {
+	// Ensure a reasonable number of profiles is provided
+	if nProfiles == 0 || nProfiles > 255 {
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Couldn't link profiles")
+		return nil
+	}
+
+	// Loop through profiles to adjust BPC (Black Point Compensation) as needed
+	for i := uint32(0); i < nProfiles; i++ {
+		// Ensure BPC rules are enforced based on intent
+		if TheIntents[i] == INTENT_ABSOLUTE_COLORIMETRIC {
+			BPC[i] = false
+		}
+
+		if TheIntents[i] == INTENT_PERCEPTUAL || TheIntents[i] == INTENT_SATURATION {
+			// Force BPC for V4 profiles in perceptual and saturation
+			if cmsGetEncodedICCversion(unsafe.Pointer(hProfiles[i])) >= 0x4000000 {
+				BPC[i] = true
+			}
+		}
+	}
+
+	// Search for an appropriate intent handler
+	intent := SearchIntent(ContextID, TheIntents[0])
+	if intent == nil {
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported intent")
+		return nil
+	}
+
+	// Call the intent's handler to link profiles
+	return intent.Link(ContextID, nProfiles, TheIntents, hProfiles, BPC, AdaptationStates, dwFlags)
+}
+
+// cmsRegisterRenderingIntentPlugin registers a rendering intent plugin.
 func cmsRegisterRenderingIntentPlugin(id cmsContext, Data *cmsPluginBase) bool {
 	ctx := (*cmsIntentsPluginChunkType)(cmsContextGetClientChunk(id, IntentPlugin))
 	Plugin := (*cmsPluginRenderingIntent)(unsafe.Pointer(Data))
@@ -590,8 +968,7 @@ func cmsRegisterRenderingIntentPlugin(id cmsContext, Data *cmsPluginBase) bool {
 
 	// Populate the new node's fields.
 	fl.Intent = Plugin.Intent
-	copy(fl.Description[:], Plugin.Description[:len(Plugin.Description)])
-	fl.Description[len(fl.Description)-1] = 0 // Ensure null termination.
+	fl.Description = strncpy(Plugin.Description, int(unsafe.Sizeof(fl.Description)-1))
 	fl.Link = Plugin.Link
 
 	// Update the linked list.

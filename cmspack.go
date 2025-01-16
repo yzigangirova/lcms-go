@@ -734,17 +734,7 @@ func IsInkSpace(Type uint32) bool {
 		return false
 	}
 }
-func PixelSize(Format uint32) uint32 {
-	fmtBytes := T_BYTES(Format)
 
-	// For double, the T_BYTES field is zero
-	if fmtBytes == 0 {
-		return uint32(unsafe.Sizeof(uint64(0)))
-	}
-
-	// Otherwise, it is already correct for all formats
-	return uint32(fmtBytes)
-}
 func UnrollDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, Stride uint32) []uint8 {
 	nChan := T_CHANNELS(info.InputFormat)
 	DoSwap := T_DOSWAP(info.InputFormat)

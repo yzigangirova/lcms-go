@@ -304,10 +304,6 @@ func cmsWriteXYZNumber(io *cmsIOHANDLER, xyz *cmsCIEXYZ) bool {
 	return true
 }
 
-func cmsDoubleTo15Fixed16(value float64) int32 {
-	return int32(math.Floor(value*65536.0 + 0.5))
-}
-
 // Fixed Point Conversions
 
 func cms8Fixed8ToDouble(fixed8 uint16) float64 {
@@ -335,6 +331,12 @@ func cms15Fixed16ToDouble(fix32 int32) float64 {
 	floater := float64(whole) + mid
 
 	return sign * floater
+}
+
+
+// from double to Fixed point 15.16
+func cmsDoubleTo15Fixed16(v float64) cmsS15Fixed16Number  {
+    return cmsS15Fixed16Number (math.Floor((v)*65536.0 + 0.5))
 }
 
 // Date/Time Functions
@@ -460,7 +462,7 @@ func cmsPluginTHR(contextID cmsContext, plugin unsafe.Pointer) bool {
 
 		switch currentPlugin.Type {
 		case cmsPluginMemHandlerSig:
-			if cmsRegisterMemHandlerPlugin(contextID, currentPlugin) == cmsBoolTrue {
+			if cmsRegisterMemHandlerPlugin(contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginInterpolationSig:

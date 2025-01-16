@@ -94,7 +94,7 @@ func cmsXYZ2xyY(dest *cmsCIExyY, source *cmsCIEXYZ) {
 	dest.Y = source.Z
 }
 
-func xyY2XYZ(dest *cmsCIEXYZ, source *cmsCIExyY) {
+func cmsxyY2XYZ(dest *cmsCIEXYZ, source *cmsCIExyY) {
 	dest.X = (source.x / source.y) * source.Y
 	dest.Y = source.Y
 	dest.Z = ((1 - source.x - source.y) / source.y) * source.Y

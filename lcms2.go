@@ -60,11 +60,29 @@ const cmsMAX_PATH = 256
 
 type cmsInfoType int
 
+type cmsDICTentry struct {
+
+    Next *cmsDICTentry
+
+    DisplayName *cmsMLU 
+    DisplayValue *cmsMLU
+    Name string
+    Value string
+
+} ;
 // Define cmsHPROFILE as unsafe.Pointer to represent a void pointer
 type cmsHPROFILE unsafe.Pointer
 type cmsHANDLE unsafe.Pointer // Generic handle
 type cmsHTRANSFORM unsafe.Pointer
 type cmsToneCurve cms_curve_struct
+
+// Where to place/locate the stages in the pipeline chain
+type cmsStageLoc int
+
+const (
+	cmsAT_BEGIN cmsStageLoc = iota
+	cmsAT_END
+)
 
 // cmsCreateContext creates a new context with the given plugin and user data.
 func cmsCreateContext(plugin unsafe.Pointer, userData unsafe.Pointer) cmsContext
@@ -668,6 +686,36 @@ const (
 	cmsSigFloatPCS2XYZ          cmsStageSignature = 0x78326420 // 'x2d '
 	cmsSigClipNegativesElemType cmsStageSignature = 0x636c7020 // 'clp '
 )
+// Types of CurveElements
+type cmsCurveSegSignature uint32
+
+const (
+	cmsSigFormulaCurveSeg   cmsCurveSegSignature = 0x70617266 // 'parf'
+	cmsSigSampledCurveSeg   cmsCurveSegSignature = 0x73616D66 // 'samf'
+	cmsSigSegmentedCurve    cmsCurveSegSignature = 0x63757266 // 'curf'
+)
+
+// Used in ResponseCurveType
+const (
+	cmsSigStatusA uint32 = 0x53746141 // 'StaA'
+	cmsSigStatusE uint32 = 0x53746145 // 'StaE'
+	cmsSigStatusI uint32 = 0x53746149 // 'StaI'
+	cmsSigStatusT uint32 = 0x53746154 // 'StaT'
+	cmsSigStatusM uint32 = 0x5374614D // 'StaM'
+	cmsSigDN      uint32 = 0x444E2020 // 'DN  '
+	cmsSigDNP     uint32 = 0x444E2050 // 'DN P'
+	cmsSigDNN     uint32 = 0x444E4E20 // 'DNN '
+	cmsSigDNNP    uint32 = 0x444E4E50 // 'DNNP'
+)
+
+// Device attributes, currently defined values correspond to the low 4 bytes
+// of the 8-byte attribute quantity
+const (
+	cmsReflective   uint32 = 0
+	cmsTransparency uint32 = 1
+	cmsGlossy       uint32 = 0
+	cmsMatte        uint32 = 2
+)
 
 // cmsProfileClassSignature represents ICC Profile Classes
 type cmsProfileClassSignature uint32
@@ -756,6 +804,43 @@ type cmsPSEQDESC struct {
 
 const cmsMAXCHANNELS = 16
 
+// Constants for Illuminant types
+const (
+	cmsILLUMINANT_TYPE_UNKNOWN = 0x0000000
+	cmsILLUMINANT_TYPE_D50     = 0x0000001
+	cmsILLUMINANT_TYPE_D65     = 0x0000002
+	cmsILLUMINANT_TYPE_D93     = 0x0000003
+	cmsILLUMINANT_TYPE_F2      = 0x0000004
+	cmsILLUMINANT_TYPE_D55     = 0x0000005
+	cmsILLUMINANT_TYPE_A       = 0x0000006
+	cmsILLUMINANT_TYPE_E       = 0x0000007
+	cmsILLUMINANT_TYPE_F8      = 0x0000008
+)
+
+// cmsICCMeasurementConditions represents measurement conditions in ICC profiles.
+type cmsICCMeasurementConditions struct {
+	Observer       uint32    // 0 = unknown, 1 = CIE 1931, 2 = CIE 1964
+	Backing        cmsCIEXYZ // Value of backing
+	Geometry       uint32    // 0 = unknown, 1 = 45/0, 0/45, 2 = 0d, d/0
+	Flare          float64   // 0..1.0
+	IlluminantType uint32    // Illuminant type
+}
+
+// cmsICCViewingConditions represents viewing conditions in ICC profiles.
+type cmsICCViewingConditions struct {
+	IlluminantXYZ  cmsCIEXYZ // Not the same struct as CAM02
+	SurroundXYZ    cmsCIEXYZ // For storing the tag
+	IlluminantType uint32    // Viewing condition
+}
+
+// cmsVideoSignalType represents video signal characteristics.
+type cmsVideoSignalType struct {
+	ColourPrimaries         uint8 // Recommendation ITU-T H.273
+	TransferCharacteristics uint8 // (ISO/IEC 23091-2)
+	MatrixCoefficients      uint8
+	VideoFullRangeFlag      uint8
+}
+
 // Fallback for 64-bit types if not supported (Go inherently supports 64-bit integers, so this is rarely needed).
 type (
 	cmsUInt64Array [2]uint32
@@ -768,15 +853,6 @@ type (
 	cmsU8Fixed8Number   uint16
 	cmsS15Fixed16Number int32
 	cmsU16Fixed16Number uint32
-)
-
-// Boolean type
-type cmsBool int
-
-// Utility function for constants like limits (Go has math package for max values).
-const (
-	cmsBoolTrue  cmsBool = 1
-	cmsBoolFalse cmsBool = 0
 )
 
 // Ensure proper type sizes at compile-time (if desired, otherwise not necessary in Go due to well-defined type sizes).
@@ -891,5 +967,32 @@ type cmsCurveSegment struct {
 	Type          int32
 	Params        [10]float64
 	NGridPoints   uint32
-	SampledPoints []float32
+	SampledPoints *float32
+}
+
+type cmsSAMPLER16 func(In []uint16, Out []uint16, Cargo unsafe.Pointer) int32
+
+type cmsSAMPLERFLOAT func(In []float32, Out []float32, Cargo unsafe.Pointer) int32
+
+// Use this flag to prevent changes being written to destination
+const SAMPLER_INSPECT = 0x01000000
+
+type cmsScreeningChannel struct {
+	Frequency   float64
+	ScreenAngle float64
+	SpotShape   uint32
+}
+
+type cmsScreening struct {
+	Flag      uint32
+	NChannels uint32
+	Channels  [cmsMAXCHANNELS]cmsScreeningChannel
+}
+
+// Undercolorremoval & black generation -------------------------------------------------------------------------------------
+
+type cmsUcrBg struct {
+	Ucr  *cmsToneCurve
+	Bg   *cmsToneCurve
+	Desc *cmsMLU
 }

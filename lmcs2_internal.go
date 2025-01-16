@@ -8,6 +8,9 @@ import (
 	"unsafe"
 )
 
+// Determinant lower than that are assumed zero (used on matrix invert)
+const MATRIX_DET_TOLERANCE = 0.0001
+
 // Maximum encodeable values in floating point
 const MAX_ENCODEABLE_XYZ = (1.0 + 32767.0/32768.0)
 const MIN_ENCODEABLE_ab2 = (-128.0)
@@ -16,6 +19,9 @@ const MIN_ENCODEABLE_ab4 = (-128.0)
 const MAX_ENCODEABLE_ab4 = (127.0)
 
 const M_LOG10E = 0.434294481903251827651
+
+// Maximum of channels for internal pipeline evaluation
+const MAX_STAGE_CHANNELS = 128
 
 // Fixed point macros translated to Go functions
 func FIXED_TO_INT(x cmsS15Fixed16Number) int32 {
@@ -58,6 +64,7 @@ func cmsAssert(condition bool, message string) {
 		panic(message)
 	}
 }
+
 // Fast floor conversion
 func cmsQuickFloor(val float64) int {
 	// Adjust for specific configurations
@@ -306,7 +313,7 @@ type cmsPipeline struct {
 
 	ContextID cmsContext // Environment
 
-	SaveAs8Bits cmsBool // Implementation-specific: save as 8 bits if possible
+	SaveAs8Bits bool // Implementation-specific: save as 8 bits if possible
 }
 
 // Multilocalized Unicode management ---------------------------------------------------------------------------------------
@@ -414,8 +421,6 @@ type cmsAlarmCodesChunkType struct {
 // The global Context0 storage for alarm codes
 var cmsAlarmCodesChunk cmsAlarmCodesChunkType
 
-// Allocate and init alarm codes container.
-func cmsAllocAlarmCodesChunk(ctx, src cmsContext)
 
 // Container for adaptation state -- not a plug-in
 type cmsAdaptationStateChunkType struct {
@@ -436,9 +441,6 @@ type cmsInterpPluginChunkType struct {
 // The global Context0 storage for interpolation plug-in
 var cmsInterpPluginChunk cmsInterpPluginChunkType
 
-// Allocate and init interpolation container.
-func cmsAllocInterpPluginChunk(ctx, src cmsContext)
-
 // Container for parametric curves plug-in
 type cmsCurvesPluginChunkType struct {
 	ParametricCurves *cmsParametricCurvesCollection
@@ -455,17 +457,21 @@ type cmsFormattersPluginChunkType struct {
 	FactoryList *cmsFormattersFactoryList
 }
 
+// Formatters ------------------------------------------------------------------------------------------------------------
+
+const cmsFLAGS_CAN_CHANGE_FORMATTER  =   0x02000000   // Allow change buffer format
+
 // cmsCurveStruct represents the gamma function main structure.
 type cms_curve_struct struct {
 	InterpParams *cmsInterpParams              // Private optimizations for interpolation
 	nSegments    uint32                        // Number of segments in the curve. Zero for a 16-bit based tables
-	Segments     []*cmsCurveSegment            // The segments
-	SegInterp    []*cmsInterpParams            // Array of private optimizations for interpolation in table-based segments
+	Segments     *cmsCurveSegment            // The segments
+	SegInterp    **cmsInterpParams            // Array of private optimizations for interpolation in table-based segments
 	Evals        []cmsParametricCurveEvaluator // Evaluators (one per segment)
 
 	// 16-bit Table-based representation follows
 	nEntries uint32   // Number of table elements
-	Table16  []uint16 // The table itself
+	Table16  *uint16 // The table itself
 }
 
 // The global Context0 storage for formatters plug-in
@@ -539,10 +545,10 @@ type cmsICCPROFILE struct {
 	TagLinked       [MAX_TABLE_TAG]cmsTagSignature    // Tags to which these are linked
 	TagSizes        [MAX_TABLE_TAG]uint32             // Sizes of tags on disk
 	TagOffsets      [MAX_TABLE_TAG]uint32             // Offsets of tags on disk
-	TagSaveAsRaw    [MAX_TABLE_TAG]cmsBool            // Whether to write the tag as raw data
+	TagSaveAsRaw    [MAX_TABLE_TAG]bool               // Whether to write the tag as raw data
 	TagPtrs         [MAX_TABLE_TAG]unsafe.Pointer     // Pointers to tag data
 	TagTypeHandlers [MAX_TABLE_TAG]*cmsTagTypeHandler // Handlers for each tag type
-	IsWrite         cmsBool                           // Whether the profile is being written
+	IsWrite         bool                              // Whether the profile is being written
 	UsrMutex        *sync.Mutex                       // Mutex for thread-safe access
 }
 
@@ -562,6 +568,22 @@ type cmsParallelizationPluginChunkType struct {
 	MaxWorkers  int32
 	WorkerFlags int32
 	SchedulerFn cmsTransform2Fn
+}
+
+
+// memset sets a block of memory to a specified value.
+// Equivalent to C's memset function.
+func memset(ptr unsafe.Pointer, value int, num uintptr) {
+	// Convert value to byte (0-255).
+	byteValue := byte(value)
+
+	// Get a slice pointing to the memory location.
+	mem := (*[1 << 30]byte)(ptr)[:num:num]
+
+	// Fill the slice with the given value.
+	for i := uintptr(0); i < num; i++ {
+		mem[i] = byteValue
+	}
 }
 
 // Global context storage for parallelization plugin.
@@ -601,4 +623,55 @@ func memcpy(dst, src unsafe.Pointer, size uintptr) {
 	}))
 
 	copy(dstSlice, srcSlice)
+}
+// strncpy copies up to `n` characters from `src` to a new `dst`.
+// It returns the resulting string, null-padded to `n` if `src` is shorter.
+func strncpy(src string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+
+	// Convert src to a slice of bytes
+	srcBytes := []byte(src)
+
+	// Create a destination buffer of size `n`
+	dst := make([]byte, n)
+
+	// Determine how many characters to copy
+	copyLen := n
+	if len(srcBytes) < n {
+		copyLen = len(srcBytes)
+	}
+
+	// Copy bytes from src to dst
+	copy(dst, srcBytes[:copyLen])
+
+	// Remaining bytes in `dst` are already initialized to '\x00' by `make`
+
+	return string(dst)
+}
+
+
+// strlen calculates the length of a null-terminated byte string.
+func strlen(str *byte) int {
+	if str == nil {
+		return 0
+	}
+
+	length := 0
+	ptr := uintptr(unsafe.Pointer(str))
+
+	for {
+		// Dereference the pointer to get the current byte
+		currentByte := *(*byte)(unsafe.Pointer(ptr))
+		if currentByte == 0 {
+			break
+		}
+
+		// Move to the next byte
+		ptr++
+		length++
+	}
+
+	return length
 }

@@ -2,7 +2,7 @@ package golcms
 
 import (
 	"encoding/binary"
-	"unicode/utf16"
+	//"unicode/utf16"
 	"unsafe"
 )
 
@@ -87,13 +87,13 @@ func SearchMLUEntry(mlu *cmsMLU, LanguageCode, CountryCode uint16) int {
 	for i := uint32(0); i < mlu.UsedEntries; i++ {
 		// Convert the base pointer to uintptr for arithmetic
 		basePtr := uintptr(unsafe.Pointer(mlu.Entries))
-		
+
 		// Calculate the address of the current entry
 		entryPtr := unsafe.Pointer(basePtr + uintptr(i)*unsafe.Sizeof(cmsMLUentry{}))
-		
+
 		// Cast the calculated address back to a *cmsMLUentry
 		entry := (*cmsMLUentry)(entryPtr)
-		
+
 		// Compare the fields
 		if entry.Country == CountryCode && entry.Language == LanguageCode {
 			return int(i)
@@ -148,7 +148,7 @@ func AddMLUBlock(mlu *cmsMLU, size uint32, block *uint16, LanguageCode, CountryC
 	entryPtr := unsafe.Pointer(basePtr + uintptr(mlu.UsedEntries)*unsafe.Sizeof(cmsMLUentry{}))
 	// Cast the calculated address back to a *cmsMLUentry
 	entry := (*cmsMLUentry)(entryPtr)
-	
+
 	entry.StrW = offset
 	entry.Len = size
 	entry.Country = CountryCode
@@ -172,7 +172,8 @@ func strFrom16(n uint16) string {
 }
 
 // cmsMLUsetASCII adds an ASCII entry to an MLU.
-func cmsMLUsetASCII(mlu *cmsMLU, LanguageCode, CountryCode string, ASCIIString *byte, lenASCII int) bool {
+func cmsMLUsetASCII(mlu *cmsMLU, LanguageCode, CountryCode string, ASCIIString *byte) bool {
+	lenASCII := strlen(ASCIIString)
 	if mlu == nil {
 		return false
 	}
@@ -250,7 +251,7 @@ func cmsMLUdup(mlu *cmsMLU) *cmsMLU {
 		return nil
 	}
 
-    memmove(unsafe.Pointer(newMLU.Entries), unsafe.Pointer(mlu.Entries), uintptr(mlu.UsedEntries) * unsafe.Sizeof(cmsMLUentry{}))
+	memmove(unsafe.Pointer(newMLU.Entries), unsafe.Pointer(mlu.Entries), uintptr(mlu.UsedEntries)*unsafe.Sizeof(cmsMLUentry{}))
 	newMLU.UsedEntries = mlu.UsedEntries
 
 	if mlu.PoolUsed == 0 {
@@ -316,10 +317,10 @@ func _cmsMLUgetWide(mlu *cmsMLU, length *uint32, LanguageCode, CountryCode uint1
 				if length != nil {
 					*length = entry.Len
 
-				return (*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(mlu.MemPool)) + uintptr(entry.StrW)))
-			    }
-		    }
-	    }
+					return (*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(mlu.MemPool)) + uintptr(entry.StrW)))
+				}
+			}
+		}
 	}
 	if bestMatch == -1 {
 		bestMatch = 0
@@ -341,7 +342,6 @@ func _cmsMLUgetWide(mlu *cmsMLU, length *uint32, LanguageCode, CountryCode uint1
 	}
 	return (*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(mlu.MemPool)) + uintptr(entry.StrW)))
 }
-
 
 // cmsMLUgetASCII retrieves the ASCII string for a specific language and country.
 func cmsMLUgetASCII(mlu *cmsMLU, LanguageCode, CountryCode string, Buffer *byte, BufferSize uint32) uint32 {
@@ -381,58 +381,56 @@ func cmsMLUgetASCII(mlu *cmsMLU, LanguageCode, CountryCode string, Buffer *byte,
 	return asciiLen + 1
 }
 func cmsMLUgetWide(
-    mlu *cmsMLU,
-    LanguageCode string,
-    CountryCode string,
-    Buffer *uint16,
-    BufferSize uint32,
+	mlu *cmsMLU,
+	LanguageCode string,
+	CountryCode string,
+	Buffer *uint16,
+	BufferSize uint32,
 ) uint32 {
-    var Wide *uint16
-    var StrLen uint32 = 0
+	var Wide *uint16
+	var StrLen uint32 = 0
 
-    // Convert language and country codes to uint16
-    Lang := strTo16(LanguageCode[:])
-    Cntry := strTo16(CountryCode[:])
+	// Convert language and country codes to uint16
+	Lang := strTo16(LanguageCode[:])
+	Cntry := strTo16(CountryCode[:])
 
-    // Sanity check
-    if mlu == nil {
-        return 0
-    }
+	// Sanity check
+	if mlu == nil {
+		return 0
+	}
 
-    // Get the wide string representation
-    Wide = _cmsMLUgetWide(mlu, &StrLen, Lang, Cntry, nil, nil)
-    if Wide == nil {
-        return 0
-    }
+	// Get the wide string representation
+	Wide = _cmsMLUgetWide(mlu, &StrLen, Lang, Cntry, nil, nil)
+	if Wide == nil {
+		return 0
+	}
 
-    // If the buffer is null, just return the length
-    if Buffer == nil {
-        return StrLen + uint32(unsafe.Sizeof(uint16(0)))
-    }
+	// If the buffer is null, just return the length
+	if Buffer == nil {
+		return StrLen + uint32(unsafe.Sizeof(uint16(0)))
+	}
 
-    // If the buffer size is zero, no data can be written
-    if BufferSize == 0 {
-        return 0
-    }
+	// If the buffer size is zero, no data can be written
+	if BufferSize == 0 {
+		return 0
+	}
 
-    // Adjust the length if the buffer size is too small
-    if BufferSize < StrLen+uint32(unsafe.Sizeof(uint16(0))) {
-        StrLen = BufferSize - uint32(unsafe.Sizeof(uint16(0)))
-    }
+	// Adjust the length if the buffer size is too small
+	if BufferSize < StrLen+uint32(unsafe.Sizeof(uint16(0))) {
+		StrLen = BufferSize - uint32(unsafe.Sizeof(uint16(0)))
+	}
 
-    // Copy the data from Wide to the buffer
-    src := unsafe.Pointer(Wide)
-    dst := unsafe.Pointer(Buffer)
-    memmove(dst, src, uintptr(StrLen))
+	// Copy the data from Wide to the buffer
+	src := unsafe.Pointer(Wide)
+	dst := unsafe.Pointer(Buffer)
+	memmove(dst, src, uintptr(StrLen))
 
-    // Null-terminate the buffer
-    bufferSlice := (*[1 << 30]uint16)(unsafe.Pointer(Buffer))[:StrLen/2+1]
-    bufferSlice[StrLen/2] = 0
+	// Null-terminate the buffer
+	bufferSlice := (*[1 << 30]uint16)(unsafe.Pointer(Buffer))[:StrLen/2+1]
+	bufferSlice[StrLen/2] = 0
 
-    return StrLen + uint32(unsafe.Sizeof(uint16(0)))
+	return StrLen + uint32(unsafe.Sizeof(uint16(0)))
 }
-
-
 
 // cmsMLUgetTranslation retrieves the language and country used for the translation.
 func cmsMLUgetTranslation(mlu *cmsMLU, LanguageCode, CountryCode string, ObtainedLanguage, ObtainedCountry *string) bool {
@@ -480,4 +478,439 @@ func cmsMLUtranslationsCodes(mlu *cmsMLU, idx uint32, LanguageCode, CountryCode 
 		*CountryCode = strFrom16(entry.Country)
 	}
 	return true
+}
+
+// GrowNamedColorList grows the list to accommodate at least NumElements.
+func GrowNamedColorList(v *cmsNAMEDCOLORLIST) bool {
+	if v == nil {
+		return false
+	}
+
+	var size uint32
+	if v.Allocated == 0 {
+		size = 64 // Initial guess
+	} else {
+		size = v.Allocated * 2
+	}
+
+	// Limit the maximum size of the list
+	if size > 1024*100 {
+		cmsFree(v.ContextID, unsafe.Pointer(v.List))
+		v.List = nil
+		return false
+	}
+
+	newPtr := (*cmsNAMEDCOLOR)(cmsRealloc(v.ContextID, unsafe.Pointer(v.List), size*uint32(unsafe.Sizeof(cmsNAMEDCOLOR{}))))
+	if newPtr == nil {
+		return false
+	}
+
+	v.List = newPtr
+	v.Allocated = size
+	return true
+}
+
+// cmsAllocNamedColorList allocates a list for n elements.
+func cmsAllocNamedColorList(ContextID cmsContext, n, ColorantCount uint32, Prefix, Suffix string) *cmsNAMEDCOLORLIST {
+	if ColorantCount > cmsMAXCHANNELS {
+		return nil
+	}
+
+	v := (*cmsNAMEDCOLORLIST)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsNAMEDCOLORLIST{}))))
+	if v == nil {
+		return nil
+	}
+
+	v.List = nil
+	v.nColors = 0
+	v.ContextID = ContextID
+
+	// Grow the list to fit the required number of elements
+	for v.Allocated < n {
+		if !GrowNamedColorList(v) {
+			cmsFreeNamedColorList(v)
+			return nil
+		}
+	}
+
+	// Set Prefix and Suffix
+	copy(v.Prefix[:], Prefix)
+	copy(v.Suffix[:], Suffix)
+	v.Prefix[len(v.Prefix)-1] = 0
+	v.Suffix[len(v.Suffix)-1] = 0
+
+	v.ColorantCount = ColorantCount
+
+	return v
+}
+
+// cmsFreeNamedColorList frees a named color list.
+func cmsFreeNamedColorList(v *cmsNAMEDCOLORLIST) {
+	if v == nil {
+		return
+	}
+	if v.List != nil {
+		cmsFree(v.ContextID, unsafe.Pointer(v.List))
+	}
+	cmsFree(v.ContextID, unsafe.Pointer(v))
+}
+
+// cmsDupNamedColorList duplicates a named color list.
+func cmsDupNamedColorList(v *cmsNAMEDCOLORLIST) *cmsNAMEDCOLORLIST {
+	if v == nil {
+		return nil
+	}
+
+	newNC := cmsAllocNamedColorList(v.ContextID, v.nColors, v.ColorantCount, string(v.Prefix[:]), string(v.Suffix[:]))
+	if newNC == nil {
+		return nil
+	}
+
+	// Ensure the allocated size matches
+	for newNC.Allocated < v.Allocated {
+		if !GrowNamedColorList(newNC) {
+			cmsFreeNamedColorList(newNC)
+			return nil
+		}
+	}
+
+	// Copy data
+	copy(newNC.Prefix[:], v.Prefix[:])
+	copy(newNC.Suffix[:], v.Suffix[:])
+	newNC.ColorantCount = v.ColorantCount
+
+	memcpy(unsafe.Pointer(newNC.List), unsafe.Pointer(v.List), uintptr(v.nColors)*unsafe.Sizeof(cmsNAMEDCOLOR{}))
+	newNC.nColors = v.nColors
+
+	return newNC
+}
+
+func cmsAppendNamedColor(namedColorList *cmsNAMEDCOLORLIST, name string, PCS *[3]uint16, Colorant *[cmsMAXCHANNELS]uint16) bool {
+	if namedColorList == nil {
+		return false
+	}
+
+	// Grow the list if necessary
+	if namedColorList.nColors+1 > namedColorList.Allocated {
+		if !GrowNamedColorList(namedColorList) {
+			return false
+		}
+	}
+
+	// Calculate the index for the new color
+	index := namedColorList.nColors
+
+	// Access the list element
+	entry := (*cmsNAMEDCOLOR)(unsafe.Add(unsafe.Pointer(namedColorList.List), uintptr(index)*unsafe.Sizeof(cmsNAMEDCOLOR{})))
+
+	// Copy Colorant data
+	for i := uint32(0); i < namedColorList.ColorantCount; i++ {
+		if Colorant != nil {
+			entry.DeviceColorant[i] = Colorant[i]
+		} else {
+			entry.DeviceColorant[i] = 0
+		}
+	}
+
+	// Copy PCS data
+	for i := 0; i < 3; i++ {
+		if PCS != nil {
+			entry.PCS[i] = PCS[i]
+		} else {
+			entry.PCS[i] = 0
+		}
+	}
+
+	// Copy the name
+	if name != "" {
+		copy(entry.Name[:], name)
+		entry.Name[len(entry.Name)-1] = 0
+	} else {
+		entry.Name[0] = 0
+	}
+
+	// Increment the number of colors
+	namedColorList.nColors++
+	return true
+}
+
+func cmsNamedColorCount(namedColorList *cmsNAMEDCOLORLIST) uint32 {
+	if namedColorList == nil {
+		return 0
+	}
+	return namedColorList.nColors
+}
+
+func cmsNamedColorInfo(namedColorList *cmsNAMEDCOLORLIST, nColor uint32, name, prefix, suffix *byte, pcs, colorant *uint16) bool {
+	if namedColorList == nil {
+		return false
+	}
+
+	if nColor >= cmsNamedColorCount(namedColorList) {
+		return false
+	}
+	// Access the specific color entry using pointer arithmetic
+	colorEntry := (*cmsNAMEDCOLOR)(unsafe.Add(unsafe.Pointer(namedColorList.List), uintptr(nColor)*unsafe.Sizeof(cmsNAMEDCOLOR{})))
+
+	// Copy Name
+	if name != nil {
+		src := unsafe.Slice((*byte)(unsafe.Pointer(&colorEntry.Name[0])), cmsMAX_PATH)
+		dest := unsafe.Slice(name, cmsMAX_PATH)
+		copy(dest, src)
+	}
+
+	// Copy Prefix and Suffix
+	if prefix != nil {
+		src := unsafe.Slice((*byte)(unsafe.Pointer(&namedColorList.Prefix[0])), cmsMAX_PATH)
+		dest := unsafe.Slice(prefix, cmsMAX_PATH)
+		copy(dest, src)
+	}
+
+	if suffix != nil {
+		src := unsafe.Slice((*byte)(unsafe.Pointer(&namedColorList.Suffix[0])), cmsMAX_PATH)
+		dest := unsafe.Slice(suffix, cmsMAX_PATH)
+		copy(dest, src)
+	}
+
+	// Copy PCS
+	if pcs != nil {
+		src := unsafe.Slice((*uint16)(unsafe.Pointer(&colorEntry.PCS[0])), 3)
+		dest := unsafe.Slice(pcs, 3)
+		copy(dest, src)
+	}
+
+	// Copy Colorant
+	if colorant != nil {
+		src := unsafe.Slice((*uint16)(unsafe.Pointer(&colorEntry.DeviceColorant[0])), namedColorList.ColorantCount)
+		dest := unsafe.Slice(colorant, namedColorList.ColorantCount)
+		copy(dest, src)
+	}
+	return true
+}
+
+func cmsNamedColorIndex(namedColorList *cmsNAMEDCOLORLIST, name *byte) int32 {
+	if namedColorList == nil {
+		return -1
+	}
+
+	n := cmsNamedColorCount(namedColorList)
+	// Convert the `List` pointer into a slice for iteration
+	list := unsafe.Slice(namedColorList.List, n)
+
+	for i := uint32(0); i < n; i++ {
+		// Access the Name field of each cmsNAMEDCOLOR in the List
+		if cmsstrcasecmp(name, &list[i].Name[0]) == 0 {
+			return int32(i)
+		}
+	}
+
+	return -1
+}
+
+// cmsAllocProfileSequenceDescription allocates memory for a profile sequence description.
+func cmsAllocProfileSequenceDescription(ContextID cmsContext, n uint32) *cmsSEQ {
+	if n == 0 || n > 255 {
+		return nil // Invalid input
+	}
+
+	seq := (*cmsSEQ)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsSEQ{}))))
+	if seq == nil {
+		return nil
+	}
+
+	seq.ContextID = ContextID
+	seq.seq = (*cmsPSEQDESC)(cmsCalloc(ContextID, n, uint32(unsafe.Sizeof(cmsPSEQDESC{}))))
+	seq.n = n
+
+	if seq.seq == nil {
+		cmsFree(ContextID, unsafe.Pointer(seq))
+		return nil
+	}
+
+	// Initialize each entry in the sequence
+	for i := uint32(0); i < n; i++ {
+		entry := (*cmsPSEQDESC)(unsafe.Add(unsafe.Pointer(seq.seq), uintptr(i)*unsafe.Sizeof(cmsPSEQDESC{})))
+		entry.Manufacturer = nil
+		entry.Model = nil
+		entry.Description = nil
+	}
+
+	return seq
+}
+
+// cmsFreeProfileSequenceDescription frees the memory allocated for a profile sequence description.
+func cmsFreeProfileSequenceDescription(pseq *cmsSEQ) {
+	if pseq == nil {
+		return
+	}
+
+	for i := uint32(0); i < pseq.n; i++ {
+		entry := (*cmsPSEQDESC)(unsafe.Add(unsafe.Pointer(pseq.seq), uintptr(i)*unsafe.Sizeof(cmsPSEQDESC{})))
+
+		if entry.Manufacturer != nil {
+			cmsMLUfree(entry.Manufacturer)
+		}
+		if entry.Model != nil {
+			cmsMLUfree(entry.Model)
+		}
+		if entry.Description != nil {
+			cmsMLUfree(entry.Description)
+		}
+	}
+
+	if pseq.seq != nil {
+		cmsFree(pseq.ContextID, unsafe.Pointer(pseq.seq))
+	}
+	cmsFree(pseq.ContextID, unsafe.Pointer(pseq))
+}
+
+// cmsDupProfileSequenceDescription duplicates a profile sequence description.
+func cmsDupProfileSequenceDescription(pseq *cmsSEQ) *cmsSEQ {
+	if pseq == nil {
+		return nil
+	}
+
+	newSeq := (*cmsSEQ)(cmsMalloc(pseq.ContextID, uint32(unsafe.Sizeof(cmsSEQ{}))))
+	if newSeq == nil {
+		return nil
+	}
+
+	newSeq.seq = (*cmsPSEQDESC)(cmsCalloc(pseq.ContextID, pseq.n, uint32(unsafe.Sizeof(cmsPSEQDESC{}))))
+	if newSeq.seq == nil {
+		cmsFreeProfileSequenceDescription(newSeq)
+		return nil
+	}
+
+	newSeq.ContextID = pseq.ContextID
+	newSeq.n = pseq.n
+
+	for i := uint32(0); i < pseq.n; i++ {
+		srcEntry := (*cmsPSEQDESC)(unsafe.Add(unsafe.Pointer(pseq.seq), uintptr(i)*unsafe.Sizeof(cmsPSEQDESC{})))
+		dstEntry := (*cmsPSEQDESC)(unsafe.Add(unsafe.Pointer(newSeq.seq), uintptr(i)*unsafe.Sizeof(cmsPSEQDESC{})))
+
+		// Copy basic fields
+		dstEntry.deviceMfg = srcEntry.deviceMfg
+		dstEntry.deviceModel = srcEntry.deviceModel
+		dstEntry.attributes = srcEntry.attributes
+		dstEntry.ProfileID = srcEntry.ProfileID
+		dstEntry.technology = srcEntry.technology
+
+		// Duplicate MLU fields
+		dstEntry.Manufacturer = cmsMLUdup(srcEntry.Manufacturer)
+		dstEntry.Model = cmsMLUdup(srcEntry.Model)
+		dstEntry.Description = cmsMLUdup(srcEntry.Description)
+	}
+
+	return newSeq
+}
+
+
+// Dictionary structure
+type cmsDICT struct {
+	head      *cmsDICTentry
+	ContextID cmsContext
+}
+
+// Allocate an empty dictionary
+func cmsDictAlloc(contextID cmsContext) cmsHANDLE {
+	dict := (*cmsDICT) (cmsMallocZero(contextID, uint32(unsafe.Sizeof(cmsDICT{}))))
+	return cmsHANDLE(unsafe.Pointer(dict))
+}
+
+// Dispose resources
+func cmsDictFree(hDict cmsHANDLE) {
+	dict := (*cmsDICT)(unsafe.Pointer(hDict))
+	if dict == nil {
+		return
+	}
+
+	entry := dict.head
+	for entry != nil {
+		if entry.DisplayName != nil {
+			cmsMLUfree(entry.DisplayName)
+		}
+		if entry.DisplayValue != nil {
+			cmsMLUfree(entry.DisplayValue)
+		}
+	
+		next := entry.Next
+		cmsFree(dict.ContextID, unsafe.Pointer(entry))
+		entry = next
+	}
+
+	cmsFree(dict.ContextID, unsafe.Pointer(dict))
+}
+
+// Duplicate a wide character string
+func DupWcs(contextID cmsContext, ptr *uint16) *uint16 {
+	if ptr == nil {
+		return nil
+	}
+
+	length := mywcslen(ptr) + 1
+	duplicate := (*uint16)(cmsDupMem(contextID, unsafe.Pointer(ptr), uint32(length)*uint32(unsafe.Sizeof(uint16(0)))))
+	return duplicate
+}
+
+// Add a new entry to the linked list
+func cmsDictAddEntry(hDict cmsHANDLE, name string, value string, displayName *cmsMLU, displayValue *cmsMLU) bool {
+	dict := (*cmsDICT)(unsafe.Pointer(hDict))
+	if dict == nil || name == "" {
+		return false
+	}
+
+	entry := (*cmsDICTentry)(cmsMallocZero(dict.ContextID, uint32(unsafe.Sizeof(cmsDICTentry{}))))
+	if entry == nil {
+		return false
+	}
+
+	entry.DisplayName = cmsMLUdup(displayName)
+	entry.DisplayValue = cmsMLUdup(displayValue)
+	entry.Name = name
+	entry.Value = value
+	entry.Next = dict.head
+	dict.head = entry
+
+	return true
+}
+
+// Duplicate an existing dictionary
+func cmsDictDup(hDict cmsHANDLE) cmsHANDLE {
+	oldDict := (*cmsDICT)(unsafe.Pointer(hDict))
+	if oldDict == nil {
+		return nil
+	}
+
+	newDict := cmsDictAlloc(oldDict.ContextID)
+	if newDict == nil {
+		return nil
+	}
+
+	entry := oldDict.head
+	for entry != nil {
+		if !cmsDictAddEntry(newDict, entry.Name, entry.Value, entry.DisplayName, entry.DisplayValue) {
+			cmsDictFree(newDict)
+			return nil
+		}
+		entry = entry.Next
+	}
+
+	return newDict
+}
+
+// Get a pointer to the linked list
+func cmsDictGetEntryList(hDict cmsHANDLE) *cmsDICTentry {
+	dict := (*cmsDICT)(unsafe.Pointer(hDict))
+	if dict == nil {
+		return nil
+	}
+	return dict.head
+}
+
+// Helper for external languages
+func cmsDictNextEntry(e *cmsDICTentry) *cmsDICTentry {
+	if e == nil {
+		return nil
+	}
+	return e.Next
 }

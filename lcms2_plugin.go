@@ -34,8 +34,8 @@ const (
 	cmsPluginOptimizationSig        uint32 = 0x6F707448 // 'optH'
 	cmsPluginTransformSig           uint32 = 0x7A666D48 // 'xfmH'
 	cmsPluginMutexSig               uint32 = 0x6D747A48 // 'mtxH'
-	cmsPluginParallelizationSig    uint32 = 0x70726C48 // 'prlH'
-	
+	cmsPluginParallelizationSig     uint32 = 0x70726C48 // 'prlH'
+
 )
 
 // Tag Base
@@ -67,11 +67,11 @@ const MAX_INPUT_DIMENSIONS = 15
 
 // _cmsInterpFn16 is a function type for 16-bit interpolation functions.
 // Performs precision-limited linear interpolation (e.g., tetrahedral or trilinear).
-type cmsInterpFn16 func(input []uint16, output []uint16, params *cmsInterpParams)
+type cmsInterpFn16 func(input *uint16, output *uint16, params *cmsInterpParams)
 
 // _cmsInterpFnFloat is a function type for floating-point interpolation functions.
 // Performs full-precision interpolation (e.g., tetrahedral or trilinear).
-type cmsInterpFnFloat func(input []float32, output []float32, params *cmsInterpParams)
+type cmsInterpFnFloat func(input *float32, output *float32, params *cmsInterpParams)
 
 // cmsInterpFunction holds either a 16-bit or floating-point interpolation function.
 type cmsInterpFunction struct {
@@ -133,7 +133,7 @@ type cmsPluginInterpolation struct {
 // Each follows a similar idiomatic Go implementation as above
 
 // Parametric Curve Evaluator
-type cmsParametricCurveEvaluator func(int32, *[10]float64, float64) float64
+type cmsParametricCurveEvaluator func(int32, []float64, float64) float64
 
 type cmsPluginParametricCurves struct {
 	Base           cmsPluginBase
@@ -145,24 +145,13 @@ type cmsPluginParametricCurves struct {
 
 // Plugin Tag Type
 
-// cmsTagTypeHandler defines the Go equivalent of the `_cms_typehandler_struct`.
-type cmsTagTypeHandler struct {
-	Signature  cmsTagTypeSignature // The signature of the type
-	ReadPtr    func(self *cmsTagTypeHandler, io *cms_io_handler, nItems *uint32, sizeOfTag uint32) unsafe.Pointer
-	WritePtr   func(self *cmsTagTypeHandler, io *cms_io_handler, ptr unsafe.Pointer, nItems uint32) bool
-	DupPtr     func(self *cmsTagTypeHandler, ptr unsafe.Pointer, n uint32) unsafe.Pointer
-	FreePtr    func(self *cmsTagTypeHandler, ptr unsafe.Pointer)
-	ContextID  cmsContext // Additional parameters used by the calling thread
-	ICCVersion uint32     // The ICC version
-}
-
 // _cmsIOHandler represents the internal structure.
 type cms_io_handler struct {
-	Stream       unsafe.Pointer    // Associated stream, implemented differently based on media
-	ContextID    cmsContext        // Context ID
-	UsedSpace    uint32            // Used space in the stream
-	ReportedSize uint32            // Reported size of the stream
-	PhysicalFile [cmsMAX_PATH]byte // Physical file path
+	Stream       unsafe.Pointer // Associated stream, implemented differently based on media
+	ContextID    cmsContext     // Context ID
+	UsedSpace    uint32         // Used space in the stream
+	ReportedSize uint32         // Reported size of the stream
+	PhysicalFile string         // Physical file path
 	Read         func(iohandler *cms_io_handler, buffer unsafe.Pointer, size, count uint32) uint32
 	Seek         func(iohandler *cms_io_handler, offset uint32) bool
 	Close        func(iohandler *cms_io_handler) bool
@@ -243,11 +232,11 @@ type cmsTransformFn func(CMMcargo *cmsTRANSFORM, InputBuffer unsafe.Pointer,
 type cmsTransform2Fn func(CMMcargo *cmsTRANSFORM, InputBuffer unsafe.Pointer,
 	OutputBuffer unsafe.Pointer, PixelsPerLine uint32, LineCount uint32, Stride *cmsStride)
 
-type cmsTransformFactory func(xform *cmsTransformFn, UserData **unsafe.Pointer,
-	FreePrivateDataFn *cmsFreeUserDataFn, Lut **cmsPipeline, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) cmsBool
+type cmsTransformFactory func(xform *cmsTransformFn, UserData *unsafe.Pointer,
+	FreePrivateDataFn *cmsFreeUserDataFn, Lut **cmsPipeline, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) bool
 
-type cmsTransform2Factory func(xform *cmsTransform2Fn, UserData **unsafe.Pointer,
-	FreePrivateDataFn *cmsFreeUserDataFn, Lut **cmsPipeline, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) cmsBool
+type cmsTransform2Factory func(xform *cmsTransform2Fn, UserData *unsafe.Pointer,
+	FreePrivateDataFn *cmsFreeUserDataFn, Lut **cmsPipeline, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) bool
 
 type cmsFormatter struct {
 	Fmt16    cmsFormatter16
@@ -256,6 +245,29 @@ type cmsFormatter struct {
 
 const CMS_PACK_FLAGS_16BITS = 0x0000
 const CMS_PACK_FLAGS_FLOAT = 0x0001
+
+// StageToneCurvesData represents data for tone curves.
+type cmsStageToneCurvesData struct {
+	NCurves   uint32          // Number of curves
+	TheCurves []*cmsToneCurve // Slice of pointers to ToneCurve
+}
+
+// StageMatrixData represents data for a matrix transformation.
+type cmsStageMatrixData struct {
+	Double *float64 // Floating-point matrix data
+	Offset *float64 // Optional offset data
+}
+
+// StageCLutData represents data for a color lookup table (CLUT).
+type cmsStageCLutData struct {
+	Tab struct {
+		T      *uint16  // 16-bit table
+		TFloat *float32 // Float table
+	} // Union-like structure for CLUT representation
+	Params         *cmsInterpParams // Interpolation parameters
+	NEntries       uint32           // Number of entries in the table
+	HasFloatValues bool             // Indicates if the table uses float values
+}
 
 //----------------------------------------------------------------------------------------------------------
 // Optimization. Using this plug-in, additional optimization strategies may be implemented.
@@ -271,7 +283,7 @@ type cmsOPToptimizeFn func(
 	InputFormat *uint32,
 	OutputFormat *uint32,
 	dwFlags *uint32,
-) cmsBool
+) bool
 
 // _cmsPipelineEval16Fn is a function type for evaluating the pipeline in 16-bit precision.
 type cmsPipelineEval16Fn func(
@@ -372,11 +384,16 @@ func cmsLockMutex(ContextID cmsContext, mtx unsafe.Pointer) bool
 // Unlock the mutex.
 func cmsUnlockMutex(ContextID cmsContext, mtx unsafe.Pointer)
 
+type cmsPluginParalellization struct {
+	base        cmsPluginBase
+	MaxWorkers  int32           // Number of starts to do as maximum
+	WorkerFlags uint32          // Reserved
+	SchedulerFn cmsTransform2Fn // callback to setup functions
 
-type  cmsPluginParalellization struct {
-    base cmsPluginBase    
-	MaxWorkers int32       // Number of starts to do as maximum
-    WorkerFlags uint32      // Reserved
-    SchedulerFn cmsTransform2Fn     // callback to setup functions     
+}
 
-} 
+// ICC base tag
+type cmsTagBas struct {
+	sig      cmsTagTypeSignature
+	reserved [4]uint8
+}

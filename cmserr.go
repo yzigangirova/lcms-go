@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"unicode"
+
 	//"reflect"
 	"unsafe"
 	//"syscall"
@@ -110,7 +112,7 @@ func cmsDupDefaultFn(ContextID cmsContext, Org unsafe.Pointer, size uint32) unsa
 }
 
 // Plug-in replacement entry
-func cmsRegisterMemHandlerPlugin(context cmsContext, data *cmsPluginBase) cmsBool {
+func cmsRegisterMemHandlerPlugin(context cmsContext, data *cmsPluginBase) bool {
 	plugin := (*cmsPluginMemHandler)(unsafe.Pointer(data))
 	var ptr *cmsMemPluginChunkType
 
@@ -125,22 +127,22 @@ func cmsRegisterMemHandlerPlugin(context cmsContext, data *cmsPluginBase) cmsBoo
 		if context != nil {
 			ctx.chunks[MemPlugin] = unsafe.Pointer(&ctx.DefaultMemoryManager)
 		}
-		return cmsBoolTrue
+		return true
 	}
 
 	// Check for required callbacks
 	if plugin.MallocPtr == nil || plugin.FreePtr == nil || plugin.ReallocPtr == nil {
-		return cmsBoolFalse
+		return false
 	}
 
 	// Set replacement functions
 	ptr = (*cmsMemPluginChunkType)(cmsContextGetClientChunk(context, MemPlugin))
 	if ptr == nil {
-		return cmsBoolFalse
+		return false
 	}
 
 	cmsInstallAllocFunctions(plugin, ptr)
-	return cmsBoolTrue
+	return true
 }
 
 // Generic allocate
@@ -357,8 +359,9 @@ func cmsRegisterMutexPlugin(ContextID cmsContext, Data *cmsPluginBase) bool {
 	// All is ok.
 	return true
 }
+
 // Register parallel processing plugin.
-func cmsRegisterParallelizationPlugin(ContextID cmsContext, Data unsafe.Pointer ) bool {
+func cmsRegisterParallelizationPlugin(ContextID cmsContext, Data unsafe.Pointer) bool {
 	Plugin := (*cmsPluginParalellization)(Data)
 	ctx := (*cmsParallelizationPluginChunkType)(cmsContextGetClientChunk(ContextID, ParallelizationPlugin))
 
@@ -381,7 +384,6 @@ func cmsRegisterParallelizationPlugin(ContextID cmsContext, Data unsafe.Pointer 
 	ctx.SchedulerFn = Plugin.SchedulerFn
 	return true
 }
-
 
 // Mutex for thread safety.
 var globalMutex sync.Mutex
@@ -418,4 +420,38 @@ func cmsAllocParallelizationPluginChunk(ctx *cmsContextStruct, src *cmsContextSt
 		dstChunk := (*cmsParallelizationPluginChunkType)(unsafe.Pointer(ctx.chunks[ParallelizationPlugin]))
 		*dstChunk = cmsParallelizationPluginChunk
 	}
+}
+
+// Utility function to print signatures
+func cmsTagSignature2String(String [5]byte, sig cmsTagSignature) {
+	// Convert to big endian
+	be := cmsAdjustEndianess32(uint32(sig))
+
+	// Move chars
+	memmove(unsafe.Pointer(&String[0]), unsafe.Pointer(&be), 4)
+
+	// Make sure of terminator
+	String[4] = 0
+}
+func cmsstrcasecmp(s1, s2 *byte) int {
+	// Convert *byte pointers into slices to traverse
+	us1 := unsafe.Slice(s1, cmsMAX_PATH)
+	us2 := unsafe.Slice(s2, cmsMAX_PATH)
+
+	for i := 0; i < len(us1) && i < len(us2); i++ {
+		// Convert to uppercase for case-insensitive comparison
+		c1 := byte(unicode.ToUpper(rune(us1[i])))
+		c2 := byte(unicode.ToUpper(rune(us2[i])))
+
+		if c1 != c2 {
+			return int(c1) - int(c2)
+		}
+
+		// Break on null terminator
+		if us1[i] == 0 {
+			return 0
+		}
+	}
+
+	return 0
 }
