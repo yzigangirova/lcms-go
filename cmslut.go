@@ -546,6 +546,88 @@ func cmsStageAllocLabV4ToV2(ContextID cmsContext) *cmsStage {
 	return mpe
 }
 
+// Constants for normalization
+const (
+	normFactorXYZToFloat = 32768.0 / 65535.0
+	normFactorFloatToXYZ = 65535.0 / 32768.0
+)
+
+// _cmsStageNormalizeFromLabFloat normalizes Lab values from integer range to floating-point PCS range.
+func cmsStageNormalizeFromLabFloat(ContextID cmsContext) *cmsStage {
+	a1 := []float64{
+		1.0 / 100.0, 0, 0,
+		0, 1.0 / 255.0, 0,
+		0, 0, 1.0 / 255.0,
+	}
+
+	o1 := []float64{
+		0,
+		128.0 / 255.0,
+		128.0 / 255.0,
+	}
+
+	mpe := cmsStageAllocMatrix(ContextID, 3, 3, a1, o1)
+	if mpe == nil {
+		return nil
+	}
+	mpe.Implements = cmsSigLab2FloatPCS
+	return mpe
+}
+
+// _cmsStageNormalizeFromXyzFloat normalizes XYZ values from integer range to floating-point PCS range.
+func cmsStageNormalizeFromXyzFloat(ContextID cmsContext) *cmsStage {
+	a1 := []float64{
+		normFactorXYZToFloat, 0, 0,
+		0, normFactorXYZToFloat, 0,
+		0, 0, normFactorXYZToFloat,
+	}
+
+	mpe := cmsStageAllocMatrix(ContextID, 3, 3, a1, nil)
+	if mpe == nil {
+		return nil
+	}
+	mpe.Implements = cmsSigXYZ2FloatPCS
+	return mpe
+}
+
+// _cmsStageNormalizeToLabFloat normalizes Lab values from floating-point PCS range to integer range.
+func cmsStageNormalizeToLabFloat(ContextID cmsContext) *cmsStage {
+	a1 := []float64{
+		100.0, 0, 0,
+		0, 255.0, 0,
+		0, 0, 255.0,
+	}
+
+	o1 := []float64{
+		0,
+		-128.0,
+		-128.0,
+	}
+
+	mpe := cmsStageAllocMatrix(ContextID, 3, 3, a1, o1)
+	if mpe == nil {
+		return nil
+	}
+	mpe.Implements = cmsSigFloatPCS2Lab
+	return mpe
+}
+
+// _cmsStageNormalizeToXyzFloat normalizes XYZ values from floating-point PCS range to integer range.
+func cmsStageNormalizeToXyzFloat(ContextID cmsContext) *cmsStage {
+	a1 := []float64{
+		normFactorFloatToXYZ, 0, 0,
+		0, normFactorFloatToXYZ, 0,
+		0, 0, normFactorFloatToXYZ,
+	}
+
+	mpe := cmsStageAllocMatrix(ContextID, 3, 3, a1, nil)
+	if mpe == nil {
+		return nil
+	}
+	mpe.Implements = cmsSigFloatPCS2XYZ
+	return mpe
+}
+
 func cmsStageAllocLabPrelin(ContextID cmsContext) *cmsStage {
 	params := []float64{2.4}
 	var LabTable [3]*cmsToneCurve

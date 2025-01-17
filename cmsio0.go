@@ -226,13 +226,13 @@ func cmsSetHeaderAttributes(hProfile unsafe.Pointer, Flags uint64) {
 }
 
 // cmsGetHeaderProfileID retrieves the profile ID from the profile
-func cmsGetHeaderProfileID(hProfile unsafe.Pointer, ProfileID *[16]byte) {
+func cmsGetHeaderProfileID(hProfile unsafe.Pointer, ProfileID *byte) {
 	icc := (*cmsICCPROFILE)(hProfile)
 	memmove(unsafe.Pointer(ProfileID), unsafe.Pointer(&icc.ProfileID), unsafe.Sizeof(icc.ProfileID))
 }
 
 // cmsSetHeaderProfileID sets the profile ID in the profile
-func cmsSetHeaderProfileID(hProfile unsafe.Pointer, ProfileID *[16]byte) {
+func cmsSetHeaderProfileID(hProfile unsafe.Pointer, ProfileID *byte) {
 	icc := (*cmsICCPROFILE)(hProfile)
 	memmove(unsafe.Pointer(&icc.ProfileID), unsafe.Pointer(ProfileID), unsafe.Sizeof(icc.ProfileID))
 }
@@ -655,6 +655,118 @@ func cmsCreateProfilePlaceholder(ContextID cmsContext) cmsHPROFILE {
 Error:
 	cmsFree(ContextID, unsafe.Pointer(Icc))
 	return nil
+}
+
+// cmsGetTagTrueType translates to Go
+func cmsGetTagTrueType(hProfile cmsHPROFILE, sig cmsTagSignature) cmsTagTypeSignature {
+	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile)) // Cast hProfile to *cmsICCPROFILE
+	var n int
+
+	// Search for the given tag in ICC profile directory
+	n = cmsSearchTag(Icc, sig, true)
+	if n < 0 {
+		return cmsTagTypeSignature(0) // Not found, return 0
+	}
+
+	// Get the handler. The true type is there
+	TypeHandler := Icc.TagTypeHandlers[n]
+	return TypeHandler.Signature
+}
+
+// cmsWriteTag translates the given function
+func cmsWriteTag(hProfile cmsHPROFILE, sig cmsTagSignature, data unsafe.Pointer) bool {
+	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile))
+	var TypeHandler *cmsTagTypeHandler
+	var LocalTypeHandler cmsTagTypeHandler
+	var TagDescriptor *cmsTagDescriptor
+	var Type cmsTagTypeSignature
+	var i int
+	var Version float64
+	var TypeString, SigString [5]byte
+
+	if !cmsLockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex)) {
+		return false
+	}
+
+	// Handle deletion of the tag
+	if data == nil {
+		i = cmsSearchTag(Icc, sig, false)
+		if i >= 0 {
+			// Mark the tag as deleted
+			cmsDeleteTagByPos(Icc, i)
+			Icc.TagNames[i] = 0
+			cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
+			return true
+		}
+		goto Error
+	}
+
+	// Add a new tag or get the position of an existing one
+	if !cmsNewTag(Icc, sig, &i) {
+		goto Error
+	}
+
+	// Initialize the new tag
+	Icc.TagSaveAsRaw[i] = false
+	Icc.TagLinked[i] = 0
+
+	// Retrieve information about the tag
+	TagDescriptor = cmsGetTagDescriptor(Icc.ContextID, sig)
+	if TagDescriptor == nil {
+		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unsupported tag '%x'", sig))
+		goto Error
+	}
+
+	// Determine the type based on the version and data
+	Version = cmsGetProfileVersion(hProfile)
+	if TagDescriptor.DecideType != nil {
+		Type = TagDescriptor.DecideType(Version, data)
+	} else {
+		Type = TagDescriptor.SupportedTypes[0]
+	}
+
+	// Check if the type is supported
+	if !IsTypeSupported(TagDescriptor, Type) {
+		cmsTagSignature2String(TypeString, cmsTagSignature(Type))
+		cmsTagSignature2String(SigString, sig)
+		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unsupported type '%s' for tag '%s'", TypeString, SigString))
+		goto Error
+	}
+
+	// Get the handler for the type
+	TypeHandler = cmsGetTagTypeHandler(Icc.ContextID, Type)
+	if TypeHandler == nil {
+		cmsTagSignature2String(TypeString, cmsTagSignature(Type))
+		cmsTagSignature2String(SigString, sig)
+		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unsupported type '%s' for tag '%s'", TypeString, SigString))
+		goto Error
+	}
+
+	// Set up the tag fields in the profile structure
+	Icc.TagTypeHandlers[i] = TypeHandler
+	Icc.TagNames[i] = sig
+	Icc.TagSizes[i] = 0
+	Icc.TagOffsets[i] = 0
+
+	// Duplicate the pointer for the tag data
+	LocalTypeHandler = *TypeHandler
+	LocalTypeHandler.ContextID = Icc.ContextID
+	LocalTypeHandler.ICCVersion = Icc.Version
+	Icc.TagPtrs[i] = LocalTypeHandler.DupFn(&LocalTypeHandler, data, TagDescriptor.ElemCount)
+
+	if Icc.TagPtrs[i] == nil {
+		cmsTagSignature2String(TypeString, cmsTagSignature(Type))
+		cmsTagSignature2String(SigString, sig)
+		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_CORRUPTION_DETECTED, fmt.Sprintf("Malformed struct in type '%s' for tag '%s'", TypeString, SigString))
+		goto Error
+	}
+
+	cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
+	return true
+
+Error:
+	cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
+	return false
 }
 
 // Retrieve the context ID from a profile

@@ -408,7 +408,7 @@ func cmsHandleExtraChannels(
 	ComputeComponentIncrements(p.OutputFormat, Stride.BytesPerPlaneOut, DestStartingOrder[:], DestIncrements[:])
 
 	// Get formatter function
-	copyValueFn, _ := cmsGetFormatterAlpha(p.ContextID, p.InputFormat, p.OutputFormat)
+	copyValueFn, _ := cmsGetFormatterAlpha(unsafe.Pointer(p.ContextID), p.InputFormat, p.OutputFormat)
 	if copyValueFn == nil {
 		return
 	}

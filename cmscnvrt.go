@@ -40,6 +40,28 @@ func init() {
 	initDefaultIntents()
 }
 
+// SearchIntent translates the given function
+func SearchIntent(ContextID cmsContext, Intent uint32) *cmsIntentsList {
+	// Retrieve the plugin chunk for intents
+	ctx := (*cmsIntentsPluginChunkType)(cmsContextGetClientChunk(ContextID, IntentPlugin))
+
+	// Search in the plugin intents list
+	for pt := ctx.Intents; pt != nil; pt = pt.Next {
+		if pt.Intent == Intent {
+			return pt
+		}
+	}
+
+	// Search in the default intents list
+	for pt := &DefaultIntents[0]; pt != nil; pt = pt.Next {
+		if pt.Intent == Intent {
+			return pt
+		}
+	}
+
+	return nil
+}
+
 // ComputeBlackPointCompensation calculates the black point compensation matrix and offset.
 // Black points should come relative to the white point. Fills a matrix `m` and an offset `off`,
 // organized as a 4x4 matrix.
@@ -548,7 +570,7 @@ type GrayOnlyParams struct {
 }
 
 // BlackPreservingGrayOnlySampler preserves black-only CMYK transformations.
-func BlackPreservingGrayOnlySampler(In []uint16, Out []uint16, Cargo unsafe.Pointer) bool {
+func BlackPreservingGrayOnlySampler(In []uint16, Out []uint16, Cargo unsafe.Pointer) int32 {
 	bp := (*GrayOnlyParams)(Cargo)
 
 	// If going across black only, keep black only
@@ -556,12 +578,12 @@ func BlackPreservingGrayOnlySampler(In []uint16, Out []uint16, Cargo unsafe.Poin
 		// TAC does not apply because it is black ink!
 		Out[0], Out[1], Out[2] = 0, 0, 0
 		Out[3] = cmsEvalToneCurve16(bp.KTone, In[3])
-		return true
+		return int32(1)
 	}
 
 	// Keep normal transform for other colors
 	bp.Cmyk2Cmyk.Eval16Fn(In, Out, bp.Cmyk2Cmyk.Data)
-	return true
+	return int32(1)
 }
 
 // BlackPreservingKOnlyIntents handles black-preserving K-only intents.
@@ -694,7 +716,7 @@ type PreserveKPlaneParams struct {
 }
 
 // BlackPreservingSampler performs sampling for K-plane preservation.
-func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) bool {
+func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) int32 {
 	bp := (*PreserveKPlaneParams)(Cargo)
 	var Inf, Outf, LabK [4]float32
 	var ColorimetricLab, BlackPreservingLab cmsCIELab
@@ -712,7 +734,7 @@ func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) bool {
 	if In[0] == 0 && In[1] == 0 && In[2] == 0 {
 		Out[0], Out[1], Out[2] = 0, 0, 0
 		Out[3] = cmsQuickSaturateWord(float64(LabK[3] * 65535.0))
-		return true
+		return 1
 	}
 
 	// Try the original transform
@@ -725,7 +747,7 @@ func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) bool {
 
 	// Check if K is already OK
 	if math.Abs(float64(Outf[3]-LabK[3])) < (3.0 / 65535.0) {
-		return true
+		return 1
 	}
 
 	// Measure and keep Lab measurement for further usage
@@ -737,7 +759,7 @@ func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) bool {
 	// Reverse interpolation to obtain CMY with fixed K
 	if !cmsPipelineEvalReverseFloat(LabK[:], Outf[:], Outf[:], bp.LabK2Cmyk) {
 		// Use colorimetric transform if reverse interpolation fails
-		return true
+		return 1
 	}
 
 	// Fix K
@@ -768,7 +790,7 @@ func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) bool {
 		bp.MaxError = Error
 	}
 
-	return true
+	return 1
 }
 
 // BlackPreservingKPlaneIntents handles black-plane preserving intents.

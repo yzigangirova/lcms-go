@@ -1,6 +1,5 @@
 package golcms
 
-
 import (
 	"errors"
 	"math"
@@ -53,7 +52,6 @@ func cmsWhitePointFromTemp(WhitePoint *cmsCIExyY, TempK float64) error {
 	return nil
 }
 
-
 // ISOTEMPERATURE represents isotemperature data used for white point conversions.
 type ISOTEMPERATURE struct {
 	Mirek float64 // Temperature in microreciprocal kelvin
@@ -99,7 +97,6 @@ var isotempdata = []ISOTEMPERATURE{
 
 // Constants
 var NISO = len(isotempdata)
-
 
 // cmsTempFromWhitePoint calculates the correlated color temperature (CCT) from a given white point.
 
@@ -168,10 +165,9 @@ func ComputeChromaticAdaptation(Conversion *cmsMAT3, SourceWhitePoint, DestWhite
 	return true
 }
 
-
 // _cmsAdaptMatrixToD50 computes the adaptation matrix to the D50 white point.
 // The source white point is provided in the xyY representation.
-func _cmsAdaptMatrixToD50(r *cmsMAT3, SourceWhitePt *cmsCIExyY) bool{
+func _cmsAdaptMatrixToD50(r *cmsMAT3, SourceWhitePt *cmsCIExyY) bool {
 	if r == nil || SourceWhitePt == nil {
 		return false
 	}
@@ -216,7 +212,7 @@ func _cmsBuildRGB2XYZtransferMatrix(r *cmsMAT3, WhitePt *cmsCIExyY, Primrs *cmsC
 	// Build Primaries matrix
 	cmsVEC3init(&Primaries.V[0], xr, xg, xb)
 	cmsVEC3init(&Primaries.V[1], yr, yg, yb)
-	cmsVEC3init(&Primaries.V[2], (1-xr-yr), (1-xg-yg), (1-xb-yb))
+	cmsVEC3init(&Primaries.V[2], (1 - xr - yr), (1 - xg - yg), (1 - xb - yb))
 
 	// Invert Primaries matrix to obtain Result
 	if !cmsMAT3inverse(&Primaries, &Result) {
@@ -257,6 +253,60 @@ func cmsAdaptationMatrix(r *cmsMAT3, ConeMatrix *cmsMAT3, FromIll, ToIll *cmsCIE
 	}
 
 	return ComputeChromaticAdaptation(r, FromIll, ToIll, ConeMatrix)
+}
+
+// Build a White point, primary chromas transfer matrix from RGB to CIE XYZ
+// This is just an approximation, I am not handling all the non-linear
+// aspects of the RGB to XYZ process, and assuming that the gamma correction
+// has transitive property in the transformation chain.
+//
+// the algorithm:
+//
+//   - First I build the absolute conversion matrix using
+//     primaries in XYZ. This matrix is next inverted
+//   - Then I eval the source white point across this matrix
+//     obtaining the coefficients of the transformation
+//   - Then, I apply these coefficients to the original matrix
+func cmsBuildRGB2XYZtransferMatrix(r *cmsMAT3, WhitePt *cmsCIExyY, Primrs *cmsCIExyYTRIPLE) bool {
+	var (
+		WhitePoint, Coef  cmsVEC3
+		Result, Primaries cmsMAT3
+		xn, yn            float64
+		xr, yr            float64
+		xg, yg            float64
+		xb, yb            float64
+	)
+
+	xn = WhitePt.x
+	yn = WhitePt.y
+	xr = Primrs.Red.x
+	yr = Primrs.Red.y
+	xg = Primrs.Green.x
+	yg = Primrs.Green.y
+	xb = Primrs.Blue.x
+	yb = Primrs.Blue.y
+
+	// Build Primaries matrix
+	cmsVEC3init(&Primaries.v[0], xr, xg, xb)
+	cmsVEC3init(&Primaries.v[1], yr, yg, yb)
+	cmsVEC3init(&Primaries.v[2], (1 - xr - yr), (1 - xg - yg), (1 - xb - yb))
+
+	// Result = Primaries ^ (-1) inverse matrix
+	if !cmsMAT3inverse(&Primaries, &Result) {
+		return false
+	}
+
+	cmsVEC3init(&WhitePoint, xn/yn, 1.0, (1.0-xn-yn)/yn)
+
+	// Across inverse primaries ...
+	cmsMAT3eval(&Coef, &Result, &WhitePoint)
+
+	// Build the transformation matrix using Coefs
+	cmsVEC3init(&r.v[0], Coef.n[VX]*xr, Coef.n[VY]*xg, Coef.n[VZ]*xb)
+	cmsVEC3init(&r.v[1], Coef.n[VX]*yr, Coef.n[VY]*yg, Coef.n[VZ]*yb)
+	cmsVEC3init(&r.v[2], Coef.n[VX]*(1.0-xr-yr), Coef.n[VY]*(1.0-xg-yg), Coef.n[VZ]*(1.0-xb-yb))
+
+	return cmsAdaptMatrixToD50(r, WhitePt)
 }
 
 // Adapts a color to a given illuminant
