@@ -583,8 +583,8 @@ func cmsReasonableGridpointsByColorspace(Colorspace cmsColorSpaceSignature, Flag
 // _cmsEndPointsBySpace retrieves endpoints by color space
 func cmsEndPointsBySpace(
 	space cmsColorSpaceSignature,
-	white *[]uint16,
-	black *[]uint16,
+	white **uint16,
+	black **uint16,
 	nOutputs *uint32,
 ) bool {
 	var (
@@ -603,10 +603,10 @@ func cmsEndPointsBySpace(
 	switch space {
 	case cmsSigGrayData:
 		if white != nil {
-			*white = GrayWhite
+			*white = &GrayWhite[0]
 		}
 		if black != nil {
-			*black = Grayblack
+			*black = &Grayblack[0]
 		}
 		if nOutputs != nil {
 			*nOutputs = 1
@@ -615,10 +615,10 @@ func cmsEndPointsBySpace(
 
 	case cmsSigRgbData:
 		if white != nil {
-			*white = RGBwhite
+			*white = &RGBwhite[0]
 		}
 		if black != nil {
-			*black = RGBblack
+			*black = &RGBblack[0]
 		}
 		if nOutputs != nil {
 			*nOutputs = 3
@@ -627,10 +627,10 @@ func cmsEndPointsBySpace(
 
 	case cmsSigLabData:
 		if white != nil {
-			*white = LABwhite
+			*white = &LABwhite[0]
 		}
 		if black != nil {
-			*black = LABblack
+			*black = &LABblack[0]
 		}
 		if nOutputs != nil {
 			*nOutputs = 3
@@ -639,10 +639,10 @@ func cmsEndPointsBySpace(
 
 	case cmsSigCmykData:
 		if white != nil {
-			*white = CMYKwhite
+			*white = &CMYKwhite[0]
 		}
 		if black != nil {
-			*black = CMYKblack
+			*black = &CMYKblack[0]
 		}
 		if nOutputs != nil {
 			*nOutputs = 4
@@ -651,10 +651,10 @@ func cmsEndPointsBySpace(
 
 	case cmsSigCmyData:
 		if white != nil {
-			*white = CMYwhite
+			*white = &CMYwhite[0]
 		}
 		if black != nil {
-			*black = CMYblack
+			*black = &CMYblack[0]
 		}
 		if nOutputs != nil {
 			*nOutputs = 3

@@ -3,6 +3,7 @@ package golcms
 import (
 	"unsafe"
 )
+
 // Append a Lab identity after the given sequence of profiles and return the transform.
 // Lab profile is closed, rest of the profiles are kept open.
 func cmsChain2Lab(ContextID cmsContext,
@@ -75,14 +76,15 @@ func ComputeKToLstar(ContextID cmsContext,
 		return nil
 	}
 
-	SampledPoints := make([]float32, nPoints)
-	defer cmsFree(ContextID, SampledPoints)
+	SampledPoints := (*float32)(cmsCalloc(ContextID, nPoints, uint32(unsafe.Sizeof(float32(0)))))
 
 	for i := uint32(0); i < nPoints; i++ {
 		cmyk := [4]float32{0, 0, 0, float32((float64(i) * 100.0) / float64(nPoints-1))}
 		var Lab cmsCIELab
-		cmsDoTransform(xform, cmyk[:], &Lab, 1)
-		SampledPoints[i] = float32(1.0 - Lab.L/100.0) // Negate K for easier operation
+		cmsDoTransform(xform, unsafe.Pointer(&cmyk[0]), unsafe.Pointer(&Lab), 1)
+
+		// Calculate the offset for the current index and assign the value
+		*(*float32)(unsafe.Add(unsafe.Pointer(SampledPoints), uintptr(i)*unsafe.Sizeof(float32(0)))) = float32(1.0 - Lab.L/100.0)
 	}
 
 	out := cmsBuildTabulatedToneCurveFloat(ContextID, nPoints, SampledPoints)
@@ -154,15 +156,14 @@ type cmsTACestimator struct {
 	MaxInput     [cmsMAXCHANNELS]float32
 }
 
-
 // EstimateTAC is the callback function to calculate maximum TAC.
-func EstimateTAC(in []uint16, out []uint16, cargo interface{}) int {
-	bp := cargo.(*cmsTACestimator)
+func EstimateTAC(in []uint16, out []uint16, cargo unsafe.Pointer) int32 {
+	bp := (*cmsTACestimator)(cargo)
 	var roundTrip [cmsMAXCHANNELS]float32
 	var sum float32
 
 	// Evaluate the transform
-	cmsDoTransform(bp.hRoundTrip, in, &roundTrip, 1)
+	cmsDoTransform(bp.hRoundTrip, unsafe.Pointer(&in[0]), unsafe.Pointer(&roundTrip[0]), 1)
 
 	// Sum all amounts of ink
 	for i := 0; i < int(bp.nOutputChans); i++ {
@@ -190,12 +191,12 @@ func cmsDetectTAC(hProfile cmsHPROFILE) float64 {
 	contextID = cmsGetProfileContextID(hProfile)
 
 	// TAC only works on output profiles
-	if cmsGetDeviceClass(hProfile) != cmsSigOutputClass {
+	if cmsGetDeviceClass(unsafe.Pointer(hProfile)) != cmsSigOutputClass {
 		return 0
 	}
 
 	// Create a fake formatter for result
-	dwFormatter = cmsFormatterForColorspaceOfProfile(hProfile, 4, true)
+	dwFormatter = cmsFormatterForColorspaceOfProfile(unsafe.Pointer(hProfile), 4, true)
 
 	// Unsupported color space?
 	if dwFormatter == 0 {
@@ -236,7 +237,7 @@ func cmsDetectTAC(hProfile cmsHPROFILE) float64 {
 	gridPoints[1] = 74
 	gridPoints[2] = 74
 
-	if !cmsSliceSpace16(3, gridPoints, EstimateTAC, &bp) {
+	if !cmsSliceSpace16(3, gridPoints[:], EstimateTAC, unsafe.Pointer(&bp)) {
 		bp.MaxTAC = 0
 	}
 
@@ -246,10 +247,87 @@ func cmsDetectTAC(hProfile cmsHPROFILE) float64 {
 	return float64(bp.MaxTAC)
 }
 
-
-
 // Gamut LUT Creation -----------------------------------------------------------------------------------------
 
+// Define the GAMUTCHAIN structure
+type GAMUTCHAIN struct {
+	hInput    cmsHTRANSFORM // From whatever input color space. 16 bits to DBL
+	hForward  cmsHTRANSFORM // Transforms going from Lab to colorant
+	hReverse  cmsHTRANSFORM // Transforms going from colorant back to Lab
+	Threshold float64       // The threshold after which is considered out of gamut
+}
+
+const ERR_THRESHOLD = 5
+
+// This sampler does compute gamut boundaries by comparing original
+// values with a transform going back and forth. Values above ERR_THRESHOLD
+// of maximum are considered out of gamut.
+
+// GamutSampler computes gamut boundaries by comparing original values with a transform
+// going back and forth. Values above ERR_THRESHOLD are considered out of gamut.
+func GamutSampler(In []uint16, Out []uint16, Cargo unsafe.Pointer) int32 {
+	t := (*GAMUTCHAIN)(Cargo)
+	var LabIn1, LabOut1 cmsCIELab
+	var LabIn2, LabOut2 cmsCIELab
+	var Proof [cmsMAXCHANNELS]uint16
+	var Proof2 [cmsMAXCHANNELS]uint16
+	var dE1, dE2, ErrorRatio float64
+
+	// Assume in-gamut by default.
+	ErrorRatio = 1.0
+
+	// Convert input to Lab
+	cmsDoTransform(t.hInput, unsafe.Pointer(&In[0]), unsafe.Pointer(&LabIn1), 1)
+
+	// Convert from PCS to colorant. This always returns in-gamut values.
+	cmsDoTransform(t.hForward, unsafe.Pointer(&LabIn1), unsafe.Pointer(&Proof[0]), 1)
+
+	// Convert from colorant to PCS.
+	cmsDoTransform(t.hReverse, unsafe.Pointer(&Proof[0]), unsafe.Pointer(&LabOut1), 1)
+
+	// Copy LabOut1 to LabIn2
+	memmove(unsafe.Pointer(&LabIn2), unsafe.Pointer(&LabOut1), unsafe.Sizeof(cmsCIELab{}))
+
+	// Forward and reverse transform again, using LabOut1 as input
+	cmsDoTransform(t.hForward, unsafe.Pointer(&LabOut1), unsafe.Pointer(&Proof2[0]), 1)
+	cmsDoTransform(t.hReverse, unsafe.Pointer(&Proof2[0]), unsafe.Pointer(&LabOut2), 1)
+
+	// Compute differences
+	dE1 = cmsDeltaE(&LabIn1, &LabOut1)
+	dE2 = cmsDeltaE(&LabIn2, &LabOut2)
+
+	// Determine gamut status based on differences
+	if dE1 < t.Threshold && dE2 < t.Threshold {
+		Out[0] = 0
+	} else {
+		if dE1 < t.Threshold && dE2 > t.Threshold {
+			Out[0] = 0
+		} else if dE1 > t.Threshold && dE2 < t.Threshold {
+			Out[0] = uint16(cmsQuickFloor(dE1 - t.Threshold + 0.5))
+		} else {
+			if dE2 == 0.0 {
+				ErrorRatio = dE1
+			} else {
+				ErrorRatio = dE1 / dE2
+			}
+
+			if ErrorRatio > t.Threshold {
+				Out[0] = uint16(cmsQuickFloor(ErrorRatio - t.Threshold + 0.5))
+			} else {
+				Out[0] = 0
+			}
+		}
+	}
+
+	return 1 // TRUE
+}
+
+// Does compute a gamut LUT going back and forth across pcs -> relativ. colorimetric intent -> pcs
+// the dE obtained is then annotated on the LUT. Values truly out of gamut are clipped to dE = 0xFFFE
+// and values changed are supposed to be handled by any gamut remapping, so, are out of gamut as well.
+//
+// **WARNING: This algorithm does assume that gamut remapping algorithms does NOT move in-gamut colors,
+// of course, many perceptual and saturation intents does not work in such way, but relativ. ones should.
 // Used by gamut & softproofing
 func cmsCreateGamutCheckPipeline(
 	ContextID cmsContext,
@@ -260,7 +338,7 @@ func cmsCreateGamutCheckPipeline(
 	nGamutPCSposition uint32,
 	hGamut cmsHPROFILE,
 ) *cmsPipeline {
-	var hLab *cmsHPROFILE
+	var hLab cmsHPROFILE
 	var Gamut *cmsPipeline
 	var CLUT *cmsStage
 	var dwFormat uint32
@@ -269,7 +347,7 @@ func cmsCreateGamutCheckPipeline(
 	var nChannels int32
 	var ColorSpace cmsColorSpaceSignature
 	var i uint32
-	var ProfileList [256]*cmsHPROFILE
+	var ProfileList [256]cmsHPROFILE
 	var BPCList [256]bool
 	var AdaptationList [256]float64
 	var IntentList [256]uint32
@@ -279,7 +357,7 @@ func cmsCreateGamutCheckPipeline(
 
 	// Validate PCS position
 	if nGamutPCSposition <= 0 || nGamutPCSposition > 255 {
-		cmsSignalError(ContextID, cmsERROR_RANGE, "Wrong position of PCS. 1..255 expected, %d found.", nGamutPCSposition)
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Wrong position of PCS. 1..255 expected")
 		return nil
 	}
 
@@ -309,13 +387,13 @@ func cmsCreateGamutCheckPipeline(
 	AdaptationList[nGamutPCSposition] = 1.0
 	IntentList[nGamutPCSposition] = INTENT_RELATIVE_COLORIMETRIC
 
-	ColorSpace = cmsGetColorSpace(hGamut)
+	ColorSpace = cmsGetColorSpace(unsafe.Pointer(hGamut))
 	nChannels = cmsChannelsOfColorSpace(ColorSpace)
 	nGridpoints = cmsReasonableGridpointsByColorspace(ColorSpace, cmsFLAGS_HIGHRESPRECALC)
 	dwFormat = CHANNELS_SH(uint32(nChannels)) | BYTES_SH(2)
 
 	// Create the input transform
-	Chain.hInput = cmsCreateExtendedTransform(
+	Chain.hInput = cmsHTRANSFORM(cmsCreateExtendedTransform(
 		ContextID,
 		nGamutPCSposition+1,
 		ProfileList[:],
@@ -327,7 +405,7 @@ func cmsCreateGamutCheckPipeline(
 		dwFormat,
 		TYPE_Lab_DBL,
 		cmsFLAGS_NOCACHE,
-	)
+	))
 
 	// Create the forward step
 	Chain.hForward = cmsCreateTransformTHR(
@@ -381,20 +459,21 @@ func cmsCreateGamutCheckPipeline(
 	// Return the computed LUT
 	return Gamut
 }
+
 // cmsDetectRGBProfileGamma detects whether a given ICC profile works in linear (gamma 1.0) space.
 // It uses least squares fitting to estimate gamma for a synthetic gray (R=G=B).
 // If gamma is close to 1.0, RGB is linear. On unsupported profiles, -1 is returned.
 func cmsDetectRGBProfileGamma(hProfile cmsHPROFILE, threshold float64) float64 {
 	var (
-		ContextID    cmsContext
-		hXYZ         cmsHPROFILE
-		xform        cmsHTRANSFORM
-		YCurve       *cmsToneCurve
-		rgb          [256][3]uint16
-		XYZ          [256]cmsCIEXYZ
-		YNormalized  [256]float32
-		gamma        float64
-		cls          cmsProfileClassSignature
+		ContextID   cmsContext
+		hXYZ        cmsHPROFILE
+		xform       cmsHTRANSFORM
+		YCurve      *cmsToneCurve
+		rgb         [256][3]uint16
+		XYZ         [256]cmsCIEXYZ
+		YNormalized [256]float32
+		gamma       float64
+		cls         cmsProfileClassSignature
 	)
 
 	// Ensure the profile is in RGB color space
@@ -403,7 +482,7 @@ func cmsDetectRGBProfileGamma(hProfile cmsHPROFILE, threshold float64) float64 {
 	}
 
 	// Check the profile class
-	cls = cmsGetDeviceClass(hProfile)
+	cls = cmsGetDeviceClass(unsafe.Pointer(hProfile))
 	if cls != cmsSigInputClass && cls != cmsSigDisplayClass &&
 		cls != cmsSigOutputClass && cls != cmsSigColorSpaceClass {
 		return -1
@@ -426,14 +505,14 @@ func cmsDetectRGBProfileGamma(hProfile cmsHPROFILE, threshold float64) float64 {
 	}
 
 	// Generate a synthetic gray (R=G=B) ramp
-	for i := 0; i < 256; i++ {
+	for i := uint8(0); i <= uint8(255); i++ {
 		rgb[i][0] = FROM_8_TO_16(i)
 		rgb[i][1] = FROM_8_TO_16(i)
 		rgb[i][2] = FROM_8_TO_16(i)
 	}
 
 	// Perform the transform
-	cmsDoTransform(xform, rgb[:], XYZ[:], 256)
+	cmsDoTransform(xform, unsafe.Pointer(&rgb[0]), unsafe.Pointer(&XYZ[0]), 256)
 
 	// Clean up the transform and XYZ profile
 	cmsDeleteTransform(xform)
@@ -445,7 +524,7 @@ func cmsDetectRGBProfileGamma(hProfile cmsHPROFILE, threshold float64) float64 {
 	}
 
 	// Build a tone curve from the normalized Y values
-	YCurve = cmsBuildTabulatedToneCurveFloat(ContextID, 256, YNormalized[:])
+	YCurve = cmsBuildTabulatedToneCurveFloat(ContextID, 256, &YNormalized[0])
 	if YCurve == nil {
 		return -1
 	}

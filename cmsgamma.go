@@ -366,6 +366,22 @@ func cmsJoinToneCurve(ContextID cmsContext, X, Y *cmsToneCurve, nResultingPoints
 
 	return out
 }
+func cmsIsToneCurveLinear(Curve *cmsToneCurve) bool {
+	cmsAssert(Curve != nil, "")
+
+	for i := 0; i < int(Curve.nEntries); i++ {
+		// Access the i-th element of Table16
+		tableValue := *(*uint16)(unsafe.Add(unsafe.Pointer(Curve.Table16), uintptr(i)*unsafe.Sizeof(uint16(0))))
+
+		// Compute the difference
+		diff := int(tableValue) - int(cmsQuantizeVal(float64(i), Curve.nEntries))
+		if math.Abs(float64(diff)) > 0x0f {
+			return false
+		}
+	}
+
+	return true
+}
 
 // cmsIsToneCurveMonotonic checks if a tone curve is monotonic.
 func cmsIsToneCurveMonotonic(t *cmsToneCurve) bool {

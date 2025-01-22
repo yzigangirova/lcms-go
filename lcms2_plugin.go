@@ -244,7 +244,7 @@ const CMS_PACK_FLAGS_FLOAT = 0x0001
 // StageToneCurvesData represents data for tone curves.
 type cmsStageToneCurvesData struct {
 	NCurves   uint32          // Number of curves
-	TheCurves []*cmsToneCurve // Slice of pointers to ToneCurve
+	TheCurves **cmsToneCurve // Slice of pointers to ToneCurve
 }
 
 // StageMatrixData represents data for a matrix transformation.
@@ -292,18 +292,6 @@ type cmsPipelineEvalFloatFn func(
 	In []float32, // Input array
 	Out []float32, // Output array
 	Data unsafe.Pointer, // Arbitrary data
-)
-
-// This function may be used to set the optional evaluator and a block of private data. If private data is being used, an optional
-// duplicator and free functions should also be specified in order to duplicate the LUT construct. Use NULL to inhibit such functionality.
-
-// _cmsPipelineSetOptimizationParameters sets optional evaluator and private data for optimization.
-type cmsPipelineSetOptimizationParameters func(
-	Lut *cmsPipeline,
-	Eval16 cmsPipelineEval16Fn,
-	PrivateData unsafe.Pointer,
-	FreePrivateDataFn cmsFreeUserDataFn,
-	DupPrivateDataFn cmsDupUserDataFn,
 )
 
 // Optimize entry point

@@ -124,7 +124,7 @@ func cmsMAT3solve(x *cmsVEC3, a *cmsMAT3, b *cmsVEC3) bool {
 
 	memmove(unsafe.Pointer(&m), unsafe.Pointer(a), unsafe.Sizeof(cmsMAT3{}))
 
-	if cmsMAT3inverse(&m, &a_1) == 1 {
+	if cmsMAT3inverse(&m, &a_1) {
 		return false // Singular matrix
 	}
 	cmsMAT3eval(x, &a_1, b)

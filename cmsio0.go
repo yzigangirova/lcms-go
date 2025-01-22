@@ -1592,3 +1592,64 @@ func FileClose(iohandler *cms_io_handler) bool {
 	cmsFree(iohandler.ContextID, unsafe.Pointer(iohandler))
 	return true
 }
+func cmsWriteRawTag(hProfile cmsHPROFILE, sig cmsTagSignature, data unsafe.Pointer, size uint32) bool {
+	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile))
+	var i int
+
+	if !cmsLockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex)) {
+		return false
+	}
+
+	if !cmsNewTag(Icc, sig, &i) {
+		cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
+		return false
+	}
+
+	Icc.TagSaveAsRaw[i] = true
+	Icc.TagNames[i] = sig
+	Icc.TagLinked[i] = 0
+
+	Icc.TagPtrs[i] = cmsDupMem(Icc.ContextID, data, size)
+	Icc.TagSizes[i] = size
+
+	cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
+
+	if Icc.TagPtrs[i] == nil {
+		Icc.TagNames[i] = 0
+		return false
+	}
+	return true
+}
+func cmsLinkTag(hProfile cmsHPROFILE, sig cmsTagSignature, dest cmsTagSignature) bool {
+	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile))
+	var i int
+
+	if !cmsLockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex)) {
+		return false
+	}
+
+	if !cmsNewTag(Icc, sig, &i) {
+		cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
+		return false
+	}
+
+	Icc.TagSaveAsRaw[i] = false
+	Icc.TagNames[i] = sig
+	Icc.TagLinked[i] = dest
+	Icc.TagPtrs[i] = nil
+	Icc.TagSizes[i] = 0
+	Icc.TagOffsets[i] = 0
+
+	cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
+	return true
+}
+func cmsTagLinkedTo(hProfile cmsHPROFILE, sig cmsTagSignature) cmsTagSignature {
+	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile))
+	i := cmsSearchTag(Icc, sig, false)
+
+	if i < 0 {
+		return 0 // Not found
+	}
+
+	return Icc.TagLinked[i]
+}

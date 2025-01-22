@@ -701,6 +701,70 @@ func cmsReadOutputLUT(hProfile cmsHPROFILE, Intent uint32) *cmsPipeline {
 
 	return BuildRGBOutputMatrixShaper(hProfile)
 }
+func cmsIsMatrixShaper(hProfile cmsHPROFILE) bool {
+	switch cmsGetColorSpace(unsafe.Pointer(hProfile)) {
+
+	case cmsSigGrayData:
+		return cmsIsTag(hProfile, cmsSigGrayTRCTag)
+
+	case cmsSigRgbData:
+		return cmsIsTag(hProfile, cmsSigRedColorantTag) &&
+			cmsIsTag(hProfile, cmsSigGreenColorantTag) &&
+			cmsIsTag(hProfile, cmsSigBlueColorantTag) &&
+			cmsIsTag(hProfile, cmsSigRedTRCTag) &&
+			cmsIsTag(hProfile, cmsSigGreenTRCTag) &&
+			cmsIsTag(hProfile, cmsSigBlueTRCTag)
+
+	default:
+		return false
+	}
+}
+func cmsIsCLUT(hProfile cmsHPROFILE, Intent uint32, UsedDirection uint32) bool {
+	var TagTable *cmsTagSignature
+
+	// For devicelinks, the supported intent is the one stated in the header
+	if cmsGetDeviceClass(unsafe.Pointer(hProfile)) == cmsSigLinkClass {
+		return cmsGetHeaderRenderingIntent(unsafe.Pointer(hProfile)) == Intent
+	}
+
+	switch UsedDirection {
+
+	case LCMS_USED_AS_INPUT:
+		TagTable = &Device2PCS16[0]
+
+	case LCMS_USED_AS_OUTPUT:
+		TagTable = &PCS2Device16[0]
+
+	case LCMS_USED_AS_PROOF:
+		return cmsIsIntentSupported(hProfile, Intent, LCMS_USED_AS_INPUT) &&
+			cmsIsIntentSupported(hProfile, INTENT_RELATIVE_COLORIMETRIC, LCMS_USED_AS_OUTPUT)
+
+	default:
+		cmsSignalError(unsafe.Pointer(cmsGetProfileContextID(hProfile)), cmsERROR_RANGE, "Unexpected direction ")
+		return false
+	}
+
+	// Extended intents are not strictly CLUT-based
+	if Intent > INTENT_ABSOLUTE_COLORIMETRIC {
+		return false
+	}
+	// Use unsafe to index into TagTable
+	tag := *(*cmsTagSignature)(unsafe.Add(unsafe.Pointer(TagTable), uintptr(Intent)*unsafe.Sizeof(cmsTagSignature(0))))
+
+	return cmsIsTag(hProfile, tag)
+
+	
+}
+
+func cmsIsIntentSupported(hProfile cmsHPROFILE, Intent uint32, UsedDirection uint32) bool {
+	// Check if the intent is implemented as CLUT
+	if cmsIsCLUT(hProfile, Intent, UsedDirection) {
+		return true
+	}
+
+	// Check for matrix-shaper support
+	return cmsIsMatrixShaper(hProfile)
+}
 
 // cmsReadProfileSequence reads both profile sequence description and profile sequence ID if present,
 // then combines them into a unique structure holding both.

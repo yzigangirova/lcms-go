@@ -58,6 +58,12 @@ const cmsMAX_PATH = 256
 
 // Little CMS specific typedefs
 
+// How profiles may be used
+const ( LCMS_USED_AS_INPUT      =0
+		LCMS_USED_AS_OUTPUT     =1
+		LCMS_USED_AS_PROOF      =2
+)
+
 type cmsInfoType int
 
 type cmsDICTentry struct {

@@ -1,9 +1,7 @@
 package golcms
 
 import (
-	"fmt"
 	"math"
-	"reflect"
 	"unsafe"
 )
 
@@ -34,6 +32,19 @@ func cmsStageAllocPlaceholder(
 	ph.Data = Data
 
 	return ph
+}
+
+func EvaluateIdentity(In []float32, Out []float32, mpe *cmsStage) {
+	memmove(unsafe.Pointer(&Out[0]), unsafe.Pointer(&In[0]), uintptr(mpe.InputChannels*uint32(unsafe.Sizeof(float32(0)))))
+}
+func cmsStageAllocIdentity(ContextID cmsContext, nChannels uint32) *cmsStage {
+	return cmsStageAllocPlaceholder(ContextID,
+		cmsSigIdentityElemType,
+		nChannels, nChannels,
+		EvaluateIdentity,
+		nil,
+		nil,
+		nil)
 }
 
 // FromFloatTo16 converts a slice of float32 values to a slice of uint16 values
@@ -105,11 +116,10 @@ func cmsStageClipNegatives(ContextID cmsContext, nChannels uint32) *cmsStage {
 	)
 }
 
-func cmsStageGetPtrToCurveSet(mpe *cmsStage) []*cmsToneCurve {
+func cmsStageGetPtrToCurveSet(mpe *cmsStage) **cmsToneCurve {
 	data := (*cmsStageToneCurvesData)(mpe.Data)
 	return data.TheCurves
 }
-
 func EvaluateCurves(In []float32, Out []float32, mpe *cmsStage) {
 	data := (*cmsStageToneCurvesData)(mpe.Data)
 	if data == nil || data.TheCurves == nil {
@@ -117,37 +127,31 @@ func EvaluateCurves(In []float32, Out []float32, mpe *cmsStage) {
 	}
 
 	for i := uint32(0); i < data.NCurves; i++ {
-		Out[i] = cmsEvalToneCurveFloat(data.TheCurves[i], In[i])
+		// Use unsafe.Add to access the i-th element of TheCurves
+		curve := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+		Out[i] = cmsEvalToneCurveFloat(*curve, In[i])
 	}
 }
 
 func CurveSetElemTypeFree(mpe *cmsStage) {
+	cmsAssert(mpe != nil, "")
+
 	data := (*cmsStageToneCurvesData)(mpe.Data)
-	if data == nil || data.TheCurves == nil {
+	if data == nil {
 		return
 	}
 
-	for i := uint32(0); i < data.NCurves; i++ {
+	if data.TheCurves != nil {
 		for i := uint32(0); i < data.NCurves; i++ {
-			if data.TheCurves[i] != nil {
-				cmsFreeToneCurve(data.TheCurves[i])
+			curve := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+			if curve != nil {
+				cmsFreeToneCurve(*curve)
 			}
 		}
 	}
-	// I probably do not need freeing of the slice itself after each member is freed
-	//cmsFree(mpe.ContextID, unsafe.Pointer(data.TheCurves))
-	cmsFree(mpe.ContextID, unsafe.Pointer(data))
-}
 
-// Convert unsafe.Pointer to a slice of pointers
-func toPointerSlice(ptr unsafe.Pointer, length int) []*cmsToneCurve {
-	// Create a slice header pointing to the allocated memory
-	sliceHeader := reflect.SliceHeader{
-		Data: uintptr(ptr),
-		Len:  length,
-		Cap:  length,
-	}
-	return *(*[]*cmsToneCurve)(unsafe.Pointer(&sliceHeader))
+	cmsFree(mpe.ContextID, unsafe.Pointer(data.TheCurves))
+	cmsFree(mpe.ContextID, unsafe.Pointer(data))
 }
 func CurveSetDup(mpe *cmsStage) unsafe.Pointer {
 	// Access the data from the input stage
@@ -158,30 +162,26 @@ func CurveSetDup(mpe *cmsStage) unsafe.Pointer {
 	if newElem == nil {
 		return nil
 	}
-
 	// Set the number of curves
 	newElem.NCurves = data.NCurves
 
 	// Allocate memory for the array of tone curve pointers
-	newElem.TheCurves = make([]*cmsToneCurve, newElem.NCurves)
-	newSliceHeader := (*reflect.SliceHeader)(unsafe.Pointer(&newElem.TheCurves))
-	newBasePtr := unsafe.Pointer(newSliceHeader.Data)
-
-	dataSliceHeader := (*reflect.SliceHeader)(unsafe.Pointer(&data.TheCurves))
-	dataBasePtr := unsafe.Pointer(dataSliceHeader.Data)
+	newElem.TheCurves = (**cmsToneCurve)(cmsCalloc(mpe.ContextID, newElem.NCurves, uint32(unsafe.Sizeof((*cmsToneCurve)(nil)))))
+	if newElem.TheCurves == nil {
+		goto Error
+	}
 
 	for i := uint32(0); i < newElem.NCurves; i++ {
 		// Access the original curve pointer
-		curve := (*cmsToneCurve)(unsafe.Add(dataBasePtr, uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+		curve := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
 
 		// Duplicate the curve
-		duplicatedCurve := cmsDupToneCurve(curve)
+		duplicatedCurve := cmsDupToneCurve(*curve)
 		if duplicatedCurve == nil {
 			goto Error
 		}
-
 		// Assign the duplicated curve to the new allocated slice
-		*(*cmsToneCurve)(unsafe.Add(newBasePtr, uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil)))) = *duplicatedCurve
+		*(*cmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil)))) = *duplicatedCurve
 	}
 
 	return unsafe.Pointer(newElem)
@@ -189,12 +189,12 @@ func CurveSetDup(mpe *cmsStage) unsafe.Pointer {
 Error:
 	// Cleanup allocated memory in case of an error
 	for i := uint32(0); i < newElem.NCurves; i++ {
-		newCurve := (*cmsToneCurve)(unsafe.Add(newBasePtr, uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+		newCurve := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
 		if newCurve != nil {
-			cmsFreeToneCurve(newCurve)
+			cmsFreeToneCurve(*newCurve)
 		}
 	}
-	cmsFree(mpe.ContextID, unsafe.Pointer(newSliceHeader.Data))
+	cmsFree(mpe.ContextID, unsafe.Pointer(newElem.TheCurves))
 	cmsFree(mpe.ContextID, unsafe.Pointer(newElem))
 	return nil
 }
@@ -219,48 +219,33 @@ func cmsStageAllocToneCurves(ContextID cmsContext, nChannels uint32, Curves **cm
 	newElem.NCurves = nChannels
 
 	// Allocate memory for the slice of tone curve pointers
-	newElem.TheCurves = make([]*cmsToneCurve, nChannels)
-	newSliceHeader := (*reflect.SliceHeader)(unsafe.Pointer(&newElem.TheCurves))
-	newBasePtr := unsafe.Pointer(newSliceHeader.Data)
+	newElem.TheCurves = (**cmsToneCurve)(cmsCalloc(ContextID, nChannels, uint32(unsafe.Sizeof((*cmsToneCurve)(nil)))))
 
 	// Handle the input curves, either creating identity curves or duplicating existing ones
-	if Curves != nil {
-		curvesSliceHeader := (*reflect.SliceHeader)(unsafe.Pointer(&Curves))
-		curvesBasePtr := unsafe.Pointer(curvesSliceHeader.Data)
+	for i := uint32(0); i < nChannels; i++ {
+		// Calculate the pointer to the i-th element of NewElem.TheCurves
+		curvePtr := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
 
-		for i := uint32(0); i < nChannels; i++ {
-			curve := (*cmsToneCurve)(unsafe.Add(curvesBasePtr, uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
-			duplicatedCurve := cmsDupToneCurve(curve)
-			if duplicatedCurve == nil {
-				goto Error
-			}
-			*(*cmsToneCurve)(unsafe.Add(newBasePtr, uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil)))) = *duplicatedCurve
+		if Curves == nil {
+			// Assign a new tone curve if Curves is nil
+			*curvePtr = cmsBuildGamma(ContextID, 1.0)
+		} else {
+			// Calculate the pointer to the i-th element of Curves
+			srcCurvePtr := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+
+			// Duplicate the tone curve and assign it to NewElem.TheCurves
+			*curvePtr = cmsDupToneCurve(*srcCurvePtr)
 		}
-	} else {
-		// Create identity curves if no input curves are provided
-		for i := uint32(0); i < nChannels; i++ {
-			curve := cmsBuildGamma(ContextID, 1.0)
-			if curve == nil {
-				goto Error
-			}
-			*(*cmsToneCurve)(unsafe.Add(newBasePtr, uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil)))) = *curve
+
+		// Check if the assignment failed
+		if *curvePtr == nil {
+			cmsStageFree(newMPE)
+			return nil
 		}
 	}
 
 	return newMPE
 
-Error:
-	// Cleanup in case of an error
-	for i := uint32(0); i < nChannels; i++ {
-		curve := (*cmsToneCurve)(unsafe.Add(newBasePtr, uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
-		if curve != nil {
-			cmsFreeToneCurve(curve)
-		}
-	}
-	cmsFree(ContextID, unsafe.Pointer(newSliceHeader.Data))
-	cmsFree(ContextID, unsafe.Pointer(newElem))
-	cmsStageFree(newMPE)
-	return nil
 }
 
 func cmsStageAllocIdentityCurves(ContextID cmsContext, nChannels uint32) *cmsStage {
@@ -434,6 +419,71 @@ func EvaluateXYZ2Lab(In []float32, Out []float32, mpe *cmsStage) {
 func cmsStageAllocXYZ2Lab(ContextID cmsContext) *cmsStage {
 	return cmsStageAllocPlaceholder(ContextID, cmsSigXYZ2LabElemType, 3, 3, EvaluateXYZ2Lab, nil, nil, nil)
 }
+
+// This routine does a sweep on whole input space, and calls its callback
+// function on knots. returns TRUE if all ok, FALSE otherwise.
+
+func cmsSliceSpace16(nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLER16, Cargo unsafe.Pointer) bool {
+	if nInputs >= cmsMAXCHANNELS {
+		return false
+	}
+	var rest int
+	var In [cmsMAXCHANNELS]uint16
+
+	nTotalPoints := CubeSize(clutPoints, nInputs)
+	if nTotalPoints == 0 {
+		return false
+	}
+
+	for t := int(nInputs) - 1; t >= 0; t-- {
+		Colorant := uint32(rest % int(clutPoints[t]))
+		rest /= int(clutPoints[t])
+
+		// Assign quantized value to the input array
+		In[t] = cmsQuantizeVal(float64(Colorant), clutPoints[t])
+	}
+
+	// Call the sampler with the current input
+	if Sampler(In[:], nil, Cargo) != 1 {
+		return false
+	}
+	return true
+}
+func cmsSliceSpaceFloat(nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLERFLOAT, Cargo unsafe.Pointer) int32 {
+	if nInputs >= cmsMAXCHANNELS {
+		return 0 // FALSE
+	}
+
+	nTotalPoints := CubeSize(clutPoints, nInputs)
+	if nTotalPoints == 0 {
+		return 0 // FALSE
+	}
+	var In [cmsMAXCHANNELS]float32
+
+	for i := 0; i < int(nTotalPoints); i++ {
+		rest := i
+
+		for t := int(nInputs) - 1; t >= 0; t-- {
+			Colorant := rest % int(clutPoints[t])
+			rest /= int(clutPoints[t])
+
+			// Assign quantized value, scaled to 0.0–1.0 range
+			In[t] = float32(cmsQuantizeVal(float64(Colorant), clutPoints[t])) / 65535.0
+		}
+
+		// Call the sampler with the current input
+		if Sampler(In[:], nil, Cargo) != 1 {
+			return 0 // FALSE
+		}
+	}
+
+	return 1 // TRUE
+}
+
+// ********************************************************************************
+// Type cmsSigLab2XYZElemType
+// ********************************************************************************
+
 func EvaluateLab2XYZ(In []float32, Out []float32, mpe *cmsStage) {
 	const XYZadj = MAX_ENCODEABLE_XYZ
 
@@ -653,7 +703,7 @@ func cmsStageOutputChannels(mpe *cmsStage) uint32 {
 func cmsStageType(mpe *cmsStage) cmsStageSignature {
 	return mpe.Type
 }
-func cmsStageData(mpe *cmsStage) interface{} {
+func cmsStageData(mpe *cmsStage) unsafe.Pointer {
 	return mpe.Data
 }
 func cmsGetStageContextID(mpe *cmsStage) cmsContext {
@@ -1000,6 +1050,17 @@ func cmsPipelineGetPtrToLastStage(lut *cmsPipeline) *cmsStage {
 	return prev
 }
 
+// This function may be used to set the optional evaluator and a block of private data. If private data is being used, an optional
+// duplicator and free functions should also be specified in order to duplicate the LUT construct. Use nil to inhibit such functionality.
+func cmsPipelineSetOptimizationParameters(Lut *cmsPipeline,
+	Eval16 cmsPipelineEval16Fn, PrivateData unsafe.Pointer,
+	FreePrivateDataFn cmsFreeUserDataFn, DupPrivateDataFn cmsDupUserDataFn) {
+	Lut.Eval16Fn = Eval16
+	Lut.DupDataFn = DupPrivateDataFn
+	Lut.FreeDataFn = FreePrivateDataFn
+	Lut.Data = PrivateData
+}
+
 // cmsPipelineStageCount counts the number of stages in the pipeline.
 func cmsPipelineStageCount(lut *cmsPipeline) uint32 {
 	var count uint32
@@ -1289,7 +1350,7 @@ func cmsStageAllocCLut16bitGranular(
 	}
 
 	if inputChan > MAX_INPUT_DIMENSIONS {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, fmt.Sprintf("Too many input channels (%d channels, max=%d)", inputChan, MAX_INPUT_DIMENSIONS))
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Too many input channels (%d channels, max=%d)")
 		return nil
 	}
 
@@ -1371,7 +1432,7 @@ func cmsStageAllocCLutFloatGranular(
 	}
 
 	if inputChan > MAX_INPUT_DIMENSIONS {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, fmt.Sprintf("Too many input channels"))
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Too many input channels")
 		return nil
 	}
 
@@ -1408,6 +1469,34 @@ func cmsStageAllocCLutFloatGranular(
 	}
 
 	return NewMPE
+}
+
+func IdentitySampler(In []uint16, Out []uint16, Cargo unsafe.Pointer) int32 {
+	nChan := *(*int)(Cargo)
+	for i := 0; i < nChan; i++ {
+		Out[i] = In[i]
+	}
+	return 1
+}
+
+func cmsStageAllocIdentityCLut(ContextID cmsContext, nChan uint32) *cmsStage {
+	var Dimensions [MAX_INPUT_DIMENSIONS]uint32
+	for i := 0; i < MAX_INPUT_DIMENSIONS; i++ {
+		Dimensions[i] = 2
+	}
+
+	mpe := cmsStageAllocCLut16bitGranular(ContextID, Dimensions[:], nChan, nChan, nil)
+	if mpe == nil {
+		return nil
+	}
+
+	if !cmsStageSampleCLut16bit(mpe, IdentitySampler, unsafe.Pointer(&nChan), 0) {
+		cmsStageFree(mpe)
+		return nil
+	}
+
+	mpe.Implements = cmsSigIdentityElemType
+	return mpe
 }
 
 // Quantizes a value `i` in the range [0, MaxSamples) to a 16-bit value (0..0xffff).

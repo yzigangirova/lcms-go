@@ -277,7 +277,7 @@ func cmsCreateLinearizationDeviceLinkTHR(ContextID cmsContext, ColorSpace cmsCol
 		goto Error
 	}
 
-	if !cmsPipelineInsertStage(Pipeline, cmsAT_BEGIN, cmsStageAllocToneCurves(ContextID, nChannels, TransferFunctions)) {
+	if !cmsPipelineInsertStage(Pipeline, cmsAT_BEGIN, cmsStageAllocToneCurves(ContextID, uint32(nChannels), &TransferFunctions[0])) {
 		goto Error
 	}
 

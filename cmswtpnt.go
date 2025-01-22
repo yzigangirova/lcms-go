@@ -187,57 +187,6 @@ func _cmsAdaptMatrixToD50(r *cmsMAT3, SourceWhitePt *cmsCIExyY) bool {
 	return true
 }
 
-// _cmsBuildRGB2XYZtransferMatrix builds a transformation matrix from RGB to CIE XYZ.
-// This is an approximation that assumes gamma correction has a transitive property
-// and handles linear transformations only.
-//
-// Algorithm:
-//  1. Build an absolute conversion matrix using primaries in XYZ. This matrix is then inverted.
-//  2. Evaluate the source white point across this matrix to obtain transformation coefficients.
-//  3. Apply these coefficients to the original matrix.
-func _cmsBuildRGB2XYZtransferMatrix(r *cmsMAT3, WhitePt *cmsCIExyY, Primrs *cmsCIExyYTRIPLE) (bool, error) {
-	if r == nil || WhitePt == nil || Primrs == nil {
-		return false, errors.New("invalid input: r, WhitePt, and Primrs must not be nil")
-	}
-
-	var WhitePoint, Coef cmsVEC3
-	var Result, Primaries cmsMAT3
-
-	// Extract coordinates from input structures
-	xn, yn := WhitePt.x, WhitePt.Y
-	xr, yr := Primrs.Red.x, Primrs.Red.Y
-	xg, yg := Primrs.Green.x, Primrs.Green.Y
-	xb, yb := Primrs.Blue.x, Primrs.Blue.Y
-
-	// Build Primaries matrix
-	cmsVEC3init(&Primaries.V[0], xr, xg, xb)
-	cmsVEC3init(&Primaries.V[1], yr, yg, yb)
-	cmsVEC3init(&Primaries.V[2], (1 - xr - yr), (1 - xg - yg), (1 - xb - yb))
-
-	// Invert Primaries matrix to obtain Result
-	if !cmsMAT3inverse(&Primaries, &Result) {
-		return false, nil
-	}
-
-	// Compute the white point vector
-	cmsVEC3init(&WhitePoint, xn/yn, 1.0, (1.0-xn-yn)/yn)
-
-	// Evaluate Coefficients across the inverse primaries matrix
-	cmsMAT3eval(&Coef, &Result, &WhitePoint)
-
-	// Build the transformation matrix using the coefficients
-	cmsVEC3init(&r.V[0], Coef.N[VX]*xr, Coef.N[VY]*xg, Coef.N[VZ]*xb)
-	cmsVEC3init(&r.V[1], Coef.N[VX]*yr, Coef.N[VY]*yg, Coef.N[VZ]*yb)
-	cmsVEC3init(&r.V[2], Coef.N[VX]*(1.0-xr-yr), Coef.N[VY]*(1.0-xg-yg), Coef.N[VZ]*(1.0-xb-yb))
-
-	// Adapt the matrix to the D50 white point
-	if success, err := cmsAdaptMatrixToD50(r, WhitePt); !success || err != nil {
-		return false, err
-	}
-
-	return true, nil
-}
-
 // Returns the final chromatic adaptation matrix from illuminant FromIll to ToIll
 func cmsAdaptationMatrix(r *cmsMAT3, ConeMatrix *cmsMAT3, FromIll, ToIll *cmsCIEXYZ) bool {
 	var LamRigg = cmsMAT3{
@@ -254,6 +203,29 @@ func cmsAdaptationMatrix(r *cmsMAT3, ConeMatrix *cmsMAT3, FromIll, ToIll *cmsCIE
 
 	return ComputeChromaticAdaptation(r, FromIll, ToIll, ConeMatrix)
 }
+func cmsAdaptMatrixToD50(r *cmsMAT3, SourceWhitePt *cmsCIExyY) bool {
+	var (
+		Dn       cmsCIEXYZ
+		Bradford cmsMAT3
+		Tmp      cmsMAT3
+	)
+
+	// Convert the xyY source white point to XYZ
+	cmsxyY2XYZ(&Dn, SourceWhitePt)
+
+	// Compute the adaptation matrix to D50
+	if !cmsAdaptationMatrix(&Bradford, nil, &Dn, cmsD50_XYZ()) {
+		return false
+	}
+
+	// Save the current matrix in Tmp
+	Tmp = *r
+
+	// Apply the adaptation matrix
+	cmsMAT3per(r, &Bradford, &Tmp)
+
+	return true
+}
 
 // Build a White point, primary chromas transfer matrix from RGB to CIE XYZ
 // This is just an approximation, I am not handling all the non-linear
@@ -267,6 +239,16 @@ func cmsAdaptationMatrix(r *cmsMAT3, ConeMatrix *cmsMAT3, FromIll, ToIll *cmsCIE
 //   - Then I eval the source white point across this matrix
 //     obtaining the coefficients of the transformation
 //   - Then, I apply these coefficients to the original matrix
+
+// _cmsBuildRGB2XYZtransferMatrix builds a transformation matrix from RGB to CIE XYZ.
+// This is an approximation that assumes gamma correction has a transitive property
+// and handles linear transformations only.
+//
+// Algorithm:
+//  1. Build an absolute conversion matrix using primaries in XYZ. This matrix is then inverted.
+//  2. Evaluate the source white point across this matrix to obtain transformation coefficients.
+//  3. Apply these coefficients to the original matrix.
+
 func cmsBuildRGB2XYZtransferMatrix(r *cmsMAT3, WhitePt *cmsCIExyY, Primrs *cmsCIExyYTRIPLE) bool {
 	var (
 		WhitePoint, Coef  cmsVEC3
@@ -287,9 +269,9 @@ func cmsBuildRGB2XYZtransferMatrix(r *cmsMAT3, WhitePt *cmsCIExyY, Primrs *cmsCI
 	yb = Primrs.Blue.y
 
 	// Build Primaries matrix
-	cmsVEC3init(&Primaries.v[0], xr, xg, xb)
-	cmsVEC3init(&Primaries.v[1], yr, yg, yb)
-	cmsVEC3init(&Primaries.v[2], (1 - xr - yr), (1 - xg - yg), (1 - xb - yb))
+	cmsVEC3init(&Primaries.V[0], xr, xg, xb)
+	cmsVEC3init(&Primaries.V[1], yr, yg, yb)
+	cmsVEC3init(&Primaries.V[2], (1 - xr - yr), (1 - xg - yg), (1 - xb - yb))
 
 	// Result = Primaries ^ (-1) inverse matrix
 	if !cmsMAT3inverse(&Primaries, &Result) {
@@ -302,9 +284,9 @@ func cmsBuildRGB2XYZtransferMatrix(r *cmsMAT3, WhitePt *cmsCIExyY, Primrs *cmsCI
 	cmsMAT3eval(&Coef, &Result, &WhitePoint)
 
 	// Build the transformation matrix using Coefs
-	cmsVEC3init(&r.v[0], Coef.n[VX]*xr, Coef.n[VY]*xg, Coef.n[VZ]*xb)
-	cmsVEC3init(&r.v[1], Coef.n[VX]*yr, Coef.n[VY]*yg, Coef.n[VZ]*yb)
-	cmsVEC3init(&r.v[2], Coef.n[VX]*(1.0-xr-yr), Coef.n[VY]*(1.0-xg-yg), Coef.n[VZ]*(1.0-xb-yb))
+	cmsVEC3init(&r.V[0], Coef.N[VX]*xr, Coef.N[VY]*xg, Coef.N[VZ]*xb)
+	cmsVEC3init(&r.V[1], Coef.N[VX]*yr, Coef.N[VY]*yg, Coef.N[VZ]*yb)
+	cmsVEC3init(&r.V[2], Coef.N[VX]*(1.0-xr-yr), Coef.N[VY]*(1.0-xg-yg), Coef.N[VZ]*(1.0-xb-yb))
 
 	return cmsAdaptMatrixToD50(r, WhitePt)
 }
