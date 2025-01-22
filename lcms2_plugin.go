@@ -282,15 +282,15 @@ type cmsOPToptimizeFn func(
 
 // _cmsPipelineEval16Fn is a function type for evaluating the pipeline in 16-bit precision.
 type cmsPipelineEval16Fn func(
-	In []uint16, // Input array
-	Out []uint16, // Output array
+	In *uint16, // Input array
+	Out *uint16, // Output array
 	Data unsafe.Pointer, // Arbitrary data
 )
 
 // _cmsPipelineEvalFloatFn is a function type for evaluating the pipeline in floating-point precision.
 type cmsPipelineEvalFloatFn func(
-	In []float32, // Input array
-	Out []float32, // Output array
+	In *float32, // Input array
+	Out *float32, // Output array
 	Data unsafe.Pointer, // Arbitrary data
 )
 

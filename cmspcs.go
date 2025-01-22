@@ -581,7 +581,7 @@ func cmsReasonableGridpointsByColorspace(Colorspace cmsColorSpaceSignature, Flag
 // Predefined arrays for common spaces
 
 // _cmsEndPointsBySpace retrieves endpoints by color space
-func cmsEndPointsBySpace(
+/*func cmsEndPointsBySpace(
 	space cmsColorSpaceSignature,
 	white **uint16,
 	black **uint16,
@@ -664,7 +664,93 @@ func cmsEndPointsBySpace(
 	default:
 		return false
 	}
+}*/
+
+func cmsEndPointsBySpace(
+	space cmsColorSpaceSignature,
+	white *[]uint16,
+	black *[]uint16,
+	nOutputs *uint32,
+) bool {
+	var (
+		RGBblack  = []uint16{0, 0, 0}
+		RGBwhite  = []uint16{0xffff, 0xffff, 0xffff}
+		CMYKblack = []uint16{0xffff, 0xffff, 0xffff, 0xffff} // 400% of ink
+		CMYKwhite = []uint16{0, 0, 0, 0}
+		LABblack  = []uint16{0, 0x8080, 0x8080}              // V4 Lab encoding
+		LABwhite  = []uint16{0xffff, 0x8080, 0x8080}
+		CMYblack  = []uint16{0xffff, 0xffff, 0xffff}
+		CMYwhite  = []uint16{0, 0, 0}
+		Grayblack = []uint16{0}
+		GrayWhite = []uint16{0xffff}
+	)
+
+	switch space {
+	case cmsSigGrayData:
+		if white != nil {
+			*white = GrayWhite
+		}
+		if black != nil {
+			*black = Grayblack
+		}
+		if nOutputs != nil {
+			*nOutputs = 1
+		}
+		return true
+
+	case cmsSigRgbData:
+		if white != nil {
+			*white = RGBwhite
+		}
+		if black != nil {
+			*black = RGBblack
+		}
+		if nOutputs != nil {
+			*nOutputs = 3
+		}
+		return true
+
+	case cmsSigLabData:
+		if white != nil {
+			*white = LABwhite
+		}
+		if black != nil {
+			*black = LABblack
+		}
+		if nOutputs != nil {
+			*nOutputs = 3
+		}
+		return true
+
+	case cmsSigCmykData:
+		if white != nil {
+			*white = CMYKwhite
+		}
+		if black != nil {
+			*black = CMYKblack
+		}
+		if nOutputs != nil {
+			*nOutputs = 4
+		}
+		return true
+
+	case cmsSigCmyData:
+		if white != nil {
+			*white = CMYwhite
+		}
+		if black != nil {
+			*black = CMYblack
+		}
+		if nOutputs != nil {
+			*nOutputs = 3
+		}
+		return true
+
+	default:
+		return false
+	}
 }
+
 
 // Translate from our colorspace to ICC representation.
 func cmsICCcolorSpace(ourNotation int) cmsColorSpaceSignature {

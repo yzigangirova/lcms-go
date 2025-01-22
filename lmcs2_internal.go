@@ -264,7 +264,7 @@ type cmsStage struct {
 
 // Pipelines, Multi Process Elements.
 // Define function pointer types
-type cmsStageEvalFn func(In []float32, Out []float32, mpe *cmsStage)
+type cmsStageEvalFn func(In *float32, Out *float32, mpe *cmsStage)
 type cmsStageDupElemFn func(mpe *cmsStage) unsafe.Pointer
 type cmsStageFreeElemFn func(mpe *cmsStage)
 
