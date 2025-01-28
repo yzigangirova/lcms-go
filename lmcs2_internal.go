@@ -202,7 +202,7 @@ type cmsTRANSFORM struct {
 	DwOriginalFlags uint32                 // uint32
 	AdaptationState float64                // float64
 	RenderingIntent uint32                 // uint32
-	ContextID       cmsContext             // cmsContext
+	ContextID       CmsContext             // CmsContext
 	UserData        unsafe.Pointer         // void*
 	FreeUserData    cmsFreeUserDataFn      // cmsFreeUserDataFn (function pointer, requires C interop)
 	OldXform        cmsTransformFn         // cmsTransformFn (function pointer, requires C interop)
@@ -228,12 +228,12 @@ type cmsNAMEDCOLORLIST struct {
 
 	List *cmsNAMEDCOLOR
 
-	ContextID cmsContext
+	ContextID CmsContext
 }
 
 // Internal structure for context
-type cmsContextStruct struct {
-	Next    cmsContext                      // Points to next context in the new style
+type CmsContextStruct struct {
+	Next    CmsContext                      // Points to next context in the new style
 	MemPool *cmsSubAllocator                // The memory pool that stores context data
 	chunks  [MemoryClientMax]unsafe.Pointer // array of pointers to client chunks. Memory itself is hold in the suballocator.
 	// If NULL, then it reverts to global Context0
@@ -248,7 +248,7 @@ type cmsCACHE struct {
 
 // Pipelines & Stages ---------------------------------------------------------------------------------------------
 type cmsStage struct {
-	ContextID      cmsContext         // Context identifier
+	ContextID      CmsContext         // Context identifier
 	Type           cmsStageSignature  // Identifies the stage
 	Implements     cmsStageSignature  // Identifies the *function* of the stage (for optimizations)
 	InputChannels  uint32             // Input channels -- for optimization purposes
@@ -270,7 +270,7 @@ type cmsStageFreeElemFn func(mpe *cmsStage)
 
 // Placeholder function allocation
 /*func cmsStageAllocPlaceholder(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	Type cmsStageSignature,
 	InputChannels uint32,
 	OutputChannels uint32,
@@ -311,7 +311,7 @@ type cmsPipeline struct {
 	FreeDataFn  cmsFreeUserDataFn
 	DupDataFn   cmsDupUserDataFn
 
-	ContextID cmsContext // Environment
+	ContextID CmsContext // Environment
 
 	SaveAs8Bits bool // Implementation-specific: save as 8 bits if possible
 }
@@ -329,7 +329,7 @@ type cmsMLUentry struct {
 }
 
 type cmsMLU struct {
-	ContextID        cmsContext
+	ContextID        CmsContext
 	AllocatedEntries uint32       // Number of allocated entries
 	UsedEntries      uint32       // Number of used entries
 	Entries          *cmsMLUentry // probably this must be slice; it is a pointer to arrays of entries in  C; check
@@ -351,12 +351,12 @@ type cmsSubAllocatorChunk struct {
 
 // cmsSubAllocator represents the suballocator.
 type cmsSubAllocator struct {
-	ContextID cmsContext            // Context ID for memory management
+	ContextID CmsContext            // Context ID for memory management
 	Head      *cmsSubAllocatorChunk // Pointer to the first chunk
 }
 
 // cmsCreateSubAlloc creates a suballocator with an initial size.
-/*type cmsCreateSubAlloc func(ContextID cmsContext, Initial uint32) *cmsSubAllocator
+/*type cmsCreateSubAlloc func(ContextID CmsContext, Initial uint32) *cmsSubAllocator
 
 // cmsSubAllocDestroy destroys the suballocator and frees all associated memory.
 type cmsSubAllocDestroy func(s *cmsSubAllocator)
@@ -410,9 +410,6 @@ type cmsLogErrorChunkType struct {
 // The global Context0 storage for error logger
 var cmsLogErrorChunk cmsLogErrorChunkType
 
-// Allocate and init error logger container.
-func cmsAllocLogErrorChunk(ctx, src cmsContext)
-
 // Container for alarm codes -- not a plug-in
 type cmsAlarmCodesChunkType struct {
 	AlarmCodes [cmsMAXCHANNELS]uint16
@@ -421,7 +418,6 @@ type cmsAlarmCodesChunkType struct {
 // The global Context0 storage for alarm codes
 var cmsAlarmCodesChunk cmsAlarmCodesChunkType
 
-
 // Container for adaptation state -- not a plug-in
 type cmsAdaptationStateChunkType struct {
 	AdaptationState float64
@@ -429,9 +425,6 @@ type cmsAdaptationStateChunkType struct {
 
 // The global Context0 storage for memory management
 var cmsMemPluginChunk cmsMemPluginChunkType
-
-// Allocate and init memory management container.
-func cmsAllocMemPluginChunk(ctx, src cmsContext)
 
 // Container for interpolation plug-in
 type cmsInterpPluginChunkType struct {
@@ -449,9 +442,6 @@ type cmsCurvesPluginChunkType struct {
 // The global Context0 storage for tone curves plug-in
 var cmsCurvesPluginChunk cmsCurvesPluginChunkType
 
-// Allocate and init parametric curves container.
-func cmsAllocCurvesPluginChunk(ctx, src cmsContext)
-
 // Container for formatters plug-in
 type cmsFormattersPluginChunkType struct {
 	FactoryList *cmsFormattersFactoryList
@@ -459,18 +449,18 @@ type cmsFormattersPluginChunkType struct {
 
 // Formatters ------------------------------------------------------------------------------------------------------------
 
-const cmsFLAGS_CAN_CHANGE_FORMATTER  =   0x02000000   // Allow change buffer format
+const cmsFLAGS_CAN_CHANGE_FORMATTER = 0x02000000 // Allow change buffer format
 
 // cmsCurveStruct represents the gamma function main structure.
 type cms_curve_struct struct {
 	InterpParams *cmsInterpParams              // Private optimizations for interpolation
 	nSegments    uint32                        // Number of segments in the curve. Zero for a 16-bit based tables
-	Segments     *cmsCurveSegment            // The segments
-	SegInterp    **cmsInterpParams            // Array of private optimizations for interpolation in table-based segments
+	Segments     *cmsCurveSegment              // The segments
+	SegInterp    **cmsInterpParams             // Array of private optimizations for interpolation in table-based segments
 	Evals        []cmsParametricCurveEvaluator // Evaluators (one per segment)
 
 	// 16-bit Table-based representation follows
-	nEntries uint32   // Number of table elements
+	nEntries uint32  // Number of table elements
 	Table16  *uint16 // The table itself
 }
 
@@ -478,7 +468,7 @@ type cms_curve_struct struct {
 var cmsFormattersPluginChunk cmsFormattersPluginChunkType
 
 // Allocate and init formatters container.
-//type cmsAllocFormattersPluginChunkFunc func(ctx, src cmsContext)
+//type cmsAllocFormattersPluginChunkFunc func(ctx, src CmsContext)
 
 // This chunk type is shared by TagType plug-in and MPE Plug-in
 type cmsTagTypePluginChunkType struct {
@@ -491,12 +481,6 @@ var cmsTagTypePluginChunk cmsTagTypePluginChunkType
 // The global Context0 storage for multi-process elements plug-in
 var cmsMPETypePluginChunk cmsTagTypePluginChunkType
 
-// Allocate and init Tag types container.
-func cmsAllocTagTypePluginChunk(ctx, src cmsContext)
-
-// Allocate and init MPE container.
-func cmsAllocMPETypePluginChunk(ctx, src cmsContext)
-
 // Container for tag plug-in
 type cmsTagPluginChunkType struct {
 	Tag *cmsTagLinkedList
@@ -504,9 +488,6 @@ type cmsTagPluginChunkType struct {
 
 // The global Context0 storage for tag plug-in
 var cmsTagPluginChunk cmsTagPluginChunkType
-
-// Allocate and init Tag container.
-func cmsAllocTagPluginChunk(ctx, src cmsContext)
 
 // Container for intents plug-in
 type cmsIntentsPluginChunkType struct {
@@ -516,9 +497,6 @@ type cmsIntentsPluginChunkType struct {
 // The global Context0 storage for intents plug-in
 var cmsIntentsPluginChunk cmsIntentsPluginChunkType
 
-// Allocate and init intents container.
-func cmsAllocIntentsPluginChunk(ctx, src cmsContext)
-
 // Container for optimization plug-in  see cmsxform
 
 // cmsICCPROFILE represents the Go version of the C structure.
@@ -527,7 +505,7 @@ const MAX_TABLE_TAG = 100
 
 type cmsICCPROFILE struct {
 	IOhandler       *cmsIOHANDLER                     // I/O handler
-	ContextID       cmsContext                        // Thread ID or context
+	ContextID       CmsContext                        // Thread ID or context
 	Created         time.Time                         // Creation time
 	Version         uint32                            // ICC profile version
 	DeviceClass     cmsProfileClassSignature          // Device class signature
@@ -569,7 +547,6 @@ type cmsParallelizationPluginChunkType struct {
 	WorkerFlags int32
 	SchedulerFn cmsTransform2Fn
 }
-
 
 // memset sets a block of memory to a specified value.
 // Equivalent to C's memset function.
@@ -624,6 +601,7 @@ func memcpy(dst, src unsafe.Pointer, size uintptr) {
 
 	copy(dstSlice, srcSlice)
 }
+
 // strncpy copies up to `n` characters from `src` to a new `dst`.
 // It returns the resulting string, null-padded to `n` if `src` is shorter.
 func strncpy(src string, n int) string {
@@ -650,7 +628,6 @@ func strncpy(src string, n int) string {
 
 	return string(dst)
 }
-
 
 // strlen calculates the length of a null-terminated byte string.
 func strlen(str *byte) int {

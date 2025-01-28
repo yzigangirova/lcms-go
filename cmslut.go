@@ -6,7 +6,7 @@ import (
 )
 
 func cmsStageAllocPlaceholder(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	Type cmsStageSignature,
 	InputChannels, OutputChannels uint32,
 	EvalPtr cmsStageEvalFn,
@@ -37,7 +37,7 @@ func cmsStageAllocPlaceholder(
 func EvaluateIdentity(In *float32, Out *float32, mpe *cmsStage) {
 	memmove(unsafe.Pointer(Out), unsafe.Pointer(In), uintptr(mpe.InputChannels*uint32(unsafe.Sizeof(float32(0)))))
 }
-func cmsStageAllocIdentity(ContextID cmsContext, nChannels uint32) *cmsStage {
+func cmsStageAllocIdentity(ContextID CmsContext, nChannels uint32) *cmsStage {
 	return cmsStageAllocPlaceholder(ContextID,
 		cmsSigIdentityElemType,
 		nChannels, nChannels,
@@ -119,7 +119,7 @@ func Clipper(In *float32, Out *float32, mpe *cmsStage) {
 	}
 }
 
-func cmsStageClipNegatives(ContextID cmsContext, nChannels uint32) *cmsStage {
+func cmsStageClipNegatives(ContextID CmsContext, nChannels uint32) *cmsStage {
 	return cmsStageAllocPlaceholder(
 		ContextID,
 		cmsSigClipNegativesElemType,
@@ -132,7 +132,7 @@ func cmsStageClipNegatives(ContextID cmsContext, nChannels uint32) *cmsStage {
 	)
 }
 
-func cmsStageGetPtrToCurveSet(mpe *cmsStage) **cmsToneCurve {
+func cmsStageGetPtrToCurveSet(mpe *cmsStage) **CmsToneCurve {
 	data := (*cmsStageToneCurvesData)(mpe.Data)
 	return data.TheCurves
 }
@@ -145,7 +145,7 @@ func EvaluateCurves(In *float32, Out *float32, mpe *cmsStage) {
 
 	for i := uint32(0); i < data.NCurves; i++ {
 		// Use unsafe.Add to access the i-th element of TheCurves
-		curvePtr := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+		curvePtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 		curve := *curvePtr
 
 		// Use unsafe.Add to access the i-th element of In and Out
@@ -167,9 +167,9 @@ func CurveSetElemTypeFree(mpe *cmsStage) {
 
 	if data.TheCurves != nil {
 		for i := uint32(0); i < data.NCurves; i++ {
-			curve := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+			curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 			if curve != nil {
-				cmsFreeToneCurve(*curve)
+				CmsFreeToneCurve(*curve)
 			}
 		}
 	}
@@ -190,14 +190,14 @@ func CurveSetDup(mpe *cmsStage) unsafe.Pointer {
 	newElem.NCurves = data.NCurves
 
 	// Allocate memory for the array of tone curve pointers
-	newElem.TheCurves = (**cmsToneCurve)(cmsCalloc(mpe.ContextID, newElem.NCurves, uint32(unsafe.Sizeof((*cmsToneCurve)(nil)))))
+	newElem.TheCurves = (**CmsToneCurve)(cmsCalloc(mpe.ContextID, newElem.NCurves, uint32(unsafe.Sizeof((*CmsToneCurve)(nil)))))
 	if newElem.TheCurves == nil {
 		goto Error
 	}
 
 	for i := uint32(0); i < newElem.NCurves; i++ {
 		// Access the original curve pointer
-		curve := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+		curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 
 		// Duplicate the curve
 		duplicatedCurve := cmsDupToneCurve(*curve)
@@ -205,7 +205,7 @@ func CurveSetDup(mpe *cmsStage) unsafe.Pointer {
 			goto Error
 		}
 		// Assign the duplicated curve to the new allocated slice
-		*(*cmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil)))) = *duplicatedCurve
+		*(*CmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil)))) = *duplicatedCurve
 	}
 
 	return unsafe.Pointer(newElem)
@@ -213,9 +213,9 @@ func CurveSetDup(mpe *cmsStage) unsafe.Pointer {
 Error:
 	// Cleanup allocated memory in case of an error
 	for i := uint32(0); i < newElem.NCurves; i++ {
-		newCurve := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+		newCurve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 		if newCurve != nil {
-			cmsFreeToneCurve(*newCurve)
+			CmsFreeToneCurve(*newCurve)
 		}
 	}
 	cmsFree(mpe.ContextID, unsafe.Pointer(newElem.TheCurves))
@@ -223,7 +223,7 @@ Error:
 	return nil
 }
 
-func cmsStageAllocToneCurves(ContextID cmsContext, nChannels uint32, Curves **cmsToneCurve) *cmsStage {
+func cmsStageAllocToneCurves(ContextID CmsContext, nChannels uint32, Curves **CmsToneCurve) *cmsStage {
 	// Allocate the placeholder for the stage
 	newMPE := cmsStageAllocPlaceholder(ContextID, cmsSigCurveSetElemType, nChannels, nChannels, EvaluateCurves, CurveSetDup, CurveSetElemTypeFree, nil)
 	if newMPE == nil {
@@ -243,19 +243,19 @@ func cmsStageAllocToneCurves(ContextID cmsContext, nChannels uint32, Curves **cm
 	newElem.NCurves = nChannels
 
 	// Allocate memory for the slice of tone curve pointers
-	newElem.TheCurves = (**cmsToneCurve)(cmsCalloc(ContextID, nChannels, uint32(unsafe.Sizeof((*cmsToneCurve)(nil)))))
+	newElem.TheCurves = (**CmsToneCurve)(cmsCalloc(ContextID, nChannels, uint32(unsafe.Sizeof((*CmsToneCurve)(nil)))))
 
 	// Handle the input curves, either creating identity curves or duplicating existing ones
 	for i := uint32(0); i < nChannels; i++ {
 		// Calculate the pointer to the i-th element of NewElem.TheCurves
-		curvePtr := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+		curvePtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 
 		if Curves == nil {
 			// Assign a new tone curve if Curves is nil
-			*curvePtr = cmsBuildGamma(ContextID, 1.0)
+			*curvePtr = CmsBuildGamma(ContextID, 1.0)
 		} else {
 			// Calculate the pointer to the i-th element of Curves
-			srcCurvePtr := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+			srcCurvePtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 
 			// Duplicate the tone curve and assign it to NewElem.TheCurves
 			*curvePtr = cmsDupToneCurve(*srcCurvePtr)
@@ -272,7 +272,7 @@ func cmsStageAllocToneCurves(ContextID cmsContext, nChannels uint32, Curves **cm
 
 }
 
-func cmsStageAllocIdentityCurves(ContextID cmsContext, nChannels uint32) *cmsStage {
+func cmsStageAllocIdentityCurves(ContextID CmsContext, nChannels uint32) *cmsStage {
 	mpe := cmsStageAllocToneCurves(ContextID, nChannels, nil)
 	if mpe == nil {
 		return nil
@@ -351,7 +351,7 @@ func MatrixElemTypeFree(mpe *cmsStage) {
 	cmsFree(mpe.ContextID, mpe.Data)
 }
 func cmsStageAllocMatrix(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	Rows, Cols uint32,
 	Matrix, Offset *float64,
 ) *cmsStage {
@@ -423,7 +423,6 @@ Error:
 	return nil
 }
 
-
 /*
 	func EvaluateXYZ2Lab(In *float32, Out *float32, mpe *cmsStage) {
 		const XYZadj = MAX_ENCODEABLE_XYZ
@@ -475,7 +474,7 @@ func EvaluateXYZ2Lab(In *float32, Out *float32, mpe *cmsStage) {
 	*outB = float32((Lab.b + 128.0) / 255.0)
 }
 
-func cmsStageAllocXYZ2Lab(ContextID cmsContext) *cmsStage {
+func cmsStageAllocXYZ2Lab(ContextID CmsContext) *cmsStage {
 	return cmsStageAllocPlaceholder(ContextID, cmsSigXYZ2LabElemType, 3, 3, EvaluateXYZ2Lab, nil, nil, nil)
 }
 
@@ -596,7 +595,7 @@ func EvaluateLab2XYZ(In *float32, Out *float32, mpe *cmsStage) {
 }
 
 // No dup or free routines needed, as the structure has no pointers in it.
-func cmsStageAllocLab2XYZ(ContextID cmsContext) *cmsStage {
+func cmsStageAllocLab2XYZ(ContextID CmsContext) *cmsStage {
 	return cmsStageAllocPlaceholder(ContextID, cmsSigLab2XYZElemType, 3, 3, EvaluateLab2XYZ, nil, nil, nil)
 }
 
@@ -608,8 +607,8 @@ func cmsStageAllocLab2XYZ(ContextID cmsContext) *cmsStage {
 // Almost all what we need, but unfortunately, the rest of entries should be scaled by
 // (255*257/256), and this is not exact.
 
-func cmsStageAllocLabV2ToV4curves(ContextID cmsContext) *cmsStage {
-	var LabTable [3]*cmsToneCurve
+func cmsStageAllocLabV2ToV4curves(ContextID CmsContext) *cmsStage {
+	var LabTable [3]*CmsToneCurve
 	var mpe *cmsStage
 	var i, j int
 
@@ -654,7 +653,7 @@ func cmsStageAllocLabV2ToV4curves(ContextID cmsContext) *cmsStage {
 }
 
 // _cmsStageAllocLabV2ToV4 allocates a matrix-based stage for Lab v2 to v4 conversion.
-func cmsStageAllocLabV2ToV4(ContextID cmsContext) *cmsStage {
+func cmsStageAllocLabV2ToV4(ContextID CmsContext) *cmsStage {
 	var v2ToV4 = []float64{
 		65535.0 / 65280.0, 0, 0,
 		0, 65535.0 / 65280.0, 0,
@@ -670,7 +669,7 @@ func cmsStageAllocLabV2ToV4(ContextID cmsContext) *cmsStage {
 }
 
 // _cmsStageAllocLabV4ToV2 allocates a matrix-based stage for Lab v4 to v2 conversion.
-func cmsStageAllocLabV4ToV2(ContextID cmsContext) *cmsStage {
+func cmsStageAllocLabV4ToV2(ContextID CmsContext) *cmsStage {
 	var v4ToV2 = []float64{
 		65280.0 / 65535.0, 0, 0,
 		0, 65280.0 / 65535.0, 0,
@@ -692,7 +691,7 @@ const (
 )
 
 // _cmsStageNormalizeFromLabFloat normalizes Lab values from integer range to floating-point PCS range.
-func cmsStageNormalizeFromLabFloat(ContextID cmsContext) *cmsStage {
+func cmsStageNormalizeFromLabFloat(ContextID CmsContext) *cmsStage {
 	a1 := []float64{
 		1.0 / 100.0, 0, 0,
 		0, 1.0 / 255.0, 0,
@@ -714,7 +713,7 @@ func cmsStageNormalizeFromLabFloat(ContextID cmsContext) *cmsStage {
 }
 
 // _cmsStageNormalizeFromXyzFloat normalizes XYZ values from integer range to floating-point PCS range.
-func cmsStageNormalizeFromXyzFloat(ContextID cmsContext) *cmsStage {
+func cmsStageNormalizeFromXyzFloat(ContextID CmsContext) *cmsStage {
 	a1 := []float64{
 		normFactorXYZToFloat, 0, 0,
 		0, normFactorXYZToFloat, 0,
@@ -730,7 +729,7 @@ func cmsStageNormalizeFromXyzFloat(ContextID cmsContext) *cmsStage {
 }
 
 // _cmsStageNormalizeToLabFloat normalizes Lab values from floating-point PCS range to integer range.
-func cmsStageNormalizeToLabFloat(ContextID cmsContext) *cmsStage {
+func cmsStageNormalizeToLabFloat(ContextID CmsContext) *cmsStage {
 	a1 := []float64{
 		100.0, 0, 0,
 		0, 255.0, 0,
@@ -752,7 +751,7 @@ func cmsStageNormalizeToLabFloat(ContextID cmsContext) *cmsStage {
 }
 
 // _cmsStageNormalizeToXyzFloat normalizes XYZ values from floating-point PCS range to integer range.
-func cmsStageNormalizeToXyzFloat(ContextID cmsContext) *cmsStage {
+func cmsStageNormalizeToXyzFloat(ContextID CmsContext) *cmsStage {
 	a1 := []float64{
 		normFactorFloatToXYZ, 0, 0,
 		0, normFactorFloatToXYZ, 0,
@@ -767,11 +766,11 @@ func cmsStageNormalizeToXyzFloat(ContextID cmsContext) *cmsStage {
 	return mpe
 }
 
-func cmsStageAllocLabPrelin(ContextID cmsContext) *cmsStage {
+func cmsStageAllocLabPrelin(ContextID CmsContext) *cmsStage {
 	params := []float64{2.4}
-	var LabTable [3]*cmsToneCurve
+	var LabTable [3]*CmsToneCurve
 
-	LabTable[0] = cmsBuildGamma(ContextID, 1.0)
+	LabTable[0] = CmsBuildGamma(ContextID, 1.0)
 	LabTable[1] = cmsBuildParametricToneCurve(ContextID, 108, &params[0])
 	LabTable[2] = cmsBuildParametricToneCurve(ContextID, 108, &params[0])
 
@@ -795,7 +794,7 @@ func cmsStageType(mpe *cmsStage) cmsStageSignature {
 func cmsStageData(mpe *cmsStage) unsafe.Pointer {
 	return mpe.Data
 }
-func cmsGetStageContextID(mpe *cmsStage) cmsContext {
+func cmsGetStageContextID(mpe *cmsStage) CmsContext {
 	return mpe.ContextID
 }
 func cmsStageNext(mpe *cmsStage) *cmsStage {
@@ -908,7 +907,7 @@ func LUTevalFloat(In *float32, Out *float32, D unsafe.Pointer) {
 }
 
 // cmsPipelineAlloc allocates and initializes a new LUT pipeline
-func cmsPipelineAlloc(contextID cmsContext, inputChannels, outputChannels uint32) *cmsPipeline {
+func cmsPipelineAlloc(contextID CmsContext, inputChannels, outputChannels uint32) *cmsPipeline {
 	// A value of zero in channels is allowed as a placeholder
 	if inputChannels >= cmsMAXCHANNELS || outputChannels >= cmsMAXCHANNELS {
 		return nil
@@ -938,7 +937,7 @@ func cmsPipelineAlloc(contextID cmsContext, inputChannels, outputChannels uint32
 
 	return newLUT
 }
-func cmsGetPipelineContextID(lut *cmsPipeline) cmsContext {
+func cmsGetPipelineContextID(lut *cmsPipeline) CmsContext {
 	if lut == nil {
 		panic("lut is nil")
 	}
@@ -1429,7 +1428,7 @@ func CLutElemTypeFree(mpe *cmsStage) {
 // Allocates a 16-bit multidimensional CLUT. This is evaluated at 16-bit precision.
 // The table may have different granularity on each dimension.
 func cmsStageAllocCLut16bitGranular(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	clutPoints []uint32,
 	inputChan, outputChan uint32,
 	Table []uint16,
@@ -1485,7 +1484,7 @@ func cmsStageAllocCLut16bitGranular(
 
 // Allocates a 16-bit CLUT with the same granularity on all dimensions.
 func cmsStageAllocCLut16bit(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	nGridPoints, inputChan, outputChan uint32,
 	Table []uint16,
 ) *cmsStage {
@@ -1498,7 +1497,7 @@ func cmsStageAllocCLut16bit(
 
 // Allocates a floating-point CLUT with the same granularity on all dimensions.
 func cmsStageAllocCLutFloat(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	nGridPoints, inputChan, outputChan uint32,
 	Table []float32,
 ) *cmsStage {
@@ -1511,7 +1510,7 @@ func cmsStageAllocCLutFloat(
 
 // Allocates a floating-point multidimensional CLUT. Table may have different granularity on each dimension.
 func cmsStageAllocCLutFloatGranular(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	clutPoints []uint32,
 	inputChan, outputChan uint32,
 	Table []float32,
@@ -1568,7 +1567,7 @@ func IdentitySampler(In []uint16, Out []uint16, Cargo unsafe.Pointer) int32 {
 	return 1
 }
 
-func cmsStageAllocIdentityCLut(ContextID cmsContext, nChan uint32) *cmsStage {
+func cmsStageAllocIdentityCLut(ContextID CmsContext, nChan uint32) *cmsStage {
 	var Dimensions [MAX_INPUT_DIMENSIONS]uint32
 	for i := 0; i < MAX_INPUT_DIMENSIONS; i++ {
 		Dimensions[i] = 2

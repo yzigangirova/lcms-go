@@ -6,7 +6,7 @@ import (
 )
 
 type Prelin8Data struct {
-	ContextID cmsContext
+	ContextID CmsContext
 
 	// Tetrahedral interpolation parameters (not-owned pointer)
 	P *cmsInterpParams
@@ -21,7 +21,7 @@ type Prelin8Data struct {
 	Z0 [256]uint32
 }
 type Prelin16Data struct {
-	ContextID cmsContext
+	ContextID CmsContext
 
 	// Number of channels
 	NInputs  uint32
@@ -46,7 +46,7 @@ var DOUBLE_TO_1FIXED14 = func(x float64) cmsS1Fixed14Number {
 }
 
 type MatShaper8Data struct {
-	ContextID cmsContext
+	ContextID CmsContext
 
 	// Shapers from 0..255 to 1.14 fixed
 	Shaper1R [256]cmsS1Fixed14Number
@@ -63,7 +63,7 @@ type MatShaper8Data struct {
 	Shaper2B [16385]uint16
 }
 type Curves16Data struct {
-	ContextID cmsContext
+	ContextID CmsContext
 
 	NCurves   uint32   // Number of curves
 	NElements uint32   // Elements in curves
@@ -267,7 +267,7 @@ func PrelinEval16(Input *uint16, Output *uint16, D unsafe.Pointer) {
 }
 
 // PrelinOpt16free frees memory associated with Prelin16Data
-func PrelinOpt16free(ContextID cmsContext, ptr unsafe.Pointer) {
+func PrelinOpt16free(ContextID CmsContext, ptr unsafe.Pointer) {
 	p16 := (*Prelin16Data)(ptr)
 	cmsFree(ContextID, unsafe.Pointer(p16.EvalCurveOut16))
 	cmsFree(ContextID, unsafe.Pointer(p16.ParamsCurveOut16))
@@ -275,7 +275,7 @@ func PrelinOpt16free(ContextID cmsContext, ptr unsafe.Pointer) {
 }
 
 // Prelin16dup duplicates the Prelin16Data structure
-func Prelin16dup(ContextID cmsContext, ptr unsafe.Pointer) unsafe.Pointer {
+func Prelin16dup(ContextID CmsContext, ptr unsafe.Pointer) unsafe.Pointer {
 	p16 := (*Prelin16Data)(ptr)
 	Duped := (*Prelin16Data)(cmsDupMem(ContextID, unsafe.Pointer(p16), uint32(unsafe.Sizeof(p16))))
 
@@ -291,7 +291,7 @@ func Prelin16dup(ContextID cmsContext, ptr unsafe.Pointer) unsafe.Pointer {
 
 // PrelinOpt16alloc allocates and initializes Prelin16Data
 // PrelinOpt16alloc allocates and initializes Prelin16Data
-func PrelinOpt16alloc(ContextID cmsContext, ColorMap *cmsInterpParams, nInputs uint32, In **cmsToneCurve, nOutputs uint32, Out **cmsToneCurve) *Prelin16Data {
+func PrelinOpt16alloc(ContextID CmsContext, ColorMap *cmsInterpParams, nInputs uint32, In **CmsToneCurve, nOutputs uint32, Out **CmsToneCurve) *Prelin16Data {
 	p16 := (*Prelin16Data)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(Prelin16Data{}))))
 	if p16 == nil {
 		return nil
@@ -303,7 +303,7 @@ func PrelinOpt16alloc(ContextID cmsContext, ColorMap *cmsInterpParams, nInputs u
 	// Handle input curves
 	for i := uint32(0); i < nInputs; i++ {
 		// Access the i-th element of In
-		inPtr := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(In), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+		inPtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(In), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 
 		if In == nil || *inPtr == nil {
 			p16.ParamsCurveIn16[i] = nil
@@ -340,7 +340,7 @@ func PrelinOpt16alloc(ContextID cmsContext, ColorMap *cmsInterpParams, nInputs u
 		evalCurveOutPtr := (*cmsInterpFn16)(unsafe.Add(unsafe.Pointer(p16.EvalCurveOut16), uintptr(i)*unsafe.Sizeof((*cmsInterpFn16)(nil))))
 
 		// Access the i-th element of Out
-		outPtr := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(Out), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+		outPtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(Out), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 
 		if Out == nil || *outPtr == nil {
 			*paramsCurveOutPtr = nil
@@ -391,7 +391,7 @@ func AllCurvesAreLinear(mpe *cmsStage) bool {
 
 	for i := uint32(0); i < n; i++ {
 		// Access the i-th curve using unsafe
-		curve := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+		curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 		if !cmsIsToneCurveLinear(*curve) {
 			return false
 		}
@@ -529,7 +529,7 @@ func FixWhiteMisalignment(Lut *cmsPipeline, EntryColorSpace, ExitColorSpace cmsC
 	if PreLin != nil {
 		Curves := cmsStageGetPtrToCurveSet(PreLin)
 		for i := uint32(0); i < nIns; i++ {
-			curve := (*cmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+			curve := (*CmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 			WhiteIn[i] = cmsEvalToneCurve16(curve, WhitePointIn[i])
 		}
 	} else {
@@ -542,13 +542,13 @@ func FixWhiteMisalignment(Lut *cmsPipeline, EntryColorSpace, ExitColorSpace cmsC
 	if PostLin != nil {
 		Curves := cmsStageGetPtrToCurveSet(PostLin)
 		for i := uint32(0); i < nOuts; i++ {
-			curve := (*cmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+			curve := (*CmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 			InversePostLin := cmsReverseToneCurve(curve)
 			if InversePostLin == nil {
 				WhiteOut[i] = WhitePointOut[i]
 			} else {
 				WhiteOut[i] = cmsEvalToneCurve16(InversePostLin, WhitePointOut[i])
-				cmsFreeToneCurve(InversePostLin)
+				CmsFreeToneCurve(InversePostLin)
 			}
 		}
 	} else {
@@ -585,8 +585,8 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		ColorSpace       cmsColorSpaceSignature
 		OutputColorSpace cmsColorSpaceSignature
 		DataCLUT         *cmsStageCLutData
-		DataSetIn        **cmsToneCurve
-		DataSetOut       **cmsToneCurve
+		DataSetIn        **CmsToneCurve
+		DataSetOut       **CmsToneCurve
 		p16              *Prelin16Data
 	)
 
@@ -669,10 +669,10 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	DataCLUT = (*cmsStageCLutData)(CLUT.Data)
 
 	if NewPreLin != nil {
-		DataSetIn = (**cmsToneCurve)(((*cmsStageToneCurvesData)(NewPreLin.Data)).TheCurves)
+		DataSetIn = (**CmsToneCurve)(((*cmsStageToneCurvesData)(NewPreLin.Data)).TheCurves)
 	}
 	if NewPostLin != nil {
-		DataSetOut = (**cmsToneCurve)(((*cmsStageToneCurvesData)(NewPostLin.Data)).TheCurves)
+		DataSetOut = (**CmsToneCurve)(((*cmsStageToneCurvesData)(NewPostLin.Data)).TheCurves)
 	}
 
 	if DataSetIn == nil && DataSetOut == nil {
@@ -722,7 +722,7 @@ Error:
 
 // Normalize endpoints by slope limiting max and min. This assures endpoints as well.
 // Descending curves are handled as well.
-func SlopeLimiting(g *cmsToneCurve) {
+func SlopeLimiting(g *CmsToneCurve) {
 	var BeginVal, EndVal int
 	AtBegin := int(math.Floor(float64(g.nEntries)*0.02 + 0.5))
 	AtEnd := int(g.nEntries) - AtBegin - 1
@@ -753,7 +753,7 @@ func SlopeLimiting(g *cmsToneCurve) {
 	}
 }
 
-func PrelinOpt8alloc(ContextID cmsContext, p *cmsInterpParams, G [3]*cmsToneCurve) *Prelin8Data {
+func PrelinOpt8alloc(ContextID CmsContext, p *cmsInterpParams, G [3]*CmsToneCurve) *Prelin8Data {
 	p8 := (*Prelin8Data)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(Prelin8Data{}))))
 	if p8 == nil {
 		return nil
@@ -788,11 +788,11 @@ func PrelinOpt8alloc(ContextID cmsContext, p *cmsInterpParams, G [3]*cmsToneCurv
 	return p8
 }
 
-func Prelin8free(ContextID cmsContext, ptr unsafe.Pointer) {
+func Prelin8free(ContextID CmsContext, ptr unsafe.Pointer) {
 	cmsFree(ContextID, ptr)
 }
 
-func Prelin8dup(ContextID cmsContext, ptr unsafe.Pointer) unsafe.Pointer {
+func Prelin8dup(ContextID CmsContext, ptr unsafe.Pointer) unsafe.Pointer {
 	return cmsDupMem(ContextID, ptr, uint32(unsafe.Sizeof(ptr)))
 }
 
@@ -946,7 +946,7 @@ func PrelinEval8(Input *uint16, Output *uint16, D unsafe.Pointer) {
 	}
 }
 
-func IsDegenerated(g *cmsToneCurve) bool {
+func IsDegenerated(g *CmsToneCurve) bool {
 	Zeros, Poles := 0, 0
 
 	for i := uint32(0); i < g.nEntries; i++ {
@@ -974,8 +974,8 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 		ColorSpace       cmsColorSpaceSignature
 		OutputColorSpace cmsColorSpaceSignature
 		nGridPoints      uint32
-		Trans            [cmsMAXCHANNELS]*cmsToneCurve
-		TransReverse     [cmsMAXCHANNELS]*cmsToneCurve
+		Trans            [cmsMAXCHANNELS]*CmsToneCurve
+		TransReverse     [cmsMAXCHANNELS]*CmsToneCurve
 		In               [cmsMAXCHANNELS]float32
 		Out              [cmsMAXCHANNELS]float32
 		lIsSuitable      = true
@@ -983,7 +983,7 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 		OptimizedLUT          *cmsPipeline
 		LutPlusCurves         *cmsPipeline
 		OptimizedPrelinMpe    *cmsStage
-		OptimizedPrelinCurves **cmsToneCurve
+		OptimizedPrelinCurves **CmsToneCurve
 		OptimizedPrelinCLUT   *cmsStageCLutData
 		OptimizedCLUTmpe      *cmsStage
 	)
@@ -1029,7 +1029,7 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 	if cmsStageType(last) == cmsSigCurveSetElemType {
 		Data := (*cmsStageToneCurvesData)(cmsStageData(last))
 		for i := uint32(0); i < Data.NCurves; i++ {
-			curve := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(Data.TheCurves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+			curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(Data.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 			if IsDegenerated(*curve) {
 				goto Error
 			}
@@ -1112,10 +1112,10 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 
 	for t := uint32(0); t < OriginalLut.InputChannels; t++ {
 		if Trans[t] != nil {
-			cmsFreeToneCurve(Trans[t])
+			CmsFreeToneCurve(Trans[t])
 		}
 		if TransReverse[t] != nil {
-			cmsFreeToneCurve(TransReverse[t])
+			CmsFreeToneCurve(TransReverse[t])
 		}
 	}
 
@@ -1156,10 +1156,10 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 Error:
 	for t := uint32(0); t < OriginalLut.InputChannels; t++ {
 		if Trans[t] != nil {
-			cmsFreeToneCurve(Trans[t])
+			CmsFreeToneCurve(Trans[t])
 		}
 		if TransReverse[t] != nil {
-			cmsFreeToneCurve(TransReverse[t])
+			CmsFreeToneCurve(TransReverse[t])
 		}
 	}
 
@@ -1172,16 +1172,16 @@ Error:
 
 	return false
 }
-func ConvertToToneCurveArray(curves **cmsToneCurve) [3]*cmsToneCurve {
-	var result [3]*cmsToneCurve
+func ConvertToToneCurveArray(curves **CmsToneCurve) [3]*CmsToneCurve {
+	var result [3]*CmsToneCurve
 	for i := 0; i < 3; i++ {
 		// Use unsafe.Add to calculate the address of each curve
-		curvePtr := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(curves), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+		curvePtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 		result[i] = *curvePtr
 	}
 	return result
 }
-func CurvesFree(ContextID cmsContext, ptr unsafe.Pointer) {
+func CurvesFree(ContextID CmsContext, ptr unsafe.Pointer) {
 	data := (*Curves16Data)(ptr)
 
 	// Free each curve in the Curves array
@@ -1194,7 +1194,7 @@ func CurvesFree(ContextID cmsContext, ptr unsafe.Pointer) {
 	cmsFree(ContextID, unsafe.Pointer(data.Curves))
 	cmsFree(ContextID, ptr)
 }
-func CurvesDup(ContextID cmsContext, ptr unsafe.Pointer) unsafe.Pointer {
+func CurvesDup(ContextID CmsContext, ptr unsafe.Pointer) unsafe.Pointer {
 	srcData := (*Curves16Data)(ptr)
 	data := (*Curves16Data)(cmsDupMem(ContextID, unsafe.Pointer(srcData), uint32(unsafe.Sizeof(Curves16Data{}))))
 	if data == nil {
@@ -1222,7 +1222,7 @@ func CurvesDup(ContextID cmsContext, ptr unsafe.Pointer) unsafe.Pointer {
 
 	return unsafe.Pointer(data)
 }
-func CurvesAlloc(ContextID cmsContext, nCurves, nElements uint32, G **cmsToneCurve) *Curves16Data {
+func CurvesAlloc(ContextID CmsContext, nCurves, nElements uint32, G **CmsToneCurve) *Curves16Data {
 	c16 := (*Curves16Data)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(Curves16Data{}))))
 	if c16 == nil {
 		return nil
@@ -1256,9 +1256,9 @@ func CurvesAlloc(ContextID cmsContext, nCurves, nElements uint32, G **cmsToneCur
 		for j := uint32(0); j < nElements; j++ {
 			if nElements == 256 {
 				//FROM_8_TO_16(uint8(j) is a strange piece in C-code,  uint32 must be reduced to uint8
-				(*(*uint16)(unsafe.Add(unsafe.Pointer(*curvePtr), uintptr(j)*unsafe.Sizeof(uint16(0))))) = cmsEvalToneCurve16((*cmsToneCurve)(unsafe.Add(unsafe.Pointer(G), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil)))), FROM_8_TO_16(uint8(j)))
+				(*(*uint16)(unsafe.Add(unsafe.Pointer(*curvePtr), uintptr(j)*unsafe.Sizeof(uint16(0))))) = cmsEvalToneCurve16((*CmsToneCurve)(unsafe.Add(unsafe.Pointer(G), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil)))), FROM_8_TO_16(uint8(j)))
 			} else {
-				(*(*uint16)(unsafe.Add(unsafe.Pointer(*curvePtr), uintptr(j)*unsafe.Sizeof(uint16(0))))) = cmsEvalToneCurve16((*cmsToneCurve)(unsafe.Add(unsafe.Pointer(G), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil)))), uint16(j))
+				(*(*uint16)(unsafe.Add(unsafe.Pointer(*curvePtr), uintptr(j)*unsafe.Sizeof(uint16(0))))) = cmsEvalToneCurve16((*CmsToneCurve)(unsafe.Add(unsafe.Pointer(G), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil)))), uint16(j))
 			}
 		}
 	}
@@ -1331,7 +1331,7 @@ func FastIdentity16(In *uint16, Out *uint16, D unsafe.Pointer) {
 // cmsOPToptimizeFn defines the function type for optimizations.
 func OptimizeByJoiningCurves(Lut **cmsPipeline, Intent uint32, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) bool {
 	var (
-		GammaTables    **cmsToneCurve
+		GammaTables    **CmsToneCurve
 		InFloat        [cmsMAXCHANNELS]float32
 		OutFloat       [cmsMAXCHANNELS]float32
 		i, j           uint32
@@ -1362,7 +1362,7 @@ func OptimizeByJoiningCurves(Lut **cmsPipeline, Intent uint32, InputFormat *uint
 	}
 
 	// Allocate GammaTables
-	GammaTables = (**cmsToneCurve)(cmsCalloc(Src.ContextID, Src.InputChannels, uint32(unsafe.Sizeof((*cmsToneCurve)(nil)))))
+	GammaTables = (**CmsToneCurve)(cmsCalloc(Src.ContextID, Src.InputChannels, uint32(unsafe.Sizeof((*CmsToneCurve)(nil)))))
 	if GammaTables == nil {
 		goto Error
 	}
@@ -1371,7 +1371,7 @@ func OptimizeByJoiningCurves(Lut **cmsPipeline, Intent uint32, InputFormat *uint
 
 	// Initialize GammaTables
 	for i = 0; i < Src.InputChannels; i++ {
-		ptr := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(GammaTables), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+		ptr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(GammaTables), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 		*ptr = cmsBuildTabulatedToneCurve16(Src.ContextID, PRELINEARIZATION_POINTS, nil)
 		if *ptr == nil {
 			goto Error
@@ -1387,7 +1387,7 @@ func OptimizeByJoiningCurves(Lut **cmsPipeline, Intent uint32, InputFormat *uint
 		cmsPipelineEvalFloat(InFloat[:], OutFloat[:], Src)
 		for j = 0; j < Src.InputChannels; j++ {
 			// Access the tone curve pointer
-			toneCurve := *(*cmsToneCurve)(unsafe.Add(unsafe.Pointer(GammaTables), uintptr(j)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+			toneCurve := *(*CmsToneCurve)(unsafe.Add(unsafe.Pointer(GammaTables), uintptr(j)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 
 			// Calculate the address of the desired index in Table16 and assign the value
 			tablePtr := (*uint16)(unsafe.Add(unsafe.Pointer(toneCurve.Table16), uintptr(i)*unsafe.Sizeof(uint16(0))))
@@ -1404,13 +1404,13 @@ func OptimizeByJoiningCurves(Lut **cmsPipeline, Intent uint32, InputFormat *uint
 	// Free GammaTables
 	for i = 0; i < Src.InputChannels; i++ {
 		// Calculate the address of GammaTables[i]
-		ptr := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(GammaTables), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+		ptr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(GammaTables), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 
-		// Dereference to get the actual *cmsToneCurve
+		// Dereference to get the actual *CmsToneCurve
 		curve := *ptr
 
 		// Free the memory for the curve
-		cmsFreeToneCurve(curve)
+		CmsFreeToneCurve(curve)
 	}
 
 	cmsFree(Src.ContextID, unsafe.Pointer(GammaTables))
@@ -1463,9 +1463,9 @@ Error:
 	}
 	if GammaTables != nil {
 		for i = 0; i < Src.InputChannels; i++ {
-			curve := (**cmsToneCurve)(unsafe.Add(unsafe.Pointer(GammaTables), uintptr(i)*unsafe.Sizeof((*cmsToneCurve)(nil))))
+			curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(GammaTables), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
 			if curve != nil {
-				cmsFreeToneCurve(*curve)
+				CmsFreeToneCurve(*curve)
 			}
 		}
 		cmsFree(Src.ContextID, unsafe.Pointer(GammaTables))
@@ -1475,12 +1475,12 @@ Error:
 	}
 	return false
 }
-func FreeMatShaper(ContextID cmsContext, Data unsafe.Pointer) {
+func FreeMatShaper(ContextID CmsContext, Data unsafe.Pointer) {
 	if Data != nil {
 		cmsFree(ContextID, Data)
 	}
 }
-func DupMatShaper(ContextID cmsContext, Data unsafe.Pointer) unsafe.Pointer {
+func DupMatShaper(ContextID CmsContext, Data unsafe.Pointer) unsafe.Pointer {
 	return cmsDupMem(ContextID, Data, uint32(unsafe.Sizeof(MatShaper8Data{})))
 }
 func MatShaperEval16(In *uint16, Out *uint16, D unsafe.Pointer) {
@@ -1521,7 +1521,7 @@ func clipToRange(value cmsS1Fixed14Number, min, max cmsS1Fixed14Number) uint32 {
 	}
 	return uint32(value)
 }
-func FillFirstShaper(Table *cmsS1Fixed14Number, Curve *cmsToneCurve) {
+func FillFirstShaper(Table *cmsS1Fixed14Number, Curve *CmsToneCurve) {
 	for i := 0; i < 256; i++ {
 		R := float32(i) / 255.0
 		y := cmsEvalToneCurveFloat(Curve, R)
@@ -1533,7 +1533,7 @@ func FillFirstShaper(Table *cmsS1Fixed14Number, Curve *cmsToneCurve) {
 		}
 	}
 }
-func FillSecondShaper(Table *uint16, Curve *cmsToneCurve, Is8BitsOutput bool) {
+func FillSecondShaper(Table *uint16, Curve *CmsToneCurve, Is8BitsOutput bool) {
 	for i := 0; i < 16385; i++ {
 		R := float32(i) / 16384.0
 		Val := cmsEvalToneCurveFloat(Curve, R)
@@ -1553,7 +1553,7 @@ func FillSecondShaper(Table *uint16, Curve *cmsToneCurve, Is8BitsOutput bool) {
 		}
 	}
 }
-func SetMatShaper(Dest *cmsPipeline, Curve1 [3]*cmsToneCurve, Mat *cmsMAT3, Off *cmsVEC3, Curve2 [3]*cmsToneCurve, OutputFormat *uint32) bool {
+func SetMatShaper(Dest *cmsPipeline, Curve1 [3]*CmsToneCurve, Mat *cmsMAT3, Off *cmsVEC3, Curve2 [3]*CmsToneCurve, OutputFormat *uint32) bool {
 	p := (*MatShaper8Data)(cmsMalloc(Dest.ContextID, uint32(unsafe.Sizeof(MatShaper8Data{}))))
 	if p == nil {
 		return false
@@ -1735,7 +1735,7 @@ func init() {
 var cmsOptimizationPluginChunk = cmsOptimizationPluginChunkType{OptimizationCollection: nil}
 
 // DupPluginOptimizationList duplicates the optimization list for a new context.
-func DupPluginOptimizationList(ctx cmsContext, src cmsContext) {
+func DupPluginOptimizationList(ctx CmsContext, src CmsContext) {
 	var newHead cmsOptimizationPluginChunkType
 	var entry, prev *cmsOptimizationCollection
 	head := (*cmsOptimizationPluginChunkType)(src.chunks[OptimizationPlugin])
@@ -1768,7 +1768,7 @@ func DupPluginOptimizationList(ctx cmsContext, src cmsContext) {
 }
 
 // cmsAllocOptimizationPluginChunk allocates the optimization plugin chunk.
-func cmsAllocOptimizationPluginChunk(ctx cmsContext, src cmsContext) {
+func cmsAllocOptimizationPluginChunk(ctx CmsContext, src CmsContext) {
 	if src != nil {
 		DupPluginOptimizationList(ctx, src)
 	} else {
@@ -1778,7 +1778,7 @@ func cmsAllocOptimizationPluginChunk(ctx cmsContext, src cmsContext) {
 }
 
 // cmsRegisterOptimizationPlugin registers a new optimization plugin.
-func cmsRegisterOptimizationPlugin(ContextID cmsContext, Data *cmsPluginBase) bool {
+func cmsRegisterOptimizationPlugin(ContextID CmsContext, Data *cmsPluginBase) bool {
 	plugin := (*cmsPluginOptimization)(unsafe.Pointer(Data))
 	ctx := (*cmsOptimizationPluginChunkType)(ContextID.chunks[OptimizationPlugin])
 	var newNode *cmsOptimizationCollection
@@ -1807,7 +1807,7 @@ func cmsRegisterOptimizationPlugin(ContextID cmsContext, Data *cmsPluginBase) bo
 }
 
 // cmsOptimizePipeline performs optimizations on a pipeline.
-func cmsOptimizePipeline(ContextID cmsContext, PtrLut **cmsPipeline, Intent uint32, InputFormat, OutputFormat, dwFlags *uint32) bool {
+func cmsOptimizePipeline(ContextID CmsContext, PtrLut **cmsPipeline, Intent uint32, InputFormat, OutputFormat, dwFlags *uint32) bool {
 	ctx := (*cmsOptimizationPluginChunkType)(ContextID.chunks[OptimizationPlugin])
 	var AnySuccess bool
 	var mpe *cmsStage

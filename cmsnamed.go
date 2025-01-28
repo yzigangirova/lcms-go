@@ -2,12 +2,11 @@ package golcms
 
 import (
 	"encoding/binary"
-	//"unicode/utf16"
 	"unsafe"
 )
 
 // cmsMLUalloc allocates an empty multi-localized unicode object.
-func cmsMLUalloc(ContextID cmsContext, nItems uint32) *cmsMLU {
+func cmsMLUalloc(ContextID CmsContext, nItems uint32) *cmsMLU {
 	if nItems <= 0 {
 		nItems = 2
 	}
@@ -511,7 +510,7 @@ func GrowNamedColorList(v *cmsNAMEDCOLORLIST) bool {
 }
 
 // cmsAllocNamedColorList allocates a list for n elements.
-func cmsAllocNamedColorList(ContextID cmsContext, n, ColorantCount uint32, Prefix, Suffix string) *cmsNAMEDCOLORLIST {
+func cmsAllocNamedColorList(ContextID CmsContext, n, ColorantCount uint32, Prefix, Suffix string) *cmsNAMEDCOLORLIST {
 	if ColorantCount > cmsMAXCHANNELS {
 		return nil
 	}
@@ -600,36 +599,36 @@ func DupNamedColorList(mpe *cmsStage) unsafe.Pointer {
 // EvalNamedColorPCS evaluates the named color in PCS (Profile Connection Space).
 
 // EvalNamedColorPCS evaluates named color in PCS (Lab) space.
-func EvalNamedColorPCS(in []float32, out []float32, mpe *cmsStage) {
+func EvalNamedColorPCS(in *float32, out *float32, mpe *cmsStage) {
 	namedColorList := (*cmsNAMEDCOLORLIST)(mpe.Data)
-	index := uint16(cmsQuickSaturateWord(float64(in[0]) * 65535.0))
-
-	if uint32(index) >= namedColorList.nColors {
-		cmsSignalError(unsafe.Pointer(namedColorList.ContextID), cmsERROR_RANGE, "Color out of range")
-		out[0], out[1], out[2] = 0.0, 0.0, 0.0
-		return
-	}
-
+	index := uint16(cmsQuickSaturateWord(float64(*in) * 65535.0))
 	// Interpret the `List` pointer as a slice of cmsNAMEDCOLOR.
 	list := unsafe.Slice(namedColorList.List, namedColorList.nColors)
 
-	// Access PCS values for the selected color.
-	out[0] = float32(list[index].PCS[0]) / 65535.0
-	out[1] = float32(list[index].PCS[1]) / 65535.0
-	out[2] = float32(list[index].PCS[2]) / 65535.0
+	for i := 0; i < 3; i++ {
+		outs := (*float32)(unsafe.Add(unsafe.Pointer(out), uintptr(i)*unsafe.Sizeof(float32(0))))
+		if uint32(index) >= namedColorList.nColors {
+			cmsSignalError(unsafe.Pointer(namedColorList.ContextID), cmsERROR_RANGE, "Color out of range")
+			*outs = 0.0
+		} else {
+			*outs = float32(list[index].PCS[i]) / 65535.0
+		}
+
+	}
 }
 
 // EvalNamedColor evaluates named color in device colorant space.
-func EvalNamedColor(in []float32, out []float32, mpe *cmsStage) {
+func EvalNamedColor(in *float32, out *float32, mpe *cmsStage) {
 	namedColorList := (*cmsNAMEDCOLORLIST)(mpe.Data)
-	index := uint16(cmsQuickSaturateWord(float64(in[0]) * 65535.0))
+	index := uint16(cmsQuickSaturateWord(float64(*in) * 65535.0))
 
 	if uint32(index) >= namedColorList.nColors {
 		cmsSignalError(unsafe.Pointer(namedColorList.ContextID), cmsERROR_RANGE, "Color out of range")
 
 		// Zero-out the output for all colorants.
 		for j := uint32(0); j < namedColorList.ColorantCount; j++ {
-			out[j] = 0.0
+			outs := (*float32)(unsafe.Add(unsafe.Pointer(out), uintptr(j)*unsafe.Sizeof(float32(0))))
+			*outs = 0.0
 		}
 		return
 	}
@@ -639,7 +638,8 @@ func EvalNamedColor(in []float32, out []float32, mpe *cmsStage) {
 
 	// Access DeviceColorant values for the selected color.
 	for j := uint32(0); j < namedColorList.ColorantCount; j++ {
-		out[j] = float32(list[index].DeviceColorant[j]) / 65535.0
+		outs := (*float32)(unsafe.Add(unsafe.Pointer(out), uintptr(j)*unsafe.Sizeof(float32(0))))
+		*outs = float32(list[index].DeviceColorant[j]) / 65535.0
 	}
 }
 
@@ -798,7 +798,7 @@ func cmsNamedColorIndex(namedColorList *cmsNAMEDCOLORLIST, name *byte) int32 {
 }
 
 // cmsAllocProfileSequenceDescription allocates memory for a profile sequence description.
-func cmsAllocProfileSequenceDescription(ContextID cmsContext, n uint32) *cmsSEQ {
+func cmsAllocProfileSequenceDescription(ContextID CmsContext, n uint32) *cmsSEQ {
 	if n == 0 || n > 255 {
 		return nil // Invalid input
 	}
@@ -897,11 +897,11 @@ func cmsDupProfileSequenceDescription(pseq *cmsSEQ) *cmsSEQ {
 // Dictionary structure
 type cmsDICT struct {
 	head      *cmsDICTentry
-	ContextID cmsContext
+	ContextID CmsContext
 }
 
 // Allocate an empty dictionary
-func cmsDictAlloc(contextID cmsContext) cmsHANDLE {
+func cmsDictAlloc(contextID CmsContext) cmsHANDLE {
 	dict := (*cmsDICT)(cmsMallocZero(contextID, uint32(unsafe.Sizeof(cmsDICT{}))))
 	return cmsHANDLE(unsafe.Pointer(dict))
 }
@@ -931,7 +931,7 @@ func cmsDictFree(hDict cmsHANDLE) {
 }
 
 // Duplicate a wide character string
-func DupWcs(contextID cmsContext, ptr *uint16) *uint16 {
+func DupWcs(contextID CmsContext, ptr *uint16) *uint16 {
 	if ptr == nil {
 		return nil
 	}

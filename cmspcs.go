@@ -87,14 +87,14 @@ CIELAB (16 bit)     b*            -128.0 . +127      0x0000 . 0x8080 . 0xffff
 */
 
 // Conversions
-func cmsXYZ2xyY(dest *cmsCIExyY, source *cmsCIEXYZ) {
+func cmsXYZ2xyY(dest *CmsCIExyY, source *cmsCIEXYZ) {
 	sum := 1.0 / (source.X + source.Y + source.Z)
 	dest.x = source.X * sum
 	dest.y = source.Y * sum
 	dest.Y = source.Z
 }
 
-func cmsxyY2XYZ(dest *cmsCIEXYZ, source *cmsCIExyY) {
+func cmsxyY2XYZ(dest *cmsCIEXYZ, source *CmsCIExyY) {
 	dest.X = (source.x / source.y) * source.Y
 	dest.Y = source.Y
 	dest.Z = ((1 - source.x - source.y) / source.y) * source.Y
@@ -677,7 +677,7 @@ func cmsEndPointsBySpace(
 		RGBwhite  = []uint16{0xffff, 0xffff, 0xffff}
 		CMYKblack = []uint16{0xffff, 0xffff, 0xffff, 0xffff} // 400% of ink
 		CMYKwhite = []uint16{0, 0, 0, 0}
-		LABblack  = []uint16{0, 0x8080, 0x8080}              // V4 Lab encoding
+		LABblack  = []uint16{0, 0x8080, 0x8080} // V4 Lab encoding
 		LABwhite  = []uint16{0xffff, 0x8080, 0x8080}
 		CMYblack  = []uint16{0xffff, 0xffff, 0xffff}
 		CMYwhite  = []uint16{0, 0, 0}
@@ -750,7 +750,6 @@ func cmsEndPointsBySpace(
 		return false
 	}
 }
-
 
 // Translate from our colorspace to ICC representation.
 func cmsICCcolorSpace(ourNotation int) cmsColorSpaceSignature {

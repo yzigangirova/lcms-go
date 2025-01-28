@@ -35,8 +35,8 @@ var DefaultCurves = cmsParametricCurvesCollection{
 	Next:           nil,
 }
 
-func cmsRegisterParametricCurvesPlugin(ContextID cmsContext, Data *cmsPluginBase) bool {
-	ctx := (*cmsCurvesPluginChunkType)(cmsContextGetClientChunk(ContextID, CurvesPlugin))
+func cmsRegisterParametricCurvesPlugin(ContextID CmsContext, Data *cmsPluginBase) bool {
+	ctx := (*cmsCurvesPluginChunkType)(CmsContextGetClientChunk(ContextID, CurvesPlugin))
 	Plugin := (*cmsPluginParametricCurves)(unsafe.Pointer(Data))
 	var fl *cmsParametricCurvesCollection
 
@@ -98,12 +98,12 @@ func IsInSet(Type int, c *cmsParametricCurvesCollection) int {
 // Type is the ICC type +1
 // if type is negative, then the curve is analytically inverted
 // GetParametricCurveByType searches for the collection that contains a specific type of parametric curve.
-func GetParametricCurveByType(ContextID cmsContext, Type int, index *int) *cmsParametricCurvesCollection {
+func GetParametricCurveByType(ContextID CmsContext, Type int, index *int) *cmsParametricCurvesCollection {
 	var c *cmsParametricCurvesCollection
 	var Position int
 
 	// Retrieve the plugin chunk associated with curves
-	ctx := (*cmsCurvesPluginChunkType)(cmsContextGetClientChunk(ContextID, CurvesPlugin))
+	ctx := (*cmsCurvesPluginChunkType)(CmsContextGetClientChunk(ContextID, CurvesPlugin))
 
 	// Search in the context's parametric curves
 	for c = ctx.ParametricCurves; c != nil; c = c.Next {
@@ -132,7 +132,7 @@ func GetParametricCurveByType(ContextID cmsContext, Type int, index *int) *cmsPa
 	return nil
 }
 
-func allocateEvals(contextID cmsContext, nSegments uint32) []cmsParametricCurveEvaluator {
+func allocateEvals(contextID CmsContext, nSegments uint32) []cmsParametricCurveEvaluator {
 	// Allocate a slice of cmsParametricCurveEvaluator with length nSegments
 	evals := make([]cmsParametricCurveEvaluator, nSegments)
 	return evals
@@ -140,12 +140,12 @@ func allocateEvals(contextID cmsContext, nSegments uint32) []cmsParametricCurveE
 
 // AllocateToneCurveStruct allocates memory for a tone curve structure.
 func AllocateToneCurveStruct(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	nEntries uint32,
 	nSegments uint32,
 	Segments *cmsCurveSegment,
 	Values *uint16,
-) *cmsToneCurve {
+) *CmsToneCurve {
 	if nEntries > 65530 {
 		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Couldn't create tone curve of more than 65530 entries")
 		return nil
@@ -156,7 +156,7 @@ func AllocateToneCurveStruct(
 		return nil
 	}
 
-	p := (*cmsToneCurve)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsToneCurve{}))))
+	p := (*CmsToneCurve)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(CmsToneCurve{}))))
 	if p == nil {
 		return nil
 	}
@@ -222,7 +222,7 @@ func AllocateToneCurveStruct(
 
 			if currentSegment.Type == 0 && currentSegment.SampledPoints != nil {
 				segmentPointsSize := uint32(unsafe.Sizeof(float32(0))) * currentSegment.NGridPoints
-				(*currentSegment).SampledPoints = (*float32)(cmsDupMem(ContextID, unsafe.Pointer(&currentSegment.SampledPoints[0]), segmentPointsSize))
+				(*currentSegment).SampledPoints = (*float32)(cmsDupMem(ContextID, unsafe.Pointer(currentSegment.SampledPoints), segmentPointsSize))
 			} else {
 				(*currentSegment).SampledPoints = nil
 			}
@@ -257,12 +257,12 @@ Error:
 }
 
 // Build a gamma table based on gamma constant
-func cmsBuildGamma(ContextID cmsContext, Gamma float64) *cmsToneCurve {
+func CmsBuildGamma(ContextID CmsContext, Gamma float64) *CmsToneCurve {
 	return cmsBuildParametricToneCurve(ContextID, 1, &Gamma)
 }
 
 // Free all memory taken by the gamma curve
-func cmsFreeToneCurve(Curve *cmsToneCurve) {
+func CmsFreeToneCurve(Curve *CmsToneCurve) {
 	if Curve == nil {
 		return
 	}
@@ -304,15 +304,15 @@ func cmsFreeToneCurve(Curve *cmsToneCurve) {
 // Utility function, free 3 gamma tables
 
 // Free a triple of tone curves.
-func cmsFreeToneCurveTriple(Curve [3]*cmsToneCurve) {
+func cmsFreeToneCurveTriple(Curve [3]*CmsToneCurve) {
 	if Curve[0] != nil {
-		cmsFreeToneCurve(Curve[0])
+		CmsFreeToneCurve(Curve[0])
 	}
 	if Curve[1] != nil {
-		cmsFreeToneCurve(Curve[1])
+		CmsFreeToneCurve(Curve[1])
 	}
 	if Curve[2] != nil {
-		cmsFreeToneCurve(Curve[2])
+		CmsFreeToneCurve(Curve[2])
 	}
 
 	Curve[0] = nil
@@ -321,7 +321,7 @@ func cmsFreeToneCurveTriple(Curve [3]*cmsToneCurve) {
 }
 
 // Duplicate a tone curve.
-func cmsDupToneCurve(In *cmsToneCurve) *cmsToneCurve {
+func cmsDupToneCurve(In *CmsToneCurve) *CmsToneCurve {
 	if In == nil {
 		return nil
 	}
@@ -331,14 +331,14 @@ func cmsDupToneCurve(In *cmsToneCurve) *cmsToneCurve {
 
 // Join two tone curves.
 // Produces y = Y^-1(X(t)).
-func cmsJoinToneCurve(ContextID cmsContext, X, Y *cmsToneCurve, nResultingPoints uint32) *cmsToneCurve {
+func cmsJoinToneCurve(ContextID CmsContext, X, Y *CmsToneCurve, nResultingPoints uint32) *CmsToneCurve {
 	if X == nil || Y == nil {
 		return nil
 	}
 
 	var (
-		out       *cmsToneCurve
-		Yreversed *cmsToneCurve
+		out       *CmsToneCurve
+		Yreversed *CmsToneCurve
 		Res       []float32
 	)
 
@@ -362,11 +362,11 @@ func cmsJoinToneCurve(ContextID cmsContext, X, Y *cmsToneCurve, nResultingPoints
 	out = cmsBuildTabulatedToneCurveFloat(ContextID, nResultingPoints, &Res[0])
 
 	// Cleanup
-	cmsFreeToneCurve(Yreversed)
+	CmsFreeToneCurve(Yreversed)
 
 	return out
 }
-func cmsIsToneCurveLinear(Curve *cmsToneCurve) bool {
+func cmsIsToneCurveLinear(Curve *CmsToneCurve) bool {
 	cmsAssert(Curve != nil, "")
 
 	for i := 0; i < int(Curve.nEntries); i++ {
@@ -384,7 +384,7 @@ func cmsIsToneCurveLinear(Curve *cmsToneCurve) bool {
 }
 
 // cmsIsToneCurveMonotonic checks if a tone curve is monotonic.
-func cmsIsToneCurveMonotonic(t *cmsToneCurve) bool {
+func cmsIsToneCurveMonotonic(t *CmsToneCurve) bool {
 	if t == nil {
 		panic("ToneCurve cannot be nil")
 	}
@@ -426,7 +426,7 @@ func cmsIsToneCurveMonotonic(t *cmsToneCurve) bool {
 }
 
 // cmsIsToneCurveDescending checks if a tone curve is descending.
-func cmsIsToneCurveDescending(t *cmsToneCurve) bool {
+func cmsIsToneCurveDescending(t *CmsToneCurve) bool {
 	if t == nil {
 		panic("ToneCurve cannot be nil")
 	}
@@ -439,7 +439,7 @@ func cmsIsToneCurveDescending(t *cmsToneCurve) bool {
 }
 
 // cmsIsToneCurveMultisegment checks if a tone curve is multisegment.
-func cmsIsToneCurveMultisegment(t *cmsToneCurve) bool {
+func cmsIsToneCurveMultisegment(t *CmsToneCurve) bool {
 	if t == nil {
 		panic("ToneCurve cannot be nil")
 	}
@@ -449,7 +449,7 @@ func cmsIsToneCurveMultisegment(t *cmsToneCurve) bool {
 
 // cmsGetToneCurveParametricType retrieves the parametric type of a tone curve.
 // Returns 0 if the tone curve is not parametric or multisegment.
-func cmsGetToneCurveParametricType(t *cmsToneCurve) int32 {
+func cmsGetToneCurveParametricType(t *CmsToneCurve) int32 {
 	if t == nil {
 		panic("ToneCurve cannot be nil")
 	}
@@ -466,7 +466,7 @@ func cmsGetToneCurveParametricType(t *cmsToneCurve) int32 {
 }
 
 // cmsEvalToneCurveFloat evaluates a tone curve at a specific point (float input and output).
-func cmsEvalToneCurveFloat(curve *cmsToneCurve, v float32) float32 {
+func cmsEvalToneCurveFloat(curve *CmsToneCurve, v float32) float32 {
 	if curve == nil {
 		panic("ToneCurve cannot be nil")
 	}
@@ -483,7 +483,7 @@ func cmsEvalToneCurveFloat(curve *cmsToneCurve, v float32) float32 {
 }
 
 // cmsEvalToneCurve16 evaluates a tone curve at a specific point (16-bit input and output).
-func cmsEvalToneCurve16(Curve *cmsToneCurve, v uint16) uint16 {
+func cmsEvalToneCurve16(Curve *CmsToneCurve, v uint16) uint16 {
 	var out uint16
 
 	cmsAssert(Curve != nil, "curve is nil")
@@ -494,11 +494,11 @@ func cmsEvalToneCurve16(Curve *cmsToneCurve, v uint16) uint16 {
 
 // cmsEstimateGamma estimates the gamma value of a tone curve using a least squares fitting method.
 // It calculates the best-fitting gamma by minimizing the sum of squared residuals.
-func cmsEstimateGamma(t *cmsToneCurve, Precision float64) float64 {
+func cmsEstimateGamma(t *CmsToneCurve, Precision float64) float64 {
 	var gamma, sum, sum2, n, x, y, Std float64
 	var i uint32
 
-	cmsAssert(t != nil, "cmsToneCurve is nil")
+	cmsAssert(t != nil, "CmsToneCurve is nil")
 
 	sum, sum2, n = 0, 0, 0
 
@@ -531,10 +531,10 @@ func cmsEstimateGamma(t *cmsToneCurve, Precision float64) float64 {
 	// Return the mean gamma value
 	return sum / n
 }
-func cmsGetToneCurveParams(t *cmsToneCurve) *float64 {
+func cmsGetToneCurveParams(t *CmsToneCurve) *float64 {
 	// Ensure the tone curve is not nil
 	if t == nil {
-		panic("cmsToneCurve is nil")
+		panic("CmsToneCurve is nil")
 	}
 
 	// Check if the curve has only one segment
@@ -547,7 +547,7 @@ func cmsGetToneCurveParams(t *cmsToneCurve) *float64 {
 }
 
 // cmsBuildTabulatedToneCurve16 creates an empty gamma curve using tables.
-func cmsBuildTabulatedToneCurve16(ContextID cmsContext, nEntries uint32, Values *uint16) *cmsToneCurve {
+func cmsBuildTabulatedToneCurve16(ContextID CmsContext, nEntries uint32, Values *uint16) *CmsToneCurve {
 	return AllocateToneCurveStruct(ContextID, nEntries, 0, nil, Values)
 }
 
@@ -560,7 +560,7 @@ func EntriesByGamma(Gamma float64) uint32 {
 }
 
 // cmsBuildSegmentedToneCurve creates a segmented gamma curve and fills the table.
-func cmsBuildSegmentedToneCurve(ContextID cmsContext, nSegments uint32, Segments *cmsCurveSegment) *cmsToneCurve {
+func cmsBuildSegmentedToneCurve(ContextID CmsContext, nSegments uint32, Segments *cmsCurveSegment) *CmsToneCurve {
 	if Segments == nil {
 		cmsAssert(Segments != nil, "Segments cannot be null")
 
@@ -586,7 +586,7 @@ func cmsBuildSegmentedToneCurve(ContextID cmsContext, nSegments uint32, Segments
 }
 
 // cmsBuildTabulatedToneCurveFloat uses a segmented curve to store the floating-point table.
-func cmsBuildTabulatedToneCurveFloat(ContextID cmsContext, nEntries uint32, values *float32) *cmsToneCurve {
+func cmsBuildTabulatedToneCurveFloat(ContextID CmsContext, nEntries uint32, values *float32) *CmsToneCurve {
 	var Seg [3]cmsCurveSegment
 
 	if nEntries == 0 || values == nil {
@@ -602,7 +602,7 @@ func cmsBuildTabulatedToneCurveFloat(ContextID cmsContext, nEntries uint32, valu
 }
 
 // cmsBuildParametricToneCurve builds a parametric tone curve.
-func cmsBuildParametricToneCurve(ContextID cmsContext, Type int, Params *float64) *cmsToneCurve {
+func cmsBuildParametricToneCurve(ContextID CmsContext, Type int, Params *float64) *CmsToneCurve {
 	var Seg0 cmsCurveSegment
 	var Pos int
 	c := GetParametricCurveByType(ContextID, Type, &Pos)
@@ -827,7 +827,7 @@ func DefaultEvalParametricFn(Type int32, Params []float64, R float64) float64 {
 // EvalSegmentedFn evaluates a segmented function for a single value.
 // Returns math.Inf(-1) if no valid segment is found.
 // If the function type is 0, performs interpolation on the table.
-func EvalSegmentedFn(g *cmsToneCurve, R float64) float64 {
+func EvalSegmentedFn(g *CmsToneCurve, R float64) float64 {
 	var Out float64
 	var Out32 float32
 
@@ -871,7 +871,7 @@ func EvalSegmentedFn(g *cmsToneCurve, R float64) float64 {
 
 	return math.Inf(-1) // MINUS_INF
 }
-func cmsReverseToneCurveEx(nResultSamples uint32, inCurve *cmsToneCurve) *cmsToneCurve {
+func cmsReverseToneCurveEx(nResultSamples uint32, inCurve *CmsToneCurve) *CmsToneCurve {
 	var a, b, y, x1, y1, x2, y2 float64
 	var i, j int
 	var ascending bool
@@ -938,7 +938,7 @@ func cmsReverseToneCurveEx(nResultSamples uint32, inCurve *cmsToneCurve) *cmsTon
 	return out
 }
 
-func cmsReverseToneCurve(inGamma *cmsToneCurve) *cmsToneCurve {
+func cmsReverseToneCurve(inGamma *CmsToneCurve) *CmsToneCurve {
 	// Ensure input curve is not nil
 	if inGamma == nil {
 		return nil

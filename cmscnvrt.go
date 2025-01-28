@@ -41,9 +41,9 @@ func init() {
 }
 
 // SearchIntent translates the given function
-func SearchIntent(ContextID cmsContext, Intent uint32) *cmsIntentsList {
+func SearchIntent(ContextID CmsContext, Intent uint32) *cmsIntentsList {
 	// Retrieve the plugin chunk for intents
-	ctx := (*cmsIntentsPluginChunkType)(cmsContextGetClientChunk(ContextID, IntentPlugin))
+	ctx := (*cmsIntentsPluginChunkType)(CmsContextGetClientChunk(ContextID, IntentPlugin))
 
 	// Search in the plugin intents list
 	for pt := ctx.Intents; pt != nil; pt = pt.Next {
@@ -106,7 +106,7 @@ func ComputeBlackPointCompensation(BlackPointIn *cmsCIEXYZ, BlackPointOut *cmsCI
 func CHAD2Temp(Chad *cmsMAT3) float64 {
 	var d, s cmsVEC3
 	var Dest cmsCIEXYZ
-	var DestChromaticity cmsCIExyY
+	var DestChromaticity CmsCIExyY
 	var TempK float64
 	var m1, m2 cmsMAT3
 
@@ -144,7 +144,7 @@ func CHAD2Temp(Chad *cmsMAT3) float64 {
 // Compute a CHAD based on a given temperature
 func Temp2CHAD(Chad *cmsMAT3, Temp float64) {
 	var White cmsCIEXYZ
-	var ChromaticityOfWhite cmsCIExyY
+	var ChromaticityOfWhite CmsCIExyY
 
 	// Compute chromaticity from the given temperature
 	cmsWhitePointFromTemp(&ChromaticityOfWhite, Temp)
@@ -236,10 +236,10 @@ func ComputeAbsoluteIntent(
 // Default handler for ICC-style intents
 
 func DefaultICCintents(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	nProfiles uint32,
 	TheIntents []uint32,
-	hProfiles []cmsHPROFILE,
+	hProfiles []CmsHPROFILE,
 	BPC []bool,
 	AdaptationStates []float64,
 	dwFlags uint32,
@@ -247,7 +247,7 @@ func DefaultICCintents(
 	var (
 		Lut               *cmsPipeline
 		Result            *cmsPipeline
-		hProfile          cmsHPROFILE
+		hProfile          CmsHPROFILE
 		m                 cmsMAT3
 		off               cmsVEC3
 		ColorSpaceIn      cmsColorSpaceSignature
@@ -268,13 +268,13 @@ func DefaultICCintents(
 		return nil
 	}
 
-	CurrentColorSpace = cmsGetColorSpace(unsafe.Pointer(hProfiles[0]))
+	CurrentColorSpace = CmsGetColorSpace(hProfiles[0])
 
 	for i := uint32(0); i < nProfiles; i++ {
 		var lIsDeviceLink, lIsInput bool
 
 		hProfile = hProfiles[i]
-		ClassSig = cmsGetDeviceClass(unsafe.Pointer(hProfile))
+		ClassSig = cmsGetDeviceClass(hProfile)
 		lIsDeviceLink = (ClassSig == cmsSigLinkClass || ClassSig == cmsSigAbstractClass)
 
 		// Determine if the profile is input
@@ -288,11 +288,11 @@ func DefaultICCintents(
 		Intent = TheIntents[i]
 
 		if lIsInput || lIsDeviceLink {
-			ColorSpaceIn = cmsGetColorSpace(unsafe.Pointer(hProfile))
-			ColorSpaceOut = cmsGetPCS(unsafe.Pointer(hProfile))
+			ColorSpaceIn = CmsGetColorSpace(hProfile)
+			ColorSpaceOut = cmsGetPCS(hProfile)
 		} else {
-			ColorSpaceIn = cmsGetPCS(unsafe.Pointer(hProfile))
-			ColorSpaceOut = cmsGetColorSpace(unsafe.Pointer(hProfile))
+			ColorSpaceIn = cmsGetPCS(hProfile)
+			ColorSpaceOut = CmsGetColorSpace(hProfile)
 		}
 
 		if !ColorSpaceIsCompatible(ColorSpaceIn, CurrentColorSpace) {
@@ -418,7 +418,7 @@ func IsEmptyLayer(m *cmsMAT3, off *cmsVEC3) bool {
 	return diff < 0.002
 }
 
-func ComputeConversion(i uint32, hProfiles []cmsHPROFILE, Intent uint32, BPC bool, AdaptationState float64, m *cmsMAT3, off *cmsVEC3) bool {
+func ComputeConversion(i uint32, hProfiles []CmsHPROFILE, Intent uint32, BPC bool, AdaptationState float64, m *cmsMAT3, off *cmsVEC3) bool {
 	// Initialize m and off to identity
 	cmsMAT3identity(m)
 	cmsVEC3init(off, 0, 0, 0)
@@ -469,13 +469,13 @@ func AddConversion(Result *cmsPipeline, InPCS cmsColorSpaceSignature, OutPCS cms
 		switch OutPCS {
 		case cmsSigXYZData: // XYZ -> XYZ
 			if !IsEmptyLayer(m, off) {
-				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
+				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, &mAsDbl[0], &offAsDbl[0])) {
 					return false
 				}
 			}
 		case cmsSigLabData: // XYZ -> Lab
 			if !IsEmptyLayer(m, off) {
-				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
+				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, &mAsDbl[0], &offAsDbl[0])) {
 					return false
 				}
 			}
@@ -493,14 +493,14 @@ func AddConversion(Result *cmsPipeline, InPCS cmsColorSpaceSignature, OutPCS cms
 				return false
 			}
 			if !IsEmptyLayer(m, off) {
-				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
+				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, &mAsDbl[0], &offAsDbl[0])) {
 					return false
 				}
 			}
 		case cmsSigLabData: // Lab -> Lab
 			if !IsEmptyLayer(m, off) {
 				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocLab2XYZ(Result.ContextID)) ||
-					!cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) ||
+					!cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, &mAsDbl[0], &offAsDbl[0])) ||
 					!cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocXYZ2Lab(Result.ContextID)) {
 					return false
 				}
@@ -540,10 +540,10 @@ func ColorSpaceIsCompatible(a, b cmsColorSpaceSignature) bool {
 	return false
 }
 func cmsDefaultICCintents(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	nProfiles uint32,
 	TheIntents []uint32,
-	hProfiles []cmsHPROFILE,
+	hProfiles []CmsHPROFILE,
 	BPC []bool,
 	AdaptationStates []float64,
 	dwFlags uint32,
@@ -566,7 +566,7 @@ func TranslateNonICCIntents(Intent uint32) uint32 {
 
 type GrayOnlyParams struct {
 	Cmyk2Cmyk *cmsPipeline  // The original transform
-	KTone     *cmsToneCurve // Black-to-black tone curve
+	KTone     *CmsToneCurve // Black-to-black tone curve
 }
 
 // BlackPreservingGrayOnlySampler preserves black-only CMYK transformations.
@@ -582,16 +582,16 @@ func BlackPreservingGrayOnlySampler(In []uint16, Out []uint16, Cargo unsafe.Poin
 	}
 
 	// Keep normal transform for other colors
-	bp.Cmyk2Cmyk.Eval16Fn(In, Out, bp.Cmyk2Cmyk.Data)
+	bp.Cmyk2Cmyk.Eval16Fn(&In[0], &Out[0], bp.Cmyk2Cmyk.Data)
 	return int32(1)
 }
 
 // BlackPreservingKOnlyIntents handles black-preserving K-only intents.
 func BlackPreservingKOnlyIntents(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	nProfiles uint32,
 	TheIntents []uint32,
-	hProfiles []cmsHPROFILE,
+	hProfiles []CmsHPROFILE,
 	BPC []bool,
 	AdaptationStates []float64,
 	dwFlags uint32,
@@ -601,7 +601,7 @@ func BlackPreservingKOnlyIntents(
 	var CLUT *cmsStage
 	var ICCIntents [256]uint32
 	var lastProfilePos, preservationProfilesCount uint32
-	var hLastProfile cmsHPROFILE
+	var hLastProfile CmsHPROFILE
 
 	// Sanity check
 	if nProfiles < 1 || nProfiles > 255 {
@@ -621,8 +621,8 @@ func BlackPreservingKOnlyIntents(
 		hLastProfile = hProfiles[lastProfilePos-1]
 		lastProfilePos--
 
-		if cmsGetColorSpace(unsafe.Pointer(hLastProfile)) != cmsSigCmykData ||
-			cmsGetDeviceClass(unsafe.Pointer(hLastProfile)) != cmsSigLinkClass {
+		if CmsGetColorSpace(hLastProfile) != cmsSigCmykData ||
+			cmsGetDeviceClass(hLastProfile) != cmsSigLinkClass {
 			break
 		}
 	}
@@ -630,9 +630,9 @@ func BlackPreservingKOnlyIntents(
 	preservationProfilesCount = lastProfilePos + 1
 
 	// Check for non-CMYK profiles
-	if cmsGetColorSpace(unsafe.Pointer(hProfiles[0])) != cmsSigCmykData ||
-		!(cmsGetColorSpace(unsafe.Pointer(hLastProfile)) == cmsSigCmykData ||
-			cmsGetDeviceClass(unsafe.Pointer(hLastProfile)) == cmsSigOutputClass) {
+	if CmsGetColorSpace(hProfiles[0]) != cmsSigCmykData ||
+		!(CmsGetColorSpace(hLastProfile) == cmsSigCmykData ||
+			cmsGetDeviceClass(hLastProfile) == cmsSigOutputClass) {
 		return DefaultICCintents(ContextID, nProfiles, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
 	}
 
@@ -687,7 +687,7 @@ func BlackPreservingKOnlyIntents(
 
 	// Free resources
 	cmsPipelineFree(bp.Cmyk2Cmyk)
-	cmsFreeToneCurve(bp.KTone)
+	CmsFreeToneCurve(bp.KTone)
 	return Result
 
 Error:
@@ -695,7 +695,7 @@ Error:
 		cmsPipelineFree(bp.Cmyk2Cmyk)
 	}
 	if bp.KTone != nil {
-		cmsFreeToneCurve(bp.KTone)
+		CmsFreeToneCurve(bp.KTone)
 	}
 	if Result != nil {
 		cmsPipelineFree(Result)
@@ -706,12 +706,12 @@ Error:
 // K Plane-preserving CMYK to CMYK ------------------------------------------------------------------------------------
 type PreserveKPlaneParams struct {
 	Cmyk2Cmyk    *cmsPipeline  // The original transform
-	HProofOutput cmsHTRANSFORM // Output CMYK to Lab (last profile)
-	Cmyk2Lab     cmsHTRANSFORM // The input chain
-	KTone        *cmsToneCurve // Black-to-black tone curve
+	HProofOutput CmsHTRANSFORM // Output CMYK to Lab (last profile)
+	Cmyk2Lab     CmsHTRANSFORM // The input chain
+	KTone        *CmsToneCurve // Black-to-black tone curve
 	LabK2Cmyk    *cmsPipeline  // The output profile
 	MaxError     float64       // Maximum error
-	HRoundTrip   cmsHTRANSFORM // Round-trip transform
+	HRoundTrip   CmsHTRANSFORM // Round-trip transform
 	MaxTAC       float64       // Maximum total area coverage
 }
 
@@ -751,10 +751,10 @@ func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) int32 {
 	}
 
 	// Measure and keep Lab measurement for further usage
-	cmsDoTransform(bp.HProofOutput, unsafe.Pointer(&Out[0]), unsafe.Pointer(&ColorimetricLab), 1)
+	CmsDoTransform(bp.HProofOutput, unsafe.Pointer(&Out[0]), unsafe.Pointer(&ColorimetricLab), 1)
 
 	// Transform to Lab
-	cmsDoTransform(bp.Cmyk2Lab, unsafe.Pointer(&Outf[0]), unsafe.Pointer(&LabK[0]), 1)
+	CmsDoTransform(bp.Cmyk2Lab, unsafe.Pointer(&Outf[0]), unsafe.Pointer(&LabK[0]), 1)
 
 	// Reverse interpolation to obtain CMY with fixed K
 	if !cmsPipelineEvalReverseFloat(LabK[:], Outf[:], Outf[:], bp.LabK2Cmyk) {
@@ -784,7 +784,7 @@ func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) int32 {
 	Out[3] = cmsQuickSaturateWord(float64(Outf[3] * 65535.0))
 
 	// Estimate the error
-	cmsDoTransform(bp.HProofOutput, unsafe.Pointer(&Out[0]), unsafe.Pointer(&BlackPreservingLab), 1)
+	CmsDoTransform(bp.HProofOutput, unsafe.Pointer(&Out[0]), unsafe.Pointer(&BlackPreservingLab), 1)
 	Error = cmsDeltaE(&ColorimetricLab, &BlackPreservingLab)
 	if Error > bp.MaxError {
 		bp.MaxError = Error
@@ -795,10 +795,10 @@ func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) int32 {
 
 // BlackPreservingKPlaneIntents handles black-plane preserving intents.
 func BlackPreservingKPlaneIntents(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	nProfiles uint32,
 	TheIntents []uint32,
-	hProfiles []cmsHPROFILE,
+	hProfiles []CmsHPROFILE,
 	BPC []bool,
 	AdaptationStates []float64,
 	dwFlags uint32,
@@ -808,7 +808,7 @@ func BlackPreservingKPlaneIntents(
 	var CLUT *cmsStage
 	var ICCIntents [256]uint32
 	var lastProfilePos, preservationProfilesCount uint32
-	var hLastProfile, hLab cmsHPROFILE
+	var hLastProfile, hLab CmsHPROFILE
 
 	// Sanity check
 	if nProfiles < 1 || nProfiles > 255 {
@@ -828,7 +828,7 @@ func BlackPreservingKPlaneIntents(
 		hLastProfile = hProfiles[lastProfilePos-1]
 		lastProfilePos--
 
-		if cmsGetColorSpace(unsafe.Pointer(hLastProfile)) != cmsSigCmykData || cmsGetDeviceClass(unsafe.Pointer(hLastProfile)) != cmsSigLinkClass {
+		if CmsGetColorSpace(hLastProfile) != cmsSigCmykData || cmsGetDeviceClass(hLastProfile) != cmsSigLinkClass {
 			break
 		}
 	}
@@ -836,8 +836,8 @@ func BlackPreservingKPlaneIntents(
 	preservationProfilesCount = lastProfilePos + 1
 
 	// Check for non-CMYK profiles
-	if cmsGetColorSpace(unsafe.Pointer(hProfiles[0])) != cmsSigCmykData ||
-		!(cmsGetColorSpace(unsafe.Pointer(hLastProfile)) == cmsSigCmykData || cmsGetDeviceClass(unsafe.Pointer(hLastProfile)) == cmsSigOutputClass) {
+	if CmsGetColorSpace(hProfiles[0]) != cmsSigCmykData ||
+		!(CmsGetColorSpace(hLastProfile) == cmsSigCmykData || cmsGetDeviceClass(hLastProfile) == cmsSigOutputClass) {
 		return DefaultICCintents(ContextID, nProfiles, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
 	}
 
@@ -883,7 +883,7 @@ func BlackPreservingKPlaneIntents(
 	if bp.Cmyk2Lab == nil {
 		goto Cleanup
 	}
-	cmsCloseProfile(hLab)
+	CmsCloseProfile(hLab)
 
 	// Create CLUT
 	nGridPoints = cmsReasonableGridpointsByColorspace(cmsSigCmykData, dwFlags)
@@ -916,7 +916,7 @@ Cleanup:
 		cmsDeleteTransform(bp.HProofOutput)
 	}
 	if bp.KTone != nil {
-		cmsFreeToneCurve(bp.KTone)
+		CmsFreeToneCurve(bp.KTone)
 	}
 	if bp.LabK2Cmyk != nil {
 		cmsPipelineFree(bp.LabK2Cmyk)
@@ -931,10 +931,10 @@ Cleanup:
 // for the first intent in chain. The handler may be user-defined. Is up to the handler to deal with the
 // rest of intents in chain. A maximum of 255 profiles at time are supported, which is pretty reasonable.
 func cmsLinkProfiles(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	nProfiles uint32,
 	TheIntents []uint32,
-	hProfiles []cmsHPROFILE,
+	hProfiles []CmsHPROFILE,
 	BPC []bool,
 	AdaptationStates []float64,
 	dwFlags uint32,
@@ -954,7 +954,7 @@ func cmsLinkProfiles(
 
 		if TheIntents[i] == INTENT_PERCEPTUAL || TheIntents[i] == INTENT_SATURATION {
 			// Force BPC for V4 profiles in perceptual and saturation
-			if cmsGetEncodedICCversion(unsafe.Pointer(hProfiles[i])) >= 0x4000000 {
+			if cmsGetEncodedICCversion(hProfiles[i]) >= 0x4000000 {
 				BPC[i] = true
 			}
 		}
@@ -972,8 +972,8 @@ func cmsLinkProfiles(
 }
 
 // cmsRegisterRenderingIntentPlugin registers a rendering intent plugin.
-func cmsRegisterRenderingIntentPlugin(id cmsContext, Data *cmsPluginBase) bool {
-	ctx := (*cmsIntentsPluginChunkType)(cmsContextGetClientChunk(id, IntentPlugin))
+func cmsRegisterRenderingIntentPlugin(id CmsContext, Data *cmsPluginBase) bool {
+	ctx := (*cmsIntentsPluginChunkType)(CmsContextGetClientChunk(id, IntentPlugin))
 	Plugin := (*cmsPluginRenderingIntent)(unsafe.Pointer(Data))
 
 	// Reset custom intents if Data is nil.

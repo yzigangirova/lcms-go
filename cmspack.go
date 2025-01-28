@@ -2582,10 +2582,10 @@ type cmsFormattersFactoryList struct {
 }
 
 // Duplicate the zone of memory used by the plugin in the new context
-func DupFormatterFactoryList(ctx cmsContext, src cmsContext) {
+func DupFormatterFactoryList(ctx CmsContext, src CmsContext) {
 	var newHead cmsFormattersPluginChunkType
 	var previousEntry *cmsFormattersFactoryList
-	head := (*cmsFormattersPluginChunkType)((cmsContextStruct)(*src).chunks[FormattersPlugin])
+	head := (*cmsFormattersPluginChunkType)((CmsContextStruct)(*src).chunks[FormattersPlugin])
 
 	if head == nil {
 		panic("Source context does not contain FormattersPlugin chunk")
@@ -2593,7 +2593,7 @@ func DupFormatterFactoryList(ctx cmsContext, src cmsContext) {
 
 	// Walk the list and copy all nodes
 	for entry := head.FactoryList; entry != nil; entry = entry.Next {
-		newEntry := (*cmsFormattersFactoryList)(cmsSubAllocDup((cmsContextStruct)(*ctx).MemPool, unsafe.Pointer(entry), uint32(unsafe.Sizeof((*cmsFormattersFactoryList)(entry)))))
+		newEntry := (*cmsFormattersFactoryList)(cmsSubAllocDup((CmsContextStruct)(*ctx).MemPool, unsafe.Pointer(entry), uint32(unsafe.Sizeof((*cmsFormattersFactoryList)(entry)))))
 		if newEntry == nil {
 			return
 		}
@@ -2610,11 +2610,11 @@ func DupFormatterFactoryList(ctx cmsContext, src cmsContext) {
 		}
 	}
 
-	(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup((cmsContextStruct)(*ctx).MemPool, unsafe.Pointer(&newHead), uint32(unsafe.Sizeof(newHead)))
+	(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup((CmsContextStruct)(*ctx).MemPool, unsafe.Pointer(&newHead), uint32(unsafe.Sizeof(newHead)))
 }
 
 // Allocate and initialize the Formatters plugin chunk
-func cmsAllocFormattersPluginChunk(ctx cmsContext, src cmsContext) {
+func cmsAllocFormattersPluginChunk(ctx CmsContext, src CmsContext) {
 	if ctx == nil {
 		panic("Context is nil")
 	}
@@ -2624,13 +2624,13 @@ func cmsAllocFormattersPluginChunk(ctx cmsContext, src cmsContext) {
 		DupFormatterFactoryList(ctx, src)
 	} else {
 		staticChunk := cmsFormattersPluginChunkType{}
-		(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup((cmsContextStruct)(*ctx).MemPool, unsafe.Pointer(&staticChunk), uint32(unsafe.Sizeof(staticChunk)))
+		(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup((CmsContextStruct)(*ctx).MemPool, unsafe.Pointer(&staticChunk), uint32(unsafe.Sizeof(staticChunk)))
 	}
 }
 
 // Register formatters plugin
-func cmsRegisterFormattersPlugin(contextID cmsContext, data *cmsPluginBase) bool {
-	ctx := (*cmsFormattersPluginChunkType)((cmsContextStruct)(*contextID).chunks[FormattersPlugin])
+func cmsRegisterFormattersPlugin(contextID CmsContext, data *cmsPluginBase) bool {
+	ctx := (*cmsFormattersPluginChunkType)((CmsContextStruct)(*contextID).chunks[FormattersPlugin])
 	plugin := (*cmsPluginFormatters)(unsafe.Pointer(data))
 
 	if plugin == nil {
@@ -2649,8 +2649,8 @@ func cmsRegisterFormattersPlugin(contextID cmsContext, data *cmsPluginBase) bool
 }
 
 // Get a formatter
-func cmsGetFormatter(contextID cmsContext, typeID uint32, direction cmsFormatterDirection, dwFlags uint32) cmsFormatter {
-	ctx := (*cmsFormattersPluginChunkType)((cmsContextStruct)(*contextID).chunks[FormattersPlugin])
+func cmsGetFormatter(contextID CmsContext, typeID uint32, direction cmsFormatterDirection, dwFlags uint32) cmsFormatter {
+	ctx := (*cmsFormattersPluginChunkType)((CmsContextStruct)(*contextID).chunks[FormattersPlugin])
 
 	if T_CHANNELS(typeID) == 0 {
 		return cmsFormatter{} // Return a null formatter
@@ -2680,8 +2680,8 @@ func cmsFormatterIs8bit(formatType uint32) bool {
 	return T_BYTES(formatType) == 1
 }
 
-func cmsFormatterForColorspaceOfProfile(hProfile unsafe.Pointer, nBytes uint32, isFloat bool) uint32 {
-	colorSpace := cmsGetColorSpace(hProfile)
+func cmsFormatterForColorspaceOfProfile(hProfile CmsHPROFILE, nBytes uint32, isFloat bool) uint32 {
+	colorSpace := CmsGetColorSpace(hProfile)
 	colorSpaceBits := cmsLCMScolorSpace(colorSpace)
 	nOutputChans := cmsChannelsOfColorSpace(colorSpace)
 	if nOutputChans < 0 {
@@ -2694,7 +2694,7 @@ func cmsFormatterForColorspaceOfProfile(hProfile unsafe.Pointer, nBytes uint32, 
 	return FLOAT_SH(floatFlag) | COLORSPACE_SH(uint32(colorSpaceBits)) | BYTES_SH(nBytes) | CHANNELS_SH(uint32(nOutputChans))
 }
 
-func cmsFormatterForPCSOfProfile(hProfile unsafe.Pointer, nBytes uint32, isFloat bool) uint32 {
+func cmsFormatterForPCSOfProfile(hProfile CmsHPROFILE, nBytes uint32, isFloat bool) uint32 {
 	colorSpace := cmsGetPCS(hProfile)
 	colorSpaceBits := cmsLCMScolorSpace(colorSpace)
 	nOutputChans := cmsChannelsOf(colorSpace)

@@ -1,34 +1,37 @@
 package golcms
+
 // This file contains routines for resampling and LUT optimization, black point detection
 // and black preservation.
 
-
-import "math"
+import (
+	"math"
+	"unsafe"
+)
 
 // CreateRoundtripXForm creates a PCS -> PCS round trip transform, always using relative intent on the device -> PCS.
-func CreateRoundtripXForm(hProfile cmsHPROFILE, nIntent uint32) cmsHTRANSFORM {
+func CreateRoundtripXForm(hProfile CmsHPROFILE, nIntent uint32) CmsHTRANSFORM {
 	ContextID := cmsGetProfileContextID(hProfile)
 	hLab := cmsCreateLab4ProfileTHR(ContextID, nil)
-	var xform cmsHTRANSFORM
+	var xform CmsHTRANSFORM
 	BPC := [4]bool{false, false, false, false}
 	States := [4]float64{1.0, 1.0, 1.0, 1.0}
-	hProfiles := [4]cmsHPROFILE{hLab, hProfile, hProfile, hLab}
+	hProfiles := [4]CmsHPROFILE{hLab, hProfile, hProfile, hLab}
 	Intents := [4]uint32{INTENT_RELATIVE_COLORIMETRIC, nIntent, INTENT_RELATIVE_COLORIMETRIC, INTENT_RELATIVE_COLORIMETRIC}
 
-	xform = cmsCreateExtendedTransform(
+	xform = CmsHTRANSFORM(cmsCreateExtendedTransform(
 		ContextID, 4, hProfiles[:], BPC[:], Intents[:],
 		States[:], nil, 0, TYPE_Lab_DBL, TYPE_Lab_DBL, cmsFLAGS_NOCACHE|cmsFLAGS_NOOPTIMIZE,
-	)
+	))
 
-	cmsCloseProfile(hLab)
+	CmsCloseProfile(hLab)
 	return xform
 }
 
-// BlackPointAsDarkerColorant uses darker colorants to obtain the black point. 
+// BlackPointAsDarkerColorant uses darker colorants to obtain the black point.
 // This works in the relative colorimetric intent and assumes more ink results in darker colors. No ink limit is assumed.
-func BlackPointAsDarkerColorant(hInput cmsHPROFILE, Intent uint32, BlackPoint *cmsCIEXYZ, dwFlags uint32) bool {
-	var Black *uint16
-	var xform cmsHTRANSFORM
+func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *cmsCIEXYZ, dwFlags uint32) bool {
+	var Black []uint16
+	var xform CmsHTRANSFORM
 	var Lab cmsCIELab
 	var BlackXYZ cmsCIEXYZ
 	var dwFormat uint32
@@ -48,7 +51,8 @@ func BlackPointAsDarkerColorant(hInput cmsHPROFILE, Intent uint32, BlackPoint *c
 	dwFormat = cmsFormatterForColorspaceOfProfile(hInput, 2, false)
 
 	// Try to get black by using black colorant.
-	Space = cmsGetColorSpace(hInput)
+	Space = CmsGetColorSpace(hInput)
+	Black = make([]uint16, 4)
 
 	// This function returns darker colorant in 16 bits for several spaces.
 	if !cmsEndPointsBySpace(Space, nil, &Black, &nChannels) {
@@ -79,7 +83,7 @@ func BlackPointAsDarkerColorant(hInput cmsHPROFILE, Intent uint32, BlackPoint *c
 		ContextID, hInput, dwFormat, hLab, TYPE_Lab_DBL,
 		Intent, cmsFLAGS_NOOPTIMIZE|cmsFLAGS_NOCACHE,
 	)
-	cmsCloseProfile(hLab)
+	CmsCloseProfile(hLab)
 
 	if xform == nil {
 		if BlackPoint != nil {
@@ -89,7 +93,7 @@ func BlackPointAsDarkerColorant(hInput cmsHPROFILE, Intent uint32, BlackPoint *c
 	}
 
 	// Convert black to Lab.
-	cmsDoTransform(xform, Black, &Lab, 1)
+	CmsDoTransform(xform, unsafe.Pointer(&Black[0]), unsafe.Pointer(&Lab), 1)
 
 	// Force it to be neutral; check for inconsistencies.
 	Lab.a = 0
@@ -110,11 +114,12 @@ func BlackPointAsDarkerColorant(hInput cmsHPROFILE, Intent uint32, BlackPoint *c
 
 	return true
 }
+
 // BlackPointUsingPerceptualBlack calculates the black point of an output CMYK profile,
 // discounting any ink-limiting embedded in the profile.
 // The process involves a roundtrip transformation using perceptual intent:
 // Lab (0, 0, 0) -> [Perceptual] Profile -> CMYK -> [Rel. Colorimetric] Profile -> Lab.
-func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile cmsHPROFILE) bool {
+func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE) bool {
 	var LabIn, LabOut cmsCIELab
 	var BlackXYZ cmsCIEXYZ
 
@@ -139,7 +144,7 @@ func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile cmsHPROFILE)
 	LabIn.L, LabIn.a, LabIn.b = 0, 0, 0
 
 	// Perform the roundtrip transformation
-	cmsDoTransform(hRoundTrip, &LabIn, &LabOut, 1)
+	CmsDoTransform(hRoundTrip, unsafe.Pointer(&LabIn), unsafe.Pointer(&LabOut), 1)
 
 	// Clip Lab values to reasonable limits
 	if LabOut.L > 50 {
@@ -161,11 +166,10 @@ func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile cmsHPROFILE)
 	return true
 }
 
-
 // cmsDetectBlackPoint detects the black point for a given profile and intent.
 // This function attempts to address the issues with broken black point tags in profiles.
 // It ensures the chromaticity of the black point is neutral to avoid tints during compensation.
-func cmsDetectBlackPoint(BlackPoint *cmsCIEXYZ, hProfile cmsHPROFILE, Intent, dwFlags uint32) bool {
+func cmsDetectBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE, Intent, dwFlags uint32) bool {
 	// Ensure the device class is adequate
 	devClass := cmsGetDeviceClass(hProfile)
 	if devClass == cmsSigLinkClass ||
@@ -206,26 +210,26 @@ func cmsDetectBlackPoint(BlackPoint *cmsCIEXYZ, hProfile cmsHPROFILE, Intent, dw
 		return true
 	}
 
-
 	// Handle v2 profiles and compute the black point based on the profile class
 	if Intent == INTENT_RELATIVE_COLORIMETRIC &&
 		cmsGetDeviceClass(hProfile) == cmsSigOutputClass &&
-		cmsGetColorSpace(hProfile) == cmsSigCmykData {
+		CmsGetColorSpace(hProfile) == cmsSigCmykData {
 		return BlackPointUsingPerceptualBlack(BlackPoint, hProfile)
 	}
 
 	// Compute black point using the current intent
 	return BlackPointAsDarkerColorant(hProfile, Intent, BlackPoint, dwFlags)
 }
+
 // RootOfLeastSquaresFitQuadraticCurve calculates the root of a least squares fit quadratic curve to data.
 // Reference: http://www.personal.psu.edu/jhm/f90/lectures/lsq2.html
 func RootOfLeastSquaresFitQuadraticCurve(n int, x []float64, y []float64) float64 {
 	var (
-		sumX, sumX2, sumX3, sumX4          float64
-		sumY, sumYX, sumYX2               float64
-		d, a, b, c                        float64
-		m                                 cmsMAT3
-		v, res                            cmsVEC3
+		sumX, sumX2, sumX3, sumX4 float64
+		sumY, sumYX, sumYX2       float64
+		d, a, b, c                float64
+		m                         cmsMAT3
+		v, res                    cmsVEC3
 	)
 
 	// A minimum of 4 data points is required for fitting
@@ -249,9 +253,9 @@ func RootOfLeastSquaresFitQuadraticCurve(n int, x []float64, y []float64) float6
 	}
 
 	// Construct the matrix and vector for solving the quadratic coefficients
-	cmsVEC3init(&m.v[0], float64(n), sumX, sumX2)
-	cmsVEC3init(&m.v[1], sumX, sumX2, sumX3)
-	cmsVEC3init(&m.v[2], sumX2, sumX3, sumX4)
+	cmsVEC3init(&m.V[0], float64(n), sumX, sumX2)
+	cmsVEC3init(&m.V[1], sumX, sumX2, sumX3)
+	cmsVEC3init(&m.V[2], sumX2, sumX3, sumX4)
 
 	cmsVEC3init(&v, sumY, sumYX, sumYX2)
 
@@ -261,13 +265,13 @@ func RootOfLeastSquaresFitQuadraticCurve(n int, x []float64, y []float64) float6
 	}
 
 	// Extract quadratic coefficients
-	a = res.n[2]
-	b = res.n[1]
-	c = res.n[0]
+	a = res.N[2]
+	b = res.N[1]
+	c = res.N[0]
 
 	// Handle cases based on the value of 'a'
-	if math.Abs(a) < 1.0E-10 {
-		if math.Abs(b) < 1.0E-10 {
+	if math.Abs(a) < 1.0e-10 {
+		if math.Abs(b) < 1.0e-10 {
 			return 0
 		}
 		// Linear solution
@@ -285,12 +289,11 @@ func RootOfLeastSquaresFitQuadraticCurve(n int, x []float64, y []float64) float6
 	}
 }
 
-
 // cmsDetectDestinationBlackPoint calculates the black point of a destination profile.
 // This algorithm comes from the Adobe paper disclosing its black point compensation method.
-func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile cmsHPROFILE, Intent, dwFlags uint32) bool {
+func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE, Intent, dwFlags uint32) bool {
 	var ColorSpace cmsColorSpaceSignature
-	var hRoundTrip cmsHTRANSFORM
+	var hRoundTrip CmsHTRANSFORM
 	var InitialLab, destLab, Lab cmsCIELab
 	var inRamp, outRamp, yRamp, x, y [256]float64
 	var MinL, MaxL, lo, hi float64
@@ -336,7 +339,7 @@ func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile cmsHPROFILE,
 	}
 
 	// Check if the profile is LUT-based and its color space
-	ColorSpace = cmsGetColorSpace(hProfile)
+	ColorSpace = CmsGetColorSpace(hProfile)
 	if !cmsIsCLUT(hProfile, Intent, LCMS_USED_AS_OUTPUT) ||
 		(ColorSpace != cmsSigGrayData &&
 			ColorSpace != cmsSigRgbData &&
@@ -367,7 +370,7 @@ func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile cmsHPROFILE,
 		Lab.a = math.Min(50, math.Max(-50, InitialLab.a))
 		Lab.b = math.Min(50, math.Max(-50, InitialLab.b))
 
-		cmsDoTransform(hRoundTrip, &Lab, &destLab, 1)
+		CmsDoTransform(hRoundTrip, unsafe.Pointer(&Lab), unsafe.Pointer(&destLab), 1)
 
 		inRamp[l] = Lab.L
 		outRamp[l] = destLab.L

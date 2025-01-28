@@ -1,7 +1,7 @@
 package golcms
 
 import (
-	"errors"
+	//"errors"
 	"unsafe"
 	//"sync"
 	"reflect"
@@ -19,7 +19,7 @@ var cmsAdaptationStateChunk = cmsAdaptationStateChunkType{
 }
 
 // cmsAllocAdaptationStateChunk initializes and duplicates the observer adaptation state.
-func cmsAllocAdaptationStateChunk(ctx cmsContext, src cmsContext) {
+func cmsAllocAdaptationStateChunk(ctx CmsContext, src CmsContext) {
 	// Default adaptation state chunk used when no source is provided.
 	defaultAdaptationStateChunk := cmsAdaptationStateChunkType{
 		AdaptationState: DEFAULT_OBSERVER_ADAPTATION_STATE,
@@ -37,9 +37,9 @@ func cmsAllocAdaptationStateChunk(ctx cmsContext, src cmsContext) {
 
 // Sets adaptation state for absolute colorimetric intent in the given context.  Adaptation state applies on all
 // but cmsCreateExtendedTransformTHR().  Little CMS can handle incomplete adaptation states.
-func cmsSetAdaptationStateTHR(ContextID cmsContext, d float64) float64 {
+func cmsSetAdaptationStateTHR(ContextID CmsContext, d float64) float64 {
 
-	ptr := (*cmsAdaptationStateChunkType)(cmsContextGetClientChunk(ContextID, AdaptationStateContext))
+	ptr := (*cmsAdaptationStateChunkType)(CmsContextGetClientChunk(ContextID, AdaptationStateContext))
 
 	// Get previous value for return
 	prev := ptr.AdaptationState
@@ -69,11 +69,11 @@ var DEFAULT_ALARM_CODES_VALUE = [cmsMAXCHANNELS]uint16{0x7F00, 0x7F00, 0x7F00, 0
 //var alarmCodeMutex sync.Mutex
 
 // cmsSetAlarmCodesTHR sets the alarm codes for a specific context.
-func cmsSetAlarmCodesTHR(ContextID cmsContext, AlarmCodesP [cmsMAXCHANNELS]uint16) {
+func cmsSetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP [cmsMAXCHANNELS]uint16) {
 	//alarmCodeMutex.Lock()
 	//defer alarmCodeMutex.Unlock()
 
-	ContextAlarmCodes := (*cmsAlarmCodesChunkType)(cmsContextGetClientChunk(ContextID, AlarmCodesContext))
+	ContextAlarmCodes := (*cmsAlarmCodesChunkType)(CmsContextGetClientChunk(ContextID, AlarmCodesContext))
 	if ContextAlarmCodes == nil {
 		panic("ContextAlarmCodes is nil")
 	}
@@ -82,11 +82,11 @@ func cmsSetAlarmCodesTHR(ContextID cmsContext, AlarmCodesP [cmsMAXCHANNELS]uint1
 }
 
 // cmsGetAlarmCodesTHR gets the alarm codes for a specific context.
-func cmsGetAlarmCodesTHR(ContextID cmsContext, AlarmCodesP [cmsMAXCHANNELS]uint16) {
+func cmsGetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP [cmsMAXCHANNELS]uint16) {
 	//alarmCodeMutex.Lock()
 	//defer alarmCodeMutex.Unlock()
 
-	ContextAlarmCodes := (*cmsAlarmCodesChunkType)(cmsContextGetClientChunk(ContextID, AlarmCodesContext))
+	ContextAlarmCodes := (*cmsAlarmCodesChunkType)(CmsContextGetClientChunk(ContextID, AlarmCodesContext))
 	if ContextAlarmCodes == nil {
 		panic("ContextAlarmCodes is nil")
 	}
@@ -113,7 +113,7 @@ func cmsGetAlarmCodes(OldAlarm [cmsMAXCHANNELS]uint16) {
 }
 
 // cmsAllocAlarmCodesChunk initializes and duplicates alarm codes.
-func cmsAllocAlarmCodesChunk(ctx cmsContext, src cmsContext) {
+func cmsAllocAlarmCodesChunk(ctx CmsContext, src CmsContext) {
 	// Define the static default alarm codes chunk
 	AlarmCodesChunk := &cmsAlarmCodesChunkType{
 		AlarmCodes: DEFAULT_ALARM_CODES_VALUE,
@@ -137,7 +137,7 @@ func cmsAllocAlarmCodesChunk(ctx cmsContext, src cmsContext) {
 // -----------------------------------------------------------------------
 
 // cmsDeleteTransform releases the resources associated with a transform.
-func cmsDeleteTransform(hTransform cmsHTRANSFORM) {
+func cmsDeleteTransform(hTransform CmsHTRANSFORM) {
 	p := (*cmsTRANSFORM)(hTransform)
 
 	if p == nil {
@@ -193,7 +193,7 @@ func PixelSize(Format uint32) uint32 {
 }
 
 // cmsDoTransform applies a transformation to the input buffer and writes the result to the output buffer.
-func cmsDoTransform(Transform cmsHTRANSFORM, InputBuffer, OutputBuffer unsafe.Pointer, Size uint32) {
+func CmsDoTransform(Transform CmsHTRANSFORM, InputBuffer, OutputBuffer unsafe.Pointer, Size uint32) {
 	p := (*cmsTRANSFORM)(Transform) // Cast the generic Transform to the specific type cmsTRANSFORM
 	var stride cmsStride
 
@@ -338,7 +338,7 @@ func PrecalculatedXFORM(
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			// Use slice indexing for accum and output
 			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
-			p.Lut.Eval16Fn(wIn[:], wOut[:], p.Lut.Data)
+			p.Lut.Eval16Fn(&wIn[0], &wOut[0], p.Lut.Data)
 			output = p.ToOutput(p, wOut[:], output, Stride.BytesPerPlaneOut)
 		}
 
@@ -353,17 +353,17 @@ func TransformOnePixelWithGamutCheck(p *cmsTRANSFORM, wIn, wOut []uint16) {
 
 	woutOfGamutSlice := (*[1]uint16)(unsafe.Pointer(&wOutOfGamut))[:]
 	// Evaluate the gamut check function
-	p.GamutCheck.Eval16Fn(wIn, woutOfGamutSlice, p.GamutCheck.Data)
+	p.GamutCheck.Eval16Fn(&wIn[0], &woutOfGamutSlice[0], p.GamutCheck.Data)
 
 	if wOutOfGamut >= 1 {
 		// If out of gamut, use alarm codes
-		contextAlarmCodes := (*cmsAlarmCodesChunkType)(cmsContextGetClientChunk(p.ContextID, AlarmCodesContext))
+		contextAlarmCodes := (*cmsAlarmCodesChunkType)(CmsContextGetClientChunk(p.ContextID, AlarmCodesContext))
 		for i := uint32(0); i < p.Lut.OutputChannels; i++ {
 			wOut[i] = contextAlarmCodes.AlarmCodes[i]
 		}
 	} else {
 		// Otherwise, evaluate the LUT
-		p.Lut.Eval16Fn(wIn, wOut, p.Lut.Data)
+		p.Lut.Eval16Fn(&wIn[0], &wOut[0], p.Lut.Data)
 	}
 }
 func PrecalculatedXFORMGamutCheck(
@@ -423,7 +423,7 @@ func CachedXFORM(
 			if reflect.DeepEqual(wIn, cache.CacheIn) {
 				copy(wOut[:], cache.CacheOut[:])
 			} else {
-				p.Lut.Eval16Fn(wIn[:], wOut[:], p.Lut.Data)
+				p.Lut.Eval16Fn(&wIn[0], &wOut[0], p.Lut.Data)
 				copy(cache.CacheIn[:], wIn[:])
 				copy(cache.CacheOut[:], wOut[:])
 			}
@@ -493,7 +493,7 @@ type cmsTransformPluginChunkType struct {
 var cmsTransformPluginChunk = cmsTransformPluginChunkType{TransformCollection: nil}
 
 // DupPluginTransformList duplicates the transform plugin list for a new context.
-func DupPluginTransformList(ctx cmsContext, src cmsContext) {
+func DupPluginTransformList(ctx CmsContext, src CmsContext) {
 	var newHead cmsTransformPluginChunkType
 	var entry, prev *cmsTransformCollection
 	head := (*cmsTransformPluginChunkType)(src.chunks[TransformPlugin])
@@ -526,7 +526,7 @@ func DupPluginTransformList(ctx cmsContext, src cmsContext) {
 }
 
 // cmsAllocTransformPluginChunk allocates the transform plugin chunk.
-func cmsAllocTransformPluginChunk(ctx cmsContext, src cmsContext) {
+func cmsAllocTransformPluginChunk(ctx CmsContext, src CmsContext) {
 	if src != nil {
 		DupPluginTransformList(ctx, src)
 	} else {
@@ -570,7 +570,7 @@ func cmsTransform2toTransformConverter(
 }
 
 // cmsRegisterTransformPlugin registers a new transform plugin.
-func cmsRegisterTransformPlugin(ContextID cmsContext, Data *cmsPluginBase) bool {
+func cmsRegisterTransformPlugin(ContextID CmsContext, Data *cmsPluginBase) bool {
 	plugin := (*cmsPluginTransform)(unsafe.Pointer(Data))
 	ctx := (*cmsTransformPluginChunkType)(ContextID.chunks[TransformPlugin])
 
@@ -686,7 +686,7 @@ func ParallelizeIfSuitable(p *cmsTRANSFORM) {
 		panic("cmsTRANSFORM pointer is nil")
 	}
 
-	ctx := (*cmsParallelizationPluginChunkType)(cmsContextGetClientChunk(p.ContextID, ParallelizationPlugin))
+	ctx := (*cmsParallelizationPluginChunkType)(CmsContextGetClientChunk(p.ContextID, ParallelizationPlugin))
 
 	if ctx != nil && ctx.SchedulerFn != nil {
 		p.Worker = p.Xform
@@ -715,13 +715,13 @@ func PackNothing(
 }
 
 func AllocEmptyTransform(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	lut *cmsPipeline,
 	Intent uint32,
 	InputFormat, OutputFormat, dwFlags *uint32,
 ) *cmsTRANSFORM {
 	// Get the transform plugin chunk
-	ctx := (*cmsTransformPluginChunkType)(cmsContextGetClientChunk(ContextID, TransformPlugin))
+	ctx := (*cmsTransformPluginChunkType)(CmsContextGetClientChunk(ContextID, TransformPlugin))
 	var plugin *cmsTransformCollection
 
 	// Allocate memory for the transform structure
@@ -782,7 +782,7 @@ func AllocEmptyTransform(
 
 		if p.FromInputFloat == nil || p.ToOutputFloat == nil {
 			cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported raster format")
-			cmsDeleteTransform(cmsHTRANSFORM(p))
+			cmsDeleteTransform(CmsHTRANSFORM(p))
 			return nil
 		}
 
@@ -803,7 +803,7 @@ func AllocEmptyTransform(
 
 			if p.FromInput == nil || p.ToOutput == nil {
 				cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported raster format")
-				cmsDeleteTransform(cmsHTRANSFORM(p))
+				cmsDeleteTransform(CmsHTRANSFORM(p))
 				return nil
 			}
 
@@ -841,14 +841,14 @@ func AllocEmptyTransform(
 }
 func GetXFormColorSpaces(
 	nProfiles uint32,
-	hProfiles []cmsHPROFILE,
+	hProfiles []CmsHPROFILE,
 	Input, Output *cmsColorSpaceSignature,
 ) bool {
 	if nProfiles == 0 || hProfiles[0] == nil {
 		return false
 	}
 
-	*Input = cmsGetColorSpace(unsafe.Pointer(hProfiles[0]))
+	*Input = CmsGetColorSpace(hProfiles[0])
 	PostColorSpace := *Input
 
 	for i := uint32(0); i < nProfiles; i++ {
@@ -857,7 +857,7 @@ func GetXFormColorSpaces(
 			return false
 		}
 
-		cls := cmsGetDeviceClass(unsafe.Pointer(hProfile))
+		cls := cmsGetDeviceClass(hProfile)
 		var ColorSpaceIn, ColorSpaceOut cmsColorSpaceSignature
 
 		lIsInput := PostColorSpace != cmsSigXYZData && PostColorSpace != cmsSigLabData
@@ -866,30 +866,31 @@ func GetXFormColorSpaces(
 		case cls == cmsSigNamedColorClass:
 			ColorSpaceIn = cmsSig1colorData
 			if nProfiles > 1 {
-				ColorSpaceOut = cmsGetPCS(unsafe.Pointer(hProfile))
+				ColorSpaceOut = cmsGetPCS(hProfile)
 			} else {
-				ColorSpaceOut = cmsGetColorSpace(unsafe.Pointer(hProfile))
+				ColorSpaceOut = CmsGetColorSpace(hProfile)
 			}
 
 		case lIsInput || cls == cmsSigLinkClass:
-			ColorSpaceIn = cmsGetColorSpace(unsafe.Pointer(hProfile))
-			ColorSpaceOut = cmsGetPCS(unsafe.Pointer(hProfile))
+			ColorSpaceIn = CmsGetColorSpace(hProfile)
+			ColorSpaceOut = cmsGetPCS(hProfile)
 
 		default:
-			ColorSpaceIn = cmsGetPCS(unsafe.Pointer(hProfile))
-			ColorSpaceOut = cmsGetColorSpace(unsafe.Pointer(hProfile))
+			ColorSpaceIn = cmsGetPCS(hProfile)
+			ColorSpaceOut = CmsGetColorSpace(hProfile)
+
+			if i == 0 {
+				*Input = ColorSpaceIn
+			}
+
+			PostColorSpace = ColorSpaceOut
 		}
 
-		if i == 0 {
-			*Input = ColorSpaceIn
-		}
-
-		PostColorSpace = ColorSpaceOut
+		*Output = PostColorSpace
 	}
-
-	*Output = PostColorSpace
 	return true
 }
+
 func IsProperColorSpace(Check cmsColorSpaceSignature, dwFormat uint32) bool {
 	Space1 := int(T_COLORSPACE(dwFormat))
 	Space2 := cmsLCMScolorSpace(Check)
@@ -912,39 +913,39 @@ func IsProperColorSpace(Check cmsColorSpaceSignature, dwFormat uint32) bool {
 // Jun-21-2000: Some profiles (those that comes with W2K) comes
 // with the media white (media black?) x 100. Add a sanity check
 
-func NormalizeXYZ(Dest *cmsCIEXYZ ){
-   for Dest.X > 2. &&
-           Dest.Y > 2. &&
-           Dest.Z > 2. {
+func NormalizeXYZ(Dest *cmsCIEXYZ) {
+	for Dest.X > 2. &&
+		Dest.Y > 2. &&
+		Dest.Z > 2. {
 
-               Dest.X /= 10.;
-               Dest.Y /= 10.;
-               Dest.Z /= 10.;
-       }
+		Dest.X /= 10.
+		Dest.Y /= 10.
+		Dest.Z /= 10.
+	}
 }
 
-func SetWhitePoint(wtPt *cmsCIEXYZ, src *cmsCIEXYZ){
-    if (src == nil) {
-        wtPt.X = cmsD50X;
-        wtPt.Y = cmsD50Y;
-        wtPt.Z = cmsD50Z;
-    }else {
-        wtPt.X = src.X;
-        wtPt.Y = src.Y;
-        wtPt.Z = src.Z;
+func SetWhitePoint(wtPt *cmsCIEXYZ, src *cmsCIEXYZ) {
+	if src == nil {
+		wtPt.X = cmsD50X
+		wtPt.Y = cmsD50Y
+		wtPt.Z = cmsD50Z
+	} else {
+		wtPt.X = src.X
+		wtPt.Y = src.Y
+		wtPt.Z = src.Z
 
-        NormalizeXYZ(wtPt);
-    }
+		NormalizeXYZ(wtPt)
+	}
 
 }
 func cmsCreateExtendedTransform(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	nProfiles uint32,
-	hProfiles []cmsHPROFILE,
+	hProfiles []CmsHPROFILE,
 	BPC []bool,
 	Intents []uint32,
 	AdaptationStates []float64,
-	hGamutProfile cmsHPROFILE,
+	hGamutProfile CmsHPROFILE,
 	nGamutPCSposition uint32,
 	InputFormat uint32,
 	OutputFormat uint32,
@@ -968,43 +969,43 @@ func cmsCreateExtendedTransform(
 	// Retrieve entry and exit color spaces
 	var EntryColorSpace, ExitColorSpace cmsColorSpaceSignature
 	if !GetXFormColorSpaces(nProfiles, hProfiles, &EntryColorSpace, &ExitColorSpace) {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_NULL, "NULL input profiles on transform");
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_NULL, "NULL input profiles on transform")
 		return nil
 	}
 
 	// Validate color spaces
 	if !IsProperColorSpace(EntryColorSpace, InputFormat) {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_COLORSPACE_CHECK, "Wrong input color space on transform");
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_COLORSPACE_CHECK, "Wrong input color space on transform")
 		return nil
 	}
 	if !IsProperColorSpace(ExitColorSpace, OutputFormat) {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_COLORSPACE_CHECK, "Wrong output color space on transform");
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_COLORSPACE_CHECK, "Wrong output color space on transform")
 		return nil
 	}
-   // Check whatever the transform is 16 bits and involves linear RGB in first profile. If so, disable optimizations
-   if EntryColorSpace == cmsSigRgbData && T_BYTES(InputFormat) == 2 && (dwFlags & cmsFLAGS_NOOPTIMIZE) == 0{
-	   gamma := cmsDetectRGBProfileGamma(hProfiles[0], 0.1);
+	// Check whatever the transform is 16 bits and involves linear RGB in first profile. If so, disable optimizations
+	if EntryColorSpace == cmsSigRgbData && T_BYTES(InputFormat) == 2 && (dwFlags&cmsFLAGS_NOOPTIMIZE) == 0 {
+		gamma := cmsDetectRGBProfileGamma(hProfiles[0], 0.1)
 
-	   if (gamma > 0 && gamma < 1.6){
-		   dwFlags |= cmsFLAGS_NOOPTIMIZE
-	  }
-   }
+		if gamma > 0 && gamma < 1.6 {
+			dwFlags |= cmsFLAGS_NOOPTIMIZE
+		}
+	}
 
 	// Build transformation pipeline
 	Lut := cmsLinkProfiles(ContextID, nProfiles, Intents, hProfiles, BPC, AdaptationStates, dwFlags)
 	if Lut == nil {
-        cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_NOT_SUITABLE, "Couldn't link the profiles")
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_NOT_SUITABLE, "Couldn't link the profiles")
 		return nil
 	}
 
 	// Validate channel counts
-   // Check channel count
-   if ((cmsChannelsOfColorSpace(EntryColorSpace) != int32 (cmsPipelineInputChannels(Lut))) ||
-   (cmsChannelsOfColorSpace(ExitColorSpace)  != int32(cmsPipelineOutputChannels(Lut)))) {
-   cmsPipelineFree(Lut);
-   cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_NOT_SUITABLE, "Channel count doesn't match. Profile is corrupted")
-   return nil;
-}
+	// Check channel count
+	if (cmsChannelsOfColorSpace(EntryColorSpace) != int32(cmsPipelineInputChannels(Lut))) ||
+		(cmsChannelsOfColorSpace(ExitColorSpace) != int32(cmsPipelineOutputChannels(Lut))) {
+		cmsPipelineFree(Lut)
+		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_NOT_SUITABLE, "Channel count doesn't match. Profile is corrupted")
+		return nil
+	}
 
 	// Allocate transform
 	xform := AllocEmptyTransform(ContextID, Lut, Intents[nProfiles-1], &InputFormat, &OutputFormat, &dwFlags)
@@ -1016,71 +1017,71 @@ func cmsCreateExtendedTransform(
 	xform.EntryColorSpace = EntryColorSpace
 	xform.ExitColorSpace = ExitColorSpace
 	xform.RenderingIntent = Intents[nProfiles-1]
-   // Take white points
-   SetWhitePoint(&xform.EntryWhitePoint, (*cmsCIEXYZ) (cmsReadTag(hProfiles[0], cmsSigMediaWhitePointTag)))
-   SetWhitePoint(&xform.ExitWhitePoint,  (*cmsCIEXYZ) (cmsReadTag(hProfiles[nProfiles-1], cmsSigMediaWhitePointTag)))
+	// Take white points
+	SetWhitePoint(&xform.EntryWhitePoint, (*cmsCIEXYZ)(cmsReadTag(hProfiles[0], cmsSigMediaWhitePointTag)))
+	SetWhitePoint(&xform.ExitWhitePoint, (*cmsCIEXYZ)(cmsReadTag(hProfiles[nProfiles-1], cmsSigMediaWhitePointTag)))
 
 	// Add optional gamut check
 	if hGamutProfile != nil && (dwFlags&cmsFLAGS_GAMUTCHECK != 0) {
 		xform.GamutCheck = cmsCreateGamutCheckPipeline(ContextID, hProfiles, BPC, Intents, AdaptationStates, nGamutPCSposition, hGamutProfile)
 	}
-  // Try to read input and output colorant table
-  if cmsIsTag(hProfiles[0], cmsSigColorantTableTag) {
+	// Try to read input and output colorant table
+	if cmsIsTag(hProfiles[0], cmsSigColorantTableTag) {
 
-	// Input table can only come in this way.
-	xform.InputColorant = cmsDupNamedColorList((*cmsNAMEDCOLORLIST) (cmsReadTag(hProfiles[0], cmsSigColorantTableTag)))
-}
-
-// Output is a little bit more complex.
-if cmsGetDeviceClass(unsafe.Pointer(hProfiles[nProfiles-1])) == cmsSigLinkClass {
-
-	// This tag may exist only on devicelink profiles.
-	if (cmsIsTag(hProfiles[nProfiles-1], cmsSigColorantTableOutTag)) {
-
-		// It may be NULL if error
-		xform.OutputColorant = cmsDupNamedColorList((*cmsNAMEDCOLORLIST) (cmsReadTag(hProfiles[nProfiles-1], cmsSigColorantTableOutTag)))
+		// Input table can only come in this way.
+		xform.InputColorant = cmsDupNamedColorList((*cmsNAMEDCOLORLIST)(cmsReadTag(hProfiles[0], cmsSigColorantTableTag)))
 	}
 
-} else {
+	// Output is a little bit more complex.
+	if cmsGetDeviceClass(hProfiles[nProfiles-1]) == cmsSigLinkClass {
 
-	if (cmsIsTag(hProfiles[nProfiles-1], cmsSigColorantTableTag)) {
+		// This tag may exist only on devicelink profiles.
+		if cmsIsTag(hProfiles[nProfiles-1], cmsSigColorantTableOutTag) {
 
-		xform.OutputColorant = cmsDupNamedColorList((*cmsNAMEDCOLORLIST) (cmsReadTag(hProfiles[nProfiles-1], cmsSigColorantTableTag)))
-	}
-}
+			// It may be NULL if error
+			xform.OutputColorant = cmsDupNamedColorList((*cmsNAMEDCOLORLIST)(cmsReadTag(hProfiles[nProfiles-1], cmsSigColorantTableOutTag)))
+		}
 
-// Store the sequence of profiles
-if (dwFlags & cmsFLAGS_KEEP_SEQUENCE != 0) {
-	xform.Sequence = cmsCompileProfileSequence(ContextID, nProfiles, hProfiles);
-}else{
-	xform.Sequence = nil
-}
-// If this is a cached transform, init first value, which is zero (16 bits only)
-if (dwFlags & cmsFLAGS_NOCACHE == 0) {
+	} else {
 
-	memset(unsafe.Pointer(&xform.Cache.CacheIn[0]), 0, unsafe.Sizeof(xform.Cache.CacheIn));
+		if cmsIsTag(hProfiles[nProfiles-1], cmsSigColorantTableTag) {
 
-	if (xform.GamutCheck != nil) {
-		TransformOnePixelWithGamutCheck(xform, xform.Cache.CacheIn[:], xform.Cache.CacheOut[:])
-	}else {
-		xform.Lut.Eval16Fn(xform.Cache.CacheIn[:], xform.Cache.CacheOut[:], xform.Lut.Data)
+			xform.OutputColorant = cmsDupNamedColorList((*cmsNAMEDCOLORLIST)(cmsReadTag(hProfiles[nProfiles-1], cmsSigColorantTableTag)))
+		}
 	}
 
-}
+	// Store the sequence of profiles
+	if dwFlags&cmsFLAGS_KEEP_SEQUENCE != 0 {
+		xform.Sequence = cmsCompileProfileSequence(ContextID, nProfiles, hProfiles)
+	} else {
+		xform.Sequence = nil
+	}
+	// If this is a cached transform, init first value, which is zero (16 bits only)
+	if dwFlags&cmsFLAGS_NOCACHE == 0 {
+
+		memset(unsafe.Pointer(&xform.Cache.CacheIn[0]), 0, unsafe.Sizeof(xform.Cache.CacheIn))
+
+		if xform.GamutCheck != nil {
+			TransformOnePixelWithGamutCheck(xform, xform.Cache.CacheIn[:], xform.Cache.CacheOut[:])
+		} else {
+			xform.Lut.Eval16Fn(&xform.Cache.CacheIn[0], &xform.Cache.CacheOut[0], xform.Lut.Data)
+		}
+
+	}
 
 	return xform
 }
 
 // cmsCreateMultiprofileTransformTHR creates a multiprofile transform with a specified context.
 func cmsCreateMultiprofileTransformTHR(
-	ContextID cmsContext,
-	hProfiles []cmsHPROFILE,
+	ContextID CmsContext,
+	hProfiles []CmsHPROFILE,
 	nProfiles uint32,
 	InputFormat uint32,
 	OutputFormat uint32,
 	Intent uint32,
 	dwFlags uint32,
-) cmsHTRANSFORM {
+) CmsHTRANSFORM {
 	var BPC [256]bool
 	var Intents [256]uint32
 	var AdaptationStates [256]float64
@@ -1103,18 +1104,18 @@ func cmsCreateMultiprofileTransformTHR(
 	}
 
 	// Create the extended transform
-	return cmsHTRANSFORM(cmsCreateExtendedTransform(ContextID, nProfiles, hProfiles, BPC[:], Intents[:], AdaptationStates[:], nil, 0, InputFormat, OutputFormat, dwFlags))
+	return CmsHTRANSFORM(cmsCreateExtendedTransform(ContextID, nProfiles, hProfiles, BPC[:], Intents[:], AdaptationStates[:], nil, 0, InputFormat, OutputFormat, dwFlags))
 }
 
 // cmsCreateMultiprofileTransform creates a multiprofile transform with a default context.
 func cmsCreateMultiprofileTransform(
-	hProfiles []cmsHPROFILE,
+	hProfiles []CmsHPROFILE,
 	nProfiles uint32,
 	InputFormat uint32,
 	OutputFormat uint32,
 	Intent uint32,
 	dwFlags uint32,
-) cmsHTRANSFORM {
+) CmsHTRANSFORM {
 	// Check the number of profiles
 	if nProfiles <= 0 || nProfiles > 255 {
 		cmsSignalError(nil, cmsERROR_RANGE, "Wrong number of profiles")
@@ -1134,15 +1135,15 @@ func cmsCreateMultiprofileTransform(
 }
 
 func cmsCreateTransformTHR(
-	ContextID cmsContext,
-	Input cmsHPROFILE,
+	ContextID CmsContext,
+	Input CmsHPROFILE,
 	InputFormat uint32,
-	Output cmsHPROFILE,
+	Output CmsHPROFILE,
 	OutputFormat uint32,
 	Intent uint32,
 	dwFlags uint32,
-) cmsHTRANSFORM {
-	hProfiles := []cmsHPROFILE{Input, Output}
+) CmsHTRANSFORM {
+	hProfiles := []CmsHPROFILE{Input, Output}
 	nProfiles := uint32(1)
 	if Output != nil {
 		nProfiles = 2
@@ -1150,29 +1151,29 @@ func cmsCreateTransformTHR(
 	return cmsCreateMultiprofileTransformTHR(ContextID, hProfiles, nProfiles, InputFormat, OutputFormat, Intent, dwFlags)
 }
 
-func cmsCreateTransform(
-	Input cmsHPROFILE,
+func CmsCreateTransform(
+	Input CmsHPROFILE,
 	InputFormat uint32,
-	Output cmsHPROFILE,
+	Output CmsHPROFILE,
 	OutputFormat uint32,
 	Intent uint32,
 	dwFlags uint32,
-) (cmsHTRANSFORM) {
+) CmsHTRANSFORM {
 	return cmsCreateTransformTHR(cmsGetProfileContextID(Input), Input, InputFormat, Output, OutputFormat, Intent, dwFlags)
 }
 
 func cmsCreateProofingTransformTHR(
-	ContextID cmsContext,
-	InputProfile cmsHPROFILE,
+	ContextID CmsContext,
+	InputProfile CmsHPROFILE,
 	InputFormat uint32,
-	OutputProfile cmsHPROFILE,
+	OutputProfile CmsHPROFILE,
 	OutputFormat uint32,
-	ProofingProfile cmsHPROFILE,
+	ProofingProfile CmsHPROFILE,
 	nIntent uint32,
 	ProofingIntent uint32,
 	dwFlags uint32,
-) cmsHTRANSFORM {
-	hArray := []cmsHPROFILE{InputProfile, ProofingProfile, ProofingProfile, OutputProfile}
+) CmsHTRANSFORM {
+	hArray := []CmsHPROFILE{InputProfile, ProofingProfile, ProofingProfile, OutputProfile}
 	Intents := []uint32{nIntent, nIntent, INTENT_RELATIVE_COLORIMETRIC, ProofingIntent}
 	BPC := []bool{
 		dwFlags&cmsFLAGS_BLACKPOINTCOMPENSATION != 0,
@@ -1191,19 +1192,19 @@ func cmsCreateProofingTransformTHR(
 		return cmsCreateTransformTHR(ContextID, InputProfile, InputFormat, OutputProfile, OutputFormat, nIntent, dwFlags)
 	}
 
-	return cmsHTRANSFORM(cmsCreateExtendedTransform(ContextID, 4, hArray, BPC, Intents, Adaptation, ProofingProfile, 1, InputFormat, OutputFormat, dwFlags))
+	return CmsHTRANSFORM(cmsCreateExtendedTransform(ContextID, 4, hArray, BPC, Intents, Adaptation, ProofingProfile, 1, InputFormat, OutputFormat, dwFlags))
 }
 
 func cmsCreateProofingTransform(
-	InputProfile cmsHPROFILE,
+	InputProfile CmsHPROFILE,
 	InputFormat uint32,
-	OutputProfile cmsHPROFILE,
+	OutputProfile CmsHPROFILE,
 	OutputFormat uint32,
-	ProofingProfile cmsHPROFILE,
+	ProofingProfile CmsHPROFILE,
 	nIntent uint32,
 	ProofingIntent uint32,
 	dwFlags uint32,
-) cmsHTRANSFORM {
+) CmsHTRANSFORM {
 	return cmsCreateProofingTransformTHR(
 		cmsGetProfileContextID(InputProfile),
 		InputProfile,
@@ -1217,7 +1218,7 @@ func cmsCreateProofingTransform(
 	)
 }
 
-func cmsGetTransformContextID(hTransform cmsHTRANSFORM) cmsContext {
+func cmsGetTransformContextID(hTransform CmsHTRANSFORM) CmsContext {
 	xform := (*cmsTRANSFORM)(hTransform)
 	if xform == nil {
 		return nil
@@ -1225,7 +1226,7 @@ func cmsGetTransformContextID(hTransform cmsHTRANSFORM) cmsContext {
 	return xform.ContextID
 }
 
-func cmsGetTransformInputFormat(hTransform cmsHTRANSFORM) uint32 {
+func cmsGetTransformInputFormat(hTransform CmsHTRANSFORM) uint32 {
 	xform := (*cmsTRANSFORM)(hTransform)
 	if xform == nil {
 		return 0
@@ -1233,7 +1234,7 @@ func cmsGetTransformInputFormat(hTransform cmsHTRANSFORM) uint32 {
 	return xform.InputFormat
 }
 
-func cmsGetTransformOutputFormat(hTransform cmsHTRANSFORM) uint32 {
+func cmsGetTransformOutputFormat(hTransform CmsHTRANSFORM) uint32 {
 	xform := (*cmsTRANSFORM)(hTransform)
 	if xform == nil {
 		return 0
@@ -1242,7 +1243,7 @@ func cmsGetTransformOutputFormat(hTransform cmsHTRANSFORM) uint32 {
 }
 
 func cmsChangeBuffersFormat(
-	hTransform cmsHTRANSFORM,
+	hTransform CmsHTRANSFORM,
 	InputFormat uint32,
 	OutputFormat uint32,
 ) bool {

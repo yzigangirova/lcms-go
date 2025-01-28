@@ -75,7 +75,7 @@ func NULLClose(iohandler *cms_io_handler) bool {
 }
 
 // cmsOpenIOhandlerFromNULL creates a null IOHandler for tracking space usage.
-func cmsOpenIOhandlerFromNULL(ContextID cmsContext) *cmsIOHANDLER {
+func cmsOpenIOhandlerFromNULL(ContextID CmsContext) *cmsIOHANDLER {
 	var iohandler *cmsIOHANDLER
 	var fm *FILENULL
 
@@ -111,7 +111,7 @@ func cmsOpenIOhandlerFromNULL(ContextID cmsContext) *cmsIOHANDLER {
 	return iohandler
 }
 
-func cmsOpenIOhandlerFromStream(ContextID cmsContext, stream *os.File) *cmsIOHANDLER {
+func cmsOpenIOhandlerFromStream(ContextID CmsContext, stream *os.File) *cmsIOHANDLER {
 	if stream == nil {
 		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_FILE, "Stream cannot be nil")
 		return nil
@@ -159,135 +159,135 @@ func cmsCloseIOhandler(io *cmsIOHANDLER) bool {
 }
 
 // cmsGetHeaderRenderingIntent retrieves the rendering intent from the profile
-func cmsGetHeaderRenderingIntent(hProfile unsafe.Pointer) uint32 {
+func cmsGetHeaderRenderingIntent(hProfile CmsHPROFILE) uint32 {
 	icc := (*cmsICCPROFILE)(hProfile)
 	return icc.RenderingIntent
 }
 
 // cmsSetHeaderRenderingIntent sets the rendering intent in the profile
-func cmsSetHeaderRenderingIntent(hProfile unsafe.Pointer, RenderingIntent uint32) {
+func cmsSetHeaderRenderingIntent(hProfile CmsHPROFILE, RenderingIntent uint32) {
 	icc := (*cmsICCPROFILE)(hProfile)
 	icc.RenderingIntent = RenderingIntent
 }
 
 // cmsGetHeaderFlags retrieves the flags from the profile
-func cmsGetHeaderFlags(hProfile unsafe.Pointer) uint32 {
+func cmsGetHeaderFlags(hProfile CmsHPROFILE) uint32 {
 	icc := (*cmsICCPROFILE)(hProfile)
 	return icc.Flags
 }
 
 // cmsSetHeaderFlags sets the flags in the profile
-func cmsSetHeaderFlags(hProfile unsafe.Pointer, Flags uint32) {
+func cmsSetHeaderFlags(hProfile CmsHPROFILE, Flags uint32) {
 	icc := (*cmsICCPROFILE)(hProfile)
 	icc.Flags = Flags
 }
 
 // cmsGetHeaderManufacturer retrieves the manufacturer from the profile
-func cmsGetHeaderManufacturer(hProfile unsafe.Pointer) uint32 {
+func cmsGetHeaderManufacturer(hProfile CmsHPROFILE) uint32 {
 	icc := (*cmsICCPROFILE)(hProfile)
 	return icc.Manufacturer
 
 }
 
 // cmsSetHeaderManufacturer sets the manufacturer in the profile
-func cmsSetHeaderManufacturer(hProfile unsafe.Pointer, Manufacturer uint32) {
+func cmsSetHeaderManufacturer(hProfile CmsHPROFILE, Manufacturer uint32) {
 	icc := (*cmsICCPROFILE)(hProfile)
 	icc.Manufacturer = Manufacturer
 }
 
 // cmsGetHeaderCreator retrieves the creator from the profile
-func cmsGetHeaderCreator(hProfile unsafe.Pointer) uint32 {
+func cmsGetHeaderCreator(hProfile CmsHPROFILE) uint32 {
 	icc := (*cmsICCPROFILE)(hProfile)
 	return icc.Creator
 }
 
 // cmsGetHeaderModel retrieves the model from the profile
-func cmsGetHeaderModel(hProfile unsafe.Pointer) uint32 {
+func cmsGetHeaderModel(hProfile CmsHPROFILE) uint32 {
 	icc := (*cmsICCPROFILE)(hProfile)
 	return icc.Model
 }
 
 // cmsSetHeaderModel sets the model in the profile
-func cmsSetHeaderModel(hProfile unsafe.Pointer, Model uint32) {
+func cmsSetHeaderModel(hProfile CmsHPROFILE, Model uint32) {
 	icc := (*cmsICCPROFILE)(hProfile)
 	icc.Model = Model
 }
 
 // cmsGetHeaderAttributes retrieves the attributes from the profile
-func cmsGetHeaderAttributes(hProfile unsafe.Pointer, Flags *uint64) {
+func cmsGetHeaderAttributes(hProfile CmsHPROFILE, Flags *uint64) {
 	icc := (*cmsICCPROFILE)(hProfile)
 	memmove(unsafe.Pointer(Flags), unsafe.Pointer(&icc.Attributes), unsafe.Sizeof(icc.Attributes))
 }
 
 // cmsSetHeaderAttributes sets the attributes in the profile
-func cmsSetHeaderAttributes(hProfile unsafe.Pointer, Flags uint64) {
+func cmsSetHeaderAttributes(hProfile CmsHPROFILE, Flags uint64) {
 	icc := (*cmsICCPROFILE)(hProfile)
 	memmove(unsafe.Pointer(&icc.Attributes), unsafe.Pointer(&Flags), unsafe.Sizeof(icc.Attributes))
 }
 
 // cmsGetHeaderProfileID retrieves the profile ID from the profile
-func cmsGetHeaderProfileID(hProfile unsafe.Pointer, ProfileID *byte) {
+func cmsGetHeaderProfileID(hProfile CmsHPROFILE, ProfileID *byte) {
 	icc := (*cmsICCPROFILE)(hProfile)
 	memmove(unsafe.Pointer(ProfileID), unsafe.Pointer(&icc.ProfileID), unsafe.Sizeof(icc.ProfileID))
 }
 
 // cmsSetHeaderProfileID sets the profile ID in the profile
-func cmsSetHeaderProfileID(hProfile unsafe.Pointer, ProfileID *byte) {
+func cmsSetHeaderProfileID(hProfile CmsHPROFILE, ProfileID *byte) {
 	icc := (*cmsICCPROFILE)(hProfile)
 	memmove(unsafe.Pointer(&icc.ProfileID), unsafe.Pointer(ProfileID), unsafe.Sizeof(icc.ProfileID))
 }
 
 // cmsGetHeaderCreationDateTime retrieves the creation date and time from the profile
-func cmsGetHeaderCreationDateTime(hProfile unsafe.Pointer) time.Time {
+func cmsGetHeaderCreationDateTime(hProfile CmsHPROFILE) time.Time {
 	icc := (*cmsICCPROFILE)(hProfile)
 	//memmove(unsafe.Pointer(t), unsafe.Pointer(&icc.Created), unsafe.Sizeof(icc.Created))
 	return icc.Created
 }
 
 // cmsGetPCS retrieves the PCS from the profile
-func cmsGetPCS(hProfile unsafe.Pointer) cmsColorSpaceSignature {
+func cmsGetPCS(hProfile CmsHPROFILE) cmsColorSpaceSignature {
 	icc := (*cmsICCPROFILE)(hProfile)
 	return icc.PCS
 }
 
 // cmsSetPCS sets the PCS in the profile
-func cmsSetPCS(hProfile unsafe.Pointer, pcs cmsColorSpaceSignature) {
+func cmsSetPCS(hProfile CmsHPROFILE, pcs cmsColorSpaceSignature) {
 	icc := (*cmsICCPROFILE)(hProfile)
 	icc.PCS = pcs
 }
 
 // cmsGetColorSpace retrieves the color space from the profile
-func cmsGetColorSpace(hProfile unsafe.Pointer) cmsColorSpaceSignature {
+func CmsGetColorSpace(hProfile CmsHPROFILE) cmsColorSpaceSignature {
 	icc := (*cmsICCPROFILE)(hProfile)
 	return icc.ColorSpace
 }
 
 // cmsSetColorSpace sets the color space in the profile
-func cmsSetColorSpace(hProfile unsafe.Pointer, sig cmsColorSpaceSignature) {
+func cmsSetColorSpace(hProfile CmsHPROFILE, sig cmsColorSpaceSignature) {
 	icc := (*cmsICCPROFILE)(hProfile)
 	icc.ColorSpace = sig
 }
 
 // cmsGetDeviceClass retrieves the device class from the profile
-func cmsGetDeviceClass(hProfile unsafe.Pointer) cmsProfileClassSignature {
+func cmsGetDeviceClass(hProfile CmsHPROFILE) cmsProfileClassSignature {
 	icc := (*cmsICCPROFILE)(hProfile)
 	return icc.DeviceClass
 }
 
 // cmsSetDeviceClass sets the device class in the profile
-func cmsSetDeviceClass(hProfile unsafe.Pointer, sig cmsProfileClassSignature) {
+func cmsSetDeviceClass(hProfile CmsHPROFILE, sig cmsProfileClassSignature) {
 	icc := (*cmsICCPROFILE)(hProfile)
 	icc.DeviceClass = sig
 }
 
 // cmsGetEncodedICCversion retrieves the ICC version from the profile
-func cmsGetEncodedICCversion(hProfile unsafe.Pointer) uint32 {
+func cmsGetEncodedICCversion(hProfile CmsHPROFILE) uint32 {
 	icc := (*cmsICCPROFILE)(hProfile)
 	return icc.Version
 }
 
 // cmsSetEncodedICCversion sets the ICC version in the profile
-func cmsSetEncodedICCversion(hProfile unsafe.Pointer, Version uint32) {
+func cmsSetEncodedICCversion(hProfile CmsHPROFILE, Version uint32) {
 	icc := (*cmsICCPROFILE)(hProfile)
 	icc.Version = Version
 }
@@ -309,7 +309,7 @@ func BaseToBase(input uint32, baseIn, baseOut int) uint32 {
 }
 
 // cmsSetProfileVersion sets the profile version in the ICC profile.
-func cmsSetProfileVersion(hProfile cmsHPROFILE, version float64) {
+func cmsSetProfileVersion(hProfile CmsHPROFILE, version float64) {
 	icc := (*cmsICCPROFILE)(hProfile)
 
 	// Convert version (e.g., 4.2) to 0x42000000 format.
@@ -317,7 +317,7 @@ func cmsSetProfileVersion(hProfile cmsHPROFILE, version float64) {
 }
 
 // cmsGetProfileVersion retrieves the profile version from the ICC profile.
-func cmsGetProfileVersion(hProfile cmsHPROFILE) float64 {
+func cmsGetProfileVersion(hProfile CmsHPROFILE) float64 {
 	icc := (*cmsICCPROFILE)(hProfile)
 
 	// Extract version from the 16 most significant bits.
@@ -325,7 +325,7 @@ func cmsGetProfileVersion(hProfile cmsHPROFILE) float64 {
 	return float64(BaseToBase(versionPart, 16, 10)) / 100.0
 }
 
-func cmsSaveProfileToIOhandler(hProfile cmsHPROFILE, io *cmsIOHANDLER) uint32 {
+func cmsSaveProfileToIOhandler(hProfile CmsHPROFILE, io *cmsIOHANDLER) uint32 {
 	Icc := (*cmsICCPROFILE)(hProfile)
 	var Keep cmsICCPROFILE
 	var PrevIO *cmsIOHANDLER
@@ -382,7 +382,7 @@ Error:
 	return 0
 }
 
-func cmsSaveProfileToFile(hProfile cmsHPROFILE, FileName string) bool {
+func cmsSaveProfileToFile(hProfile CmsHPROFILE, FileName string) bool {
 	ContextID := cmsGetProfileContextID(hProfile)
 	io := cmsOpenIOhandlerFromFile(ContextID, FileName, "w")
 	if io == nil {
@@ -402,7 +402,7 @@ func cmsSaveProfileToFile(hProfile cmsHPROFILE, FileName string) bool {
 	return rc
 }
 
-func cmsSaveProfileToStream(hProfile cmsHPROFILE, stream *os.File) bool {
+func cmsSaveProfileToStream(hProfile CmsHPROFILE, stream *os.File) bool {
 	ContextID := cmsGetProfileContextID(hProfile)
 	io := cmsOpenIOhandlerFromStream(ContextID, stream)
 	if io == nil {
@@ -414,7 +414,7 @@ func cmsSaveProfileToStream(hProfile cmsHPROFILE, stream *os.File) bool {
 	return rc
 }
 
-func cmsSaveProfileToMem(hProfile cmsHPROFILE, MemPtr unsafe.Pointer, BytesNeeded *uint32) bool {
+func cmsSaveProfileToMem(hProfile CmsHPROFILE, MemPtr unsafe.Pointer, BytesNeeded *uint32) bool {
 	ContextID := cmsGetProfileContextID(hProfile)
 
 	if MemPtr == nil {
@@ -446,7 +446,7 @@ func freeOneTag(Icc *cmsICCPROFILE, i uint32) {
 	}
 }
 
-func cmsCloseProfile(hProfile cmsHPROFILE) bool {
+func CmsCloseProfile(hProfile CmsHPROFILE) bool {
 	Icc := (*cmsICCPROFILE)(hProfile)
 	var rc bool = true
 
@@ -489,7 +489,7 @@ func IsTypeSupported(TagDescriptor *cmsTagDescriptor, Type cmsTagTypeSignature) 
 	return false
 }
 
-func cmsReadTag(hProfile cmsHPROFILE, sig cmsTagSignature) unsafe.Pointer {
+func cmsReadTag(hProfile CmsHPROFILE, sig cmsTagSignature) unsafe.Pointer {
 	Icc := (*cmsICCPROFILE)(hProfile)
 	var io *cmsIOHANDLER
 	var TypeHandler *cmsTagTypeHandler
@@ -624,7 +624,7 @@ Error:
 }
 
 // Creates an empty structure holding all required parameters
-func cmsCreateProfilePlaceholder(ContextID cmsContext) cmsHPROFILE {
+func cmsCreateProfilePlaceholder(ContextID CmsContext) CmsHPROFILE {
 	Icc := (*cmsICCPROFILE)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsICCPROFILE{}))))
 	if Icc == nil {
 		return nil
@@ -650,7 +650,7 @@ func cmsCreateProfilePlaceholder(ContextID cmsContext) cmsHPROFILE {
 	Icc.UsrMutex = (*sync.Mutex)(cmsCreateMutex(ContextID))
 
 	// Return the handle
-	return (cmsHPROFILE)(unsafe.Pointer(Icc))
+	return (CmsHPROFILE)(unsafe.Pointer(Icc))
 
 Error:
 	cmsFree(ContextID, unsafe.Pointer(Icc))
@@ -658,7 +658,7 @@ Error:
 }
 
 // cmsGetTagTrueType translates to Go
-func cmsGetTagTrueType(hProfile cmsHPROFILE, sig cmsTagSignature) cmsTagTypeSignature {
+func cmsGetTagTrueType(hProfile CmsHPROFILE, sig cmsTagSignature) cmsTagTypeSignature {
 	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile)) // Cast hProfile to *cmsICCPROFILE
 	var n int
 
@@ -674,7 +674,7 @@ func cmsGetTagTrueType(hProfile cmsHPROFILE, sig cmsTagSignature) cmsTagTypeSign
 }
 
 // cmsWriteTag translates the given function
-func cmsWriteTag(hProfile cmsHPROFILE, sig cmsTagSignature, data unsafe.Pointer) bool {
+func cmsWriteTag(hProfile CmsHPROFILE, sig cmsTagSignature, data unsafe.Pointer) bool {
 	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile))
 	var TypeHandler *cmsTagTypeHandler
 	var LocalTypeHandler cmsTagTypeHandler
@@ -770,7 +770,7 @@ Error:
 }
 
 // Retrieve the context ID from a profile
-func cmsGetProfileContextID(hProfile cmsHPROFILE) cmsContext {
+func cmsGetProfileContextID(hProfile CmsHPROFILE) CmsContext {
 	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile))
 
 	if Icc == nil {
@@ -781,7 +781,7 @@ func cmsGetProfileContextID(hProfile cmsHPROFILE) cmsContext {
 }
 
 // Return the number of tags
-func cmsGetTagCount(hProfile cmsHPROFILE) int32 {
+func cmsGetTagCount(hProfile CmsHPROFILE) int32 {
 	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile))
 	if Icc == nil {
 		return -1
@@ -790,7 +790,7 @@ func cmsGetTagCount(hProfile cmsHPROFILE) int32 {
 }
 
 // Return the tag signature of a given tag number
-func cmsGetTagSignature(hProfile cmsHPROFILE, n uint32) cmsTagSignature {
+func cmsGetTagSignature(hProfile CmsHPROFILE, n uint32) cmsTagSignature {
 	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile))
 
 	if n >= uint32(Icc.TagCount) || n >= MAX_TABLE_TAG {
@@ -886,7 +886,7 @@ func cmsNewTag(Icc *cmsICCPROFILE, sig cmsTagSignature, NewPos *int) bool {
 }
 
 // Check existence
-func cmsIsTag(hProfile cmsHPROFILE, sig cmsTagSignature) bool {
+func cmsIsTag(hProfile CmsHPROFILE, sig cmsTagSignature) bool {
 	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile))
 	return cmsSearchTag(Icc, sig, false) >= 0
 }
@@ -1138,7 +1138,7 @@ func cmsWriteHeader(Icc *cmsICCPROFILE, UsedSpace uint32) bool {
 // SaveTags dumps tag contents. If the profile is being modified, untouched tags are copied from FileOrig.
 func SaveTags(Icc *cmsICCPROFILE, FileOrig *cmsICCPROFILE) bool {
 	io := Icc.IOhandler
-	Version := cmsGetProfileVersion(cmsHPROFILE(Icc))
+	Version := cmsGetProfileVersion(CmsHPROFILE(Icc))
 
 	for i := uint32(0); i < Icc.TagCount; i++ {
 		if Icc.TagNames[i] == 0 {
@@ -1341,7 +1341,7 @@ func MemoryClose(iohandler *cms_io_handler) bool {
 
 	return true
 }
-func cmsOpenIOhandlerFromMem(ContextID cmsContext, Buffer unsafe.Pointer, size uint32, AccessMode string) *cmsIOHANDLER {
+func cmsOpenIOhandlerFromMem(ContextID CmsContext, Buffer unsafe.Pointer, size uint32, AccessMode string) *cmsIOHANDLER {
 	if AccessMode == "" {
 		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_READ, "Access mode cannot be empty")
 		return nil
@@ -1434,7 +1434,7 @@ Error:
 	return nil
 }
 
-func cmsOpenIOhandlerFromFile(ContextID cmsContext, FileName string, AccessMode string) *cmsIOHANDLER {
+func cmsOpenIOhandlerFromFile(ContextID CmsContext, FileName string, AccessMode string) *cmsIOHANDLER {
 	if FileName == "" || AccessMode == "" {
 		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_FILE, "Invalid file name or access mode")
 		return nil
@@ -1592,7 +1592,7 @@ func FileClose(iohandler *cms_io_handler) bool {
 	cmsFree(iohandler.ContextID, unsafe.Pointer(iohandler))
 	return true
 }
-func cmsWriteRawTag(hProfile cmsHPROFILE, sig cmsTagSignature, data unsafe.Pointer, size uint32) bool {
+func cmsWriteRawTag(hProfile CmsHPROFILE, sig cmsTagSignature, data unsafe.Pointer, size uint32) bool {
 	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile))
 	var i int
 
@@ -1620,7 +1620,7 @@ func cmsWriteRawTag(hProfile cmsHPROFILE, sig cmsTagSignature, data unsafe.Point
 	}
 	return true
 }
-func cmsLinkTag(hProfile cmsHPROFILE, sig cmsTagSignature, dest cmsTagSignature) bool {
+func cmsLinkTag(hProfile CmsHPROFILE, sig cmsTagSignature, dest cmsTagSignature) bool {
 	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile))
 	var i int
 
@@ -1643,7 +1643,7 @@ func cmsLinkTag(hProfile cmsHPROFILE, sig cmsTagSignature, dest cmsTagSignature)
 	cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
 	return true
 }
-func cmsTagLinkedTo(hProfile cmsHPROFILE, sig cmsTagSignature) cmsTagSignature {
+func cmsTagLinkedTo(hProfile CmsHPROFILE, sig cmsTagSignature) cmsTagSignature {
 	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile))
 	i := cmsSearchTag(Icc, sig, false)
 

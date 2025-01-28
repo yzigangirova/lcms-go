@@ -205,7 +205,7 @@ func cmsReadXYZNumber(io *cmsIOHANDLER, XYZ *cmsCIEXYZ) bool {
 
 func cmsWriteUInt8Number(io *cmsIOHANDLER, n uint8) bool {
 	if io == nil {
-		panic("Null pointer in cmsWriteUInt8Number")
+		panic("nil pointer in cmsWriteUInt8Number")
 	}
 
 	if io.Write((*cms_io_handler)(io), 1, unsafe.Pointer(&n)) != true {
@@ -216,7 +216,7 @@ func cmsWriteUInt8Number(io *cmsIOHANDLER, n uint8) bool {
 
 func cmsWriteUInt16Number(io *cmsIOHANDLER, n uint16) bool {
 	if io == nil {
-		panic("Null pointer in cmsWriteUInt16Number")
+		panic("nil pointer in cmsWriteUInt16Number")
 	}
 
 	tmp := cmsAdjustEndianess16(n)
@@ -228,7 +228,7 @@ func cmsWriteUInt16Number(io *cmsIOHANDLER, n uint16) bool {
 
 func cmsWriteUInt16Array(io *cmsIOHANDLER, n uint32, array []uint16) bool {
 	if io == nil || array == nil {
-		panic("Null pointer in cmsWriteUInt16Array")
+		panic("nil pointer in cmsWriteUInt16Array")
 	}
 
 	for i := uint32(0); i < n; i++ {
@@ -241,7 +241,7 @@ func cmsWriteUInt16Array(io *cmsIOHANDLER, n uint32, array []uint16) bool {
 
 func cmsWriteUInt32Number(io *cmsIOHANDLER, n uint32) bool {
 	if io == nil {
-		panic("Null pointer in cmsWriteUInt32Number")
+		panic("nil pointer in cmsWriteUInt32Number")
 	}
 
 	tmp := cmsAdjustEndianess32(n)
@@ -253,7 +253,7 @@ func cmsWriteUInt32Number(io *cmsIOHANDLER, n uint32) bool {
 
 func cmsWriteFloat32Number(io *cmsIOHANDLER, n float32) bool {
 	if io == nil {
-		panic("Null pointer in cmsWriteFloat32Number")
+		panic("nil pointer in cmsWriteFloat32Number")
 	}
 
 	tmp := math.Float32bits(n)
@@ -266,7 +266,7 @@ func cmsWriteFloat32Number(io *cmsIOHANDLER, n float32) bool {
 
 func cmsWriteUInt64Number(io *cmsIOHANDLER, n uint64) bool {
 	if io == nil {
-		panic("Null pointer in cmsWriteUInt64Number")
+		panic("nil pointer in cmsWriteUInt64Number")
 	}
 
 	tmp := cmsAdjustEndianess64(n)
@@ -278,7 +278,7 @@ func cmsWriteUInt64Number(io *cmsIOHANDLER, n uint64) bool {
 
 func cmsWrite15Fixed16Number(io *cmsIOHANDLER, n float64) bool {
 	if io == nil {
-		panic("Null pointer in cmsWrite15Fixed16Number")
+		panic("nil pointer in cmsWrite15Fixed16Number")
 	}
 
 	tmp := cmsAdjustEndianess32(uint32(cmsDoubleTo15Fixed16(n)))
@@ -290,7 +290,7 @@ func cmsWrite15Fixed16Number(io *cmsIOHANDLER, n float64) bool {
 
 func cmsWriteXYZNumber(io *cmsIOHANDLER, xyz *cmsCIEXYZ) bool {
 	if io == nil || xyz == nil {
-		panic("Null pointer in cmsWriteXYZNumber")
+		panic("nil pointer in cmsWriteXYZNumber")
 	}
 
 	var encodedXYZ cmsEncodedXYZNumber
@@ -333,10 +333,9 @@ func cms15Fixed16ToDouble(fix32 int32) float64 {
 	return sign * floater
 }
 
-
 // from double to Fixed point 15.16
-func cmsDoubleTo15Fixed16(v float64) cmsS15Fixed16Number  {
-    return cmsS15Fixed16Number (math.Floor((v)*65536.0 + 0.5))
+func cmsDoubleTo15Fixed16(v float64) cmsS15Fixed16Number {
+	return cmsS15Fixed16Number(math.Floor((v)*65536.0 + 0.5))
 }
 
 // Date/Time Functions
@@ -422,7 +421,7 @@ func cmsWriteAlignment(io *cmsIOHANDLER) bool {
 // Plugin memory management -------------------------------------------------------------------------------------------------
 
 // Specialized malloc for plugins, freed upon exit
-func cmsPluginMalloc(contextID cmsContext, size uint32) unsafe.Pointer {
+func cmsPluginMalloc(contextID CmsContext, size uint32) unsafe.Pointer {
 	ctx := cmsGetContext(contextID)
 
 	if ctx.MemPool == nil {
@@ -432,7 +431,7 @@ func cmsPluginMalloc(contextID cmsContext, size uint32) unsafe.Pointer {
 				return nil
 			}
 		} else {
-			cmsSignalError(unsafe.Pointer(contextID), cmsERROR_CORRUPTION_DETECTED, "NULL memory pool on context")
+			cmsSignalError(unsafe.Pointer(contextID), cmsERROR_CORRUPTION_DETECTED, "nil memory pool on context")
 			return nil
 		}
 	}
@@ -446,7 +445,7 @@ func cmsPlugin(plugin unsafe.Pointer) bool {
 }
 
 // Plugin dispatcher for a specific thread
-func cmsPluginTHR(contextID cmsContext, plugin unsafe.Pointer) bool {
+func cmsPluginTHR(contextID CmsContext, plugin unsafe.Pointer) bool {
 	currentPlugin := (*cmsPluginBase)(plugin)
 
 	for currentPlugin != nil {
@@ -528,8 +527,8 @@ func cmsUnregisterPlugins() {
 
 // Mutex for context pool head
 var (
-	cmsContextPoolHeadMutex sync.Mutex
-	cmsContextPoolHead      cmsContext
+	CmsContextPoolHeadMutex sync.Mutex
+	CmsContextPoolHead      CmsContext
 	initializedMutex        sync.Once
 )
 
@@ -564,7 +563,7 @@ func InitContextMutex() bool {
 }
 
 // Global storage for system context
-var globalContext = cmsContextStruct{
+var globalContext = CmsContextStruct{
 	Next:    nil, // Not in the linked list
 	MemPool: nil, // No suballocator
 	chunks: [MemoryClientMax]unsafe.Pointer{
@@ -587,9 +586,9 @@ var globalContext = cmsContextStruct{
 	}, // The default memory allocator is not used for context 0
 }
 
-// _cmsGetContext retrieves the associated context pointer, with guessing. Never returns nil.
-func cmsGetContext(ContextID cmsContext) cmsContext {
-	id := (cmsContext)(ContextID)
+// cmsGetContext retrieves the associated context pointer, with guessing. Never returns nil.
+func cmsGetContext(ContextID CmsContext) CmsContext {
+	id := (CmsContext)(ContextID)
 
 	// Use global settings if ContextID is nil
 	if id == nil {
@@ -599,26 +598,47 @@ func cmsGetContext(ContextID cmsContext) cmsContext {
 	InitContextMutex()
 
 	// Enter critical section
-	cmsEnterCriticalSectionPrimitive(&cmsMutex{mutex: cmsContextPoolHeadMutex})
+	cmsEnterCriticalSectionPrimitive(&cmsMutex{mutex: CmsContextPoolHeadMutex})
 
 	// Search through the context pool
-	for ctx := cmsContextPoolHead; ctx != nil; ctx = ctx.Next {
+	for ctx := CmsContextPoolHead; ctx != nil; ctx = ctx.Next {
 		if id == ctx {
 			// Leave critical section and return the context
-			cmsLeaveCriticalSectionPrimitive(&cmsMutex{mutex: cmsContextPoolHeadMutex})
+			cmsLeaveCriticalSectionPrimitive(&cmsMutex{mutex: CmsContextPoolHeadMutex})
 			return ctx
 		}
 	}
 
 	// Leave critical section if not found
-	cmsLeaveCriticalSectionPrimitive(&cmsMutex{mutex: cmsContextPoolHeadMutex})
+	cmsLeaveCriticalSectionPrimitive(&cmsMutex{mutex: CmsContextPoolHeadMutex})
 	return &globalContext
 }
 
-// _cmsContextGetClientChunk retrieves the memory area associated with each context client
+// This function returns the given context its default pristine state,
+// as no plug-ins were declared. There is no way to unregister a single
+// plug-in, as a single call to cmsPluginTHR() function may register
+// many different plug-ins simultaneously, then there is no way to
+// identify which plug-in to unregister.
+func cmsUnregisterPluginsTHR(ContextID CmsContext) {
+	cmsRegisterMemHandlerPlugin(ContextID, nil)
+	cmsRegisterInterpPlugin(ContextID, nil)
+	cmsRegisterTagTypePlugin(ContextID, nil)
+	cmsRegisterTagPlugin(ContextID, nil)
+	cmsRegisterFormattersPlugin(ContextID, nil)
+	cmsRegisterRenderingIntentPlugin(ContextID, nil)
+	cmsRegisterParametricCurvesPlugin(ContextID, nil)
+	cmsRegisterMultiProcessElementPlugin(ContextID, nil)
+	cmsRegisterOptimizationPlugin(ContextID, nil)
+	cmsRegisterTransformPlugin(ContextID, nil)
+	cmsRegisterMutexPlugin(ContextID, nil)
+	cmsRegisterParallelizationPlugin(ContextID, nil)
+
+}
+
+// CmsContextGetClientChunk retrieves the memory area associated with each context client
 // Internal: get the memory area associanted with each context client
-// Returns the block assigned to the specific zone. Never return NULL.
-func cmsContextGetClientChunk(ContextID cmsContext, mc cmsMemoryClient) unsafe.Pointer {
+// Returns the block assigned to the specific zone. Never return nil.
+func CmsContextGetClientChunk(ContextID CmsContext, mc cmsMemoryClient) unsafe.Pointer {
 	if mc < 0 || mc >= MemoryClientMax {
 		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_INTERNAL, "Bad context client -- possible corruption")
 
@@ -636,12 +656,11 @@ func cmsContextGetClientChunk(ContextID cmsContext, mc cmsMemoryClient) unsafe.P
 		return ptr
 	}
 
-	// A null ptr means no special settings for that context, and this reverts to globalContext globals
+	// A nil ptr means no special settings for that context, and this reverts to globalContext globals
 	return globalContext.chunks[mc]
 }
 
-
-// _cmsGetTime provides thread-safe time retrieval and populates the given *time.Time with UTC time.
+// cmsGetTime provides thread-safe time retrieval and populates the given *time.Time with UTC time.
 func cmsGetTime(ptrTime *time.Time) bool {
 	// Get the current time
 	now := time.Now()

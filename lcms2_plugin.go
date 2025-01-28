@@ -76,7 +76,7 @@ type cmsInterpFunction struct {
 
 // cmsInterpParams represents the parameters for interpolation.
 type cmsInterpParams struct {
-	ContextID     cmsContext                   // The calling thread context
+	ContextID     CmsContext                   // The calling thread context
 	dwFlags       uint32                       // Flags for interpolation
 	nInputs       uint32                       // Number of input channels (3D interpolation if > 1)
 	nOutputs      uint32                       // Number of output channels (3D interpolation if > 1)
@@ -101,10 +101,10 @@ type cmsPluginBase struct {
 
 // cmsIntentFn defines the function type for custom intents.
 type cmsIntentFn func(
-	ContextID cmsContext, // Context ID
+	ContextID CmsContext, // Context ID
 	nProfiles uint32, // Number of profiles
 	Intents []uint32, // Array of intents
-	hProfiles []cmsHPROFILE, // Array of profile handles
+	hProfiles []CmsHPROFILE, // Array of profile handles
 	BPC []bool, // Array of Black Point Compensation flags
 	AdaptationStates []float64, // Array of adaptation states
 	dwFlags uint32, // Flags
@@ -143,7 +143,7 @@ type cmsPluginParametricCurves struct {
 // _cmsIOHandler represents the internal structure.
 type cms_io_handler struct {
 	Stream       unsafe.Pointer // Associated stream, implemented differently based on media
-	ContextID    cmsContext     // Context ID
+	ContextID    CmsContext     // Context ID
 	UsedSpace    uint32         // Used space in the stream
 	ReportedSize uint32         // Reported size of the stream
 	PhysicalFile string         // Physical file path
@@ -217,8 +217,8 @@ type cmsPluginTransform struct {
 }
 
 // Shared callbacks for user data //YULIANA: i can not find implemenation for this functions, only declarations!  investigate further
-type cmsFreeUserDataFn func(ContextID cmsContext, Data unsafe.Pointer)
-type cmsDupUserDataFn func(ContextID cmsContext, Data unsafe.Pointer) unsafe.Pointer
+type cmsFreeUserDataFn func(ContextID CmsContext, Data unsafe.Pointer)
+type cmsDupUserDataFn func(ContextID CmsContext, Data unsafe.Pointer) unsafe.Pointer
 type cmsFormatter16 func(CMMcargo *cmsTRANSFORM, Values []uint16, Buffer []uint8, Stride uint32) []uint8
 type cmsFormatterFloat func(CMMcargo *cmsTRANSFORM, Values []float32, Buffer []uint8, Stride uint32) []uint8
 type cmsTransformFn func(CMMcargo *cmsTRANSFORM, InputBuffer unsafe.Pointer,
@@ -243,8 +243,8 @@ const CMS_PACK_FLAGS_FLOAT = 0x0001
 
 // StageToneCurvesData represents data for tone curves.
 type cmsStageToneCurvesData struct {
-	NCurves   uint32          // Number of curves
-	TheCurves **cmsToneCurve // Slice of pointers to ToneCurve
+	NCurves   uint32         // Number of curves
+	TheCurves **CmsToneCurve // Slice of pointers to ToneCurve
 }
 
 // StageMatrixData represents data for a matrix transformation.
@@ -310,22 +310,22 @@ const MAX_TYPES_IN_LCMS_PLUGIN = 20
 // Function type definitions for memory handler plug-ins.
 
 // _cmsMallocFnPtrType defines a function that allocates memory.
-type cmsMallocFnPtrType func(contextID cmsContext, size uint32) unsafe.Pointer
+type cmsMallocFnPtrType func(contextID CmsContext, size uint32) unsafe.Pointer
 
 // _cmsFreeFnPtrType defines a function that frees allocated memory.
-type cmsFreeFnPtrType func(contextID cmsContext, ptr unsafe.Pointer)
+type cmsFreeFnPtrType func(contextID CmsContext, ptr unsafe.Pointer)
 
 // _cmsReallocFnPtrType defines a function that reallocates memory.
-type cmsReallocFnPtrType func(contextID cmsContext, ptr unsafe.Pointer, newSize uint32) unsafe.Pointer
+type cmsReallocFnPtrType func(contextID CmsContext, ptr unsafe.Pointer, newSize uint32) unsafe.Pointer
 
 // _cmsMalloZerocFnPtrType defines a function that allocates zero-initialized memory.
-type cmsMalloZerocFnPtrType func(contextID cmsContext, size uint32) unsafe.Pointer
+type cmsMalloZerocFnPtrType func(contextID CmsContext, size uint32) unsafe.Pointer
 
 // _cmsCallocFnPtrType defines a function that allocates zero-initialized memory for an array.
-type cmsCallocFnPtrType func(contextID cmsContext, num uint32, size uint32) unsafe.Pointer
+type cmsCallocFnPtrType func(contextID CmsContext, num uint32, size uint32) unsafe.Pointer
 
 // _cmsDupFnPtrType defines a function that duplicates a memory block.
-type cmsDupFnPtrType func(contextID cmsContext, org unsafe.Pointer, size uint32) unsafe.Pointer
+type cmsDupFnPtrType func(contextID CmsContext, org unsafe.Pointer, size uint32) unsafe.Pointer
 
 // cmsPluginMemHandler represents the memory handler plug-in structure.
 type cmsPluginMemHandler struct {
@@ -339,10 +339,10 @@ type cmsPluginMemHandler struct {
 }
 
 // Type aliases for function pointer types.
-type cmsCreateMutexFnPtrType func(ContextID cmsContext) unsafe.Pointer
-type cmsDestroyMutexFnPtrType func(ContextID cmsContext, mtx unsafe.Pointer)
-type cmsLockMutexFnPtrType func(ContextID cmsContext, mtx unsafe.Pointer) bool
-type cmsUnlockMutexFnPtrType func(ContextID cmsContext, mtx unsafe.Pointer)
+type cmsCreateMutexFnPtrType func(ContextID CmsContext) unsafe.Pointer
+type cmsDestroyMutexFnPtrType func(ContextID CmsContext, mtx unsafe.Pointer)
+type cmsLockMutexFnPtrType func(ContextID CmsContext, mtx unsafe.Pointer) bool
+type cmsUnlockMutexFnPtrType func(ContextID CmsContext, mtx unsafe.Pointer)
 
 // Mutex plugin structure.
 type cmsPluginMutex struct {
@@ -354,18 +354,6 @@ type cmsPluginMutex struct {
 }
 
 // CMSAPI equivalent functions.
-
-// Create a new mutex.
-func cmsCreateMutex(ContextID cmsContext) unsafe.Pointer
-
-// Destroy a mutex.
-func cmsDestroyMutex(ContextID cmsContext, mtx unsafe.Pointer)
-
-// Lock the mutex.
-func cmsLockMutex(ContextID cmsContext, mtx unsafe.Pointer) bool
-
-// Unlock the mutex.
-func cmsUnlockMutex(ContextID cmsContext, mtx unsafe.Pointer)
 
 type cmsPluginParalellization struct {
 	base        cmsPluginBase

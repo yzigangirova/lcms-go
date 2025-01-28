@@ -59,9 +59,10 @@ const cmsMAX_PATH = 256
 // Little CMS specific typedefs
 
 // How profiles may be used
-const ( LCMS_USED_AS_INPUT      =0
-		LCMS_USED_AS_OUTPUT     =1
-		LCMS_USED_AS_PROOF      =2
+const (
+	LCMS_USED_AS_INPUT  = 0
+	LCMS_USED_AS_OUTPUT = 1
+	LCMS_USED_AS_PROOF  = 2
 )
 
 type cmsInfoType int
@@ -116,11 +117,11 @@ type cmsTagEntry struct {
 
 }
 
-// Define cmsHPROFILE as unsafe.Pointer to represent a void pointer
-type cmsHPROFILE unsafe.Pointer
+// Define CmsHPROFILE as unsafe.Pointer to represent a void pointer
+type CmsHPROFILE unsafe.Pointer
 type cmsHANDLE unsafe.Pointer // Generic handle
-type cmsHTRANSFORM unsafe.Pointer
-type cmsToneCurve cms_curve_struct
+type CmsHTRANSFORM unsafe.Pointer
+type CmsToneCurve cms_curve_struct
 
 // Where to place/locate the stages in the pipeline chain
 type cmsStageLoc int
@@ -130,22 +131,12 @@ const (
 	cmsAT_END
 )
 
-// cmsCreateContext creates a new context with the given plugin and user data.
-func cmsCreateContext(plugin unsafe.Pointer, userData unsafe.Pointer) cmsContext
-
-// cmsDeleteContext deletes a given context.
-func cmsDeleteContext(contextID cmsContext)
-
-// cmsDupContext duplicates a given context, optionally setting new user data.
-func cmsDupContext(contextID cmsContext, newUserData unsafe.Pointer) cmsContext
-
-// cmsGetContextUserData retrieves the user data associated with the given context.
-func cmsGetContextUserData(contextID cmsContext) unsafe.Pointer
-
-// Plug-In Registering Functions - see cmsplugin
-
-// cmsUnregisterPluginsTHR unregisters plugins for a specific context.
-func cmsUnregisterPluginsTHR(contextID cmsContext)
+// V4 perceptual black
+const (
+	cmsPERCEPTUAL_BLACK_X = 0.00336
+	cmsPERCEPTUAL_BLACK_Y = 0.0034731
+	cmsPERCEPTUAL_BLACK_Z = 0.00287
+)
 
 // Definitions in ICC spec
 const cmsMagicNumber = 0x61637370 // 'acsp'
@@ -174,17 +165,7 @@ const (
 // chance to know which thread is responsible for the warning and any environment associated
 // with it. Non-multithreading applications may safely ignore this parameter.
 // Note that under certain special circumstances, ContextID may be NULL.
-type cmsLogErrorHandlerFunction func(ContextID cmsContext, ErrorCode uint32, Text string)
-
-// Allows user to set any specific logger
-func cmsSetLogErrorHandler(fn cmsLogErrorHandlerFunction) {
-	// Implementation of setting global error handler would go here
-}
-
-// Allows user to set any specific logger in a thread-safe manner
-func cmsSetLogErrorHandlerTHR(contextID cmsContext, fn cmsLogErrorHandlerFunction) {
-	// Implementation of thread-specific error handler would go here
-}
+type cmsLogErrorHandlerFunction func(ContextID CmsContext, ErrorCode uint32, Text string)
 
 // Define cmsInfoType as int, which should match the type in the C library
 // type cmsInfoType C.int
@@ -466,7 +447,7 @@ const (
 	cmsFLAGS_NONEGATIVES = 0x8000 // Prevent negative numbers in floating-point transforms
 
 	// Copy alpha channels when transforming
-	cmsFLAGS_COPY_ALPHA = 0x04000000 // Alpha channels are copied on cmsDoTransform()
+	cmsFLAGS_COPY_ALPHA = 0x04000000 // Alpha channels are copied on CmsDoTransform()
 
 	// Fine-tune control over number of gridpoints
 	cmsFLAGS_GRIDPOINTS_MASK  = 0xFF
@@ -805,9 +786,9 @@ type cmsCIEXYZ struct {
 	Z float64
 }
 
-// cmsCIExyY represents a color in the CIE xyY color space
+// CmsCIExyY represents a color in the CIE xyY color space
 
-type cmsCIExyY struct {
+type CmsCIExyY struct {
 	x float64
 	y float64
 	Y float64 //
@@ -841,16 +822,16 @@ type cmsCIEXYZTRIPLE struct {
 	Blue  cmsCIEXYZ
 }
 
-// cmsCIExyYTRIPLE represents a set of primary colors (Red, Green, Blue) in the CIE xyY color space
-type cmsCIExyYTRIPLE struct {
-	Red   cmsCIExyY
-	Green cmsCIExyY
-	Blue  cmsCIExyY
+// CmsCIExyYTRIPLE represents a set of primary colors (Red, Green, Blue) in the CIE xyY color space
+type CmsCIExyYTRIPLE struct {
+	Red   CmsCIExyY
+	Green CmsCIExyY
+	Blue  CmsCIExyY
 }
 
 type cmsSEQ struct {
 	n         uint32
-	ContextID cmsContext
+	ContextID CmsContext
 	seq       *cmsPSEQDESC
 }
 
@@ -1021,7 +1002,7 @@ func FROM_16_TO_8(rgb uint16) uint8 {
 
 // cmsIOHANDLER is an alias for _cmsIOHandler.
 type cmsIOHANDLER cms_io_handler
-type cmsContext *cmsContextStruct
+type CmsContext *CmsContextStruct
 
 // cmsCurveSegment represents the curve segment structure.
 type cmsCurveSegment struct {
@@ -1055,7 +1036,7 @@ type cmsScreening struct {
 // Undercolorremoval & black generation -------------------------------------------------------------------------------------
 
 type cmsUcrBg struct {
-	Ucr  *cmsToneCurve
-	Bg   *cmsToneCurve
+	Ucr  *CmsToneCurve
+	Bg   *CmsToneCurve
 	Desc *cmsMLU
 }

@@ -1,18 +1,18 @@
 package golcms
 
 import (
+	"syscall"
 	"unsafe"
-	"utf16"
 )
 
 // StringToUTF16Slice converts a Go string to a slice of uint16 for wide characters.
 func StringToUTF16Slice(s string) []uint16 {
 	// Convert the string to a slice of runes (Unicode code points)
-	runes := []rune(s)
 	// Encode the runes into UTF-16
-	return utf16.Encode(runes)
+	utf16, _ := syscall.UTF16FromString(s)
+	return utf16
 }
-func SetTextTags(hProfile cmsHPROFILE, Description []uint16) bool {
+func SetTextTags(hProfile CmsHPROFILE, Description []uint16) bool {
 	var DescriptionMLU, CopyrightMLU *cmsMLU
 	var rc bool
 	ContextID := cmsGetProfileContextID(hProfile)
@@ -49,7 +49,7 @@ Error:
 	}
 	return rc
 }
-func SetSeqDescTag(hProfile cmsHPROFILE, Model *byte) bool {
+func SetSeqDescTag(hProfile CmsHPROFILE, Model *byte) bool {
 	var rc bool
 	ContextID := cmsGetProfileContextID(hProfile)
 	Seq := cmsAllocProfileSequenceDescription(ContextID, 1)
@@ -85,13 +85,13 @@ Error:
 	return rc
 }
 
-// cmsCreateRGBProfileTHR translates the function to Go
-func cmsCreateRGBProfileTHR(ContextID cmsContext, WhitePoint *cmsCIExyY, Primaries *cmsCIExyYTRIPLE, TransferFunction []*cmsToneCurve) cmsHPROFILE {
+// CmsCreateRGBProfileTHR translates the function to Go
+func CmsCreateRGBProfileTHR(ContextID CmsContext, WhitePoint *CmsCIExyY, Primaries *CmsCIExyYTRIPLE, TransferFunction []*CmsToneCurve) CmsHPROFILE {
 	var (
-		hICC          cmsHPROFILE
+		hICC          CmsHPROFILE
 		MColorants    cmsMAT3
 		Colorants     cmsCIEXYZTRIPLE
-		MaxWhite      cmsCIExyY
+		MaxWhite      CmsCIExyY
 		CHAD          cmsMAT3
 		WhitePointXYZ cmsCIEXYZ
 	)
@@ -102,10 +102,10 @@ func cmsCreateRGBProfileTHR(ContextID cmsContext, WhitePoint *cmsCIExyY, Primari
 	}
 
 	cmsSetProfileVersion(hICC, 4.4)
-	cmsSetDeviceClass(unsafe.Pointer(hICC), cmsSigDisplayClass)
-	cmsSetColorSpace(unsafe.Pointer(hICC), cmsSigRgbData)
-	cmsSetPCS(unsafe.Pointer(hICC), cmsSigXYZData)
-	cmsSetHeaderRenderingIntent(unsafe.Pointer(hICC), INTENT_PERCEPTUAL)
+	cmsSetDeviceClass(hICC, cmsSigDisplayClass)
+	cmsSetColorSpace(hICC, cmsSigRgbData)
+	cmsSetPCS(hICC, cmsSigXYZData)
+	cmsSetHeaderRenderingIntent(hICC, INTENT_PERCEPTUAL)
 
 	// Implement profile using following tags:
 	//
@@ -202,18 +202,18 @@ func cmsCreateRGBProfileTHR(ContextID cmsContext, WhitePoint *cmsCIExyY, Primari
 
 Error:
 	if hICC != nil {
-		cmsCloseProfile(hICC)
+		CmsCloseProfile(hICC)
 	}
 	return nil
 }
 
-// cmsCreateRGBProfile translates the function to Go
-func cmsCreateRGBProfile(WhitePoint *cmsCIExyY, Primaries *cmsCIExyYTRIPLE, TransferFunction []*cmsToneCurve) cmsHPROFILE {
-	return cmsCreateRGBProfileTHR(nil, WhitePoint, Primaries, TransferFunction)
+// CmsCreateRGBProfile translates the function to Go
+func CmsCreateRGBProfile(WhitePoint *CmsCIExyY, Primaries *CmsCIExyYTRIPLE, TransferFunction []*CmsToneCurve) CmsHPROFILE {
+	return CmsCreateRGBProfileTHR(nil, WhitePoint, Primaries, TransferFunction)
 }
 
 // cmsCreateGrayProfileTHR translates the function to Go
-func cmsCreateGrayProfileTHR(ContextID cmsContext, WhitePoint *cmsCIExyY, TransferFunction *cmsToneCurve) cmsHPROFILE {
+func cmsCreateGrayProfileTHR(ContextID CmsContext, WhitePoint *CmsCIExyY, TransferFunction *CmsToneCurve) CmsHPROFILE {
 	var tmp cmsCIEXYZ
 	hICC := cmsCreateProfilePlaceholder(ContextID)
 	if hICC == nil {
@@ -221,10 +221,10 @@ func cmsCreateGrayProfileTHR(ContextID cmsContext, WhitePoint *cmsCIExyY, Transf
 	}
 
 	cmsSetProfileVersion(hICC, 4.4)
-	cmsSetDeviceClass(unsafe.Pointer(hICC), cmsSigDisplayClass)
-	cmsSetColorSpace(unsafe.Pointer(hICC), cmsSigGrayData)
-	cmsSetPCS(unsafe.Pointer(hICC), cmsSigXYZData)
-	cmsSetHeaderRenderingIntent(unsafe.Pointer(hICC), INTENT_PERCEPTUAL)
+	cmsSetDeviceClass(hICC, cmsSigDisplayClass)
+	cmsSetColorSpace(hICC, cmsSigGrayData)
+	cmsSetPCS(hICC, cmsSigXYZData)
+	cmsSetHeaderRenderingIntent(hICC, INTENT_PERCEPTUAL)
 
 	if !SetTextTags(hICC, StringToUTF16Slice("gray built-in")) {
 		goto Error
@@ -247,28 +247,28 @@ func cmsCreateGrayProfileTHR(ContextID cmsContext, WhitePoint *cmsCIExyY, Transf
 
 Error:
 	if hICC != nil {
-		cmsCloseProfile(hICC)
+		CmsCloseProfile(hICC)
 	}
 	return nil
 }
 
 // cmsCreateGrayProfile translates the function to Go
-func cmsCreateGrayProfile(WhitePoint *cmsCIExyY, TransferFunction *cmsToneCurve) cmsHPROFILE {
+func CmsCreateGrayProfile(WhitePoint *CmsCIExyY, TransferFunction *CmsToneCurve) CmsHPROFILE {
 	return cmsCreateGrayProfileTHR(nil, WhitePoint, TransferFunction)
 }
 
 // cmsCreateLinearizationDeviceLinkTHR translates the function to Go
-func cmsCreateLinearizationDeviceLinkTHR(ContextID cmsContext, ColorSpace cmsColorSpaceSignature, TransferFunctions []*cmsToneCurve) cmsHPROFILE {
+func cmsCreateLinearizationDeviceLinkTHR(ContextID CmsContext, ColorSpace cmsColorSpaceSignature, TransferFunctions []*CmsToneCurve) CmsHPROFILE {
 	hICC := cmsCreateProfilePlaceholder(ContextID)
 	if hICC == nil {
 		return nil
 	}
 
 	cmsSetProfileVersion(hICC, 4.4)
-	cmsSetDeviceClass(unsafe.Pointer(hICC), cmsSigLinkClass)
-	cmsSetColorSpace(unsafe.Pointer(hICC), ColorSpace)
-	cmsSetPCS(unsafe.Pointer(hICC), ColorSpace)
-	cmsSetHeaderRenderingIntent(unsafe.Pointer(hICC), INTENT_PERCEPTUAL)
+	cmsSetDeviceClass(hICC, cmsSigLinkClass)
+	cmsSetColorSpace(hICC, ColorSpace)
+	cmsSetPCS(hICC, ColorSpace)
+	cmsSetHeaderRenderingIntent(hICC, INTENT_PERCEPTUAL)
 
 	nChannels := cmsChannelsOfColorSpace(ColorSpace)
 
@@ -293,13 +293,13 @@ func cmsCreateLinearizationDeviceLinkTHR(ContextID cmsContext, ColorSpace cmsCol
 Error:
 	cmsPipelineFree(Pipeline)
 	if hICC != nil {
-		cmsCloseProfile(hICC)
+		CmsCloseProfile(hICC)
 	}
 	return nil
 }
 
 // cmsCreateLinearizationDeviceLink translates the function to Go
-func cmsCreateLinearizationDeviceLink(ColorSpace cmsColorSpaceSignature, TransferFunctions []*cmsToneCurve) cmsHPROFILE {
+func cmsCreateLinearizationDeviceLink(ColorSpace cmsColorSpaceSignature, TransferFunctions []*CmsToneCurve) CmsHPROFILE {
 	return cmsCreateLinearizationDeviceLinkTHR(nil, ColorSpace, TransferFunctions)
 }
 
@@ -353,8 +353,8 @@ func InkLimitingSampler(In []uint16, Out []uint16, Cargo unsafe.Pointer) int32 {
 	return 1 // Equivalent to TRUE in C
 }
 
-func cmsCreateInkLimitingDeviceLinkTHR(ContextID cmsContext, ColorSpace cmsColorSpaceSignature, Limit float64) cmsHPROFILE {
-	var hICC cmsHPROFILE
+func cmsCreateInkLimitingDeviceLinkTHR(ContextID CmsContext, ColorSpace cmsColorSpaceSignature, Limit float64) CmsHPROFILE {
+	var hICC CmsHPROFILE
 	var LUT *cmsPipeline
 	var CLUT *cmsStage
 	var nChannels int32
@@ -380,10 +380,10 @@ func cmsCreateInkLimitingDeviceLinkTHR(ContextID cmsContext, ColorSpace cmsColor
 	}
 
 	cmsSetProfileVersion(hICC, 4.4)
-	cmsSetDeviceClass(unsafe.Pointer(hICC), cmsSigLinkClass)
-	cmsSetColorSpace(unsafe.Pointer(hICC), ColorSpace)
-	cmsSetPCS(unsafe.Pointer(hICC), ColorSpace)
-	cmsSetHeaderRenderingIntent(unsafe.Pointer(hICC), INTENT_PERCEPTUAL)
+	cmsSetDeviceClass(hICC, cmsSigLinkClass)
+	cmsSetColorSpace(hICC, ColorSpace)
+	cmsSetPCS(hICC, ColorSpace)
+	cmsSetHeaderRenderingIntent(hICC, INTENT_PERCEPTUAL)
 
 	LUT = cmsPipelineAlloc(ContextID, 4, 4)
 	if LUT == nil {
@@ -425,28 +425,28 @@ Error:
 		cmsPipelineFree(LUT)
 	}
 	if hICC != nil {
-		cmsCloseProfile(hICC)
+		CmsCloseProfile(hICC)
 	}
 	return nil
 }
 
-func cmsCreateInkLimitingDeviceLink(ColorSpace cmsColorSpaceSignature, Limit float64) cmsHPROFILE {
+func cmsCreateInkLimitingDeviceLink(ColorSpace cmsColorSpaceSignature, Limit float64) CmsHPROFILE {
 	return cmsCreateInkLimitingDeviceLinkTHR(nil, ColorSpace, Limit)
 }
 
-func cmsCreateLab2ProfileTHR(ContextID cmsContext, WhitePoint *cmsCIExyY) cmsHPROFILE {
-	var hProfile cmsHPROFILE
+func cmsCreateLab2ProfileTHR(ContextID CmsContext, WhitePoint *CmsCIExyY) CmsHPROFILE {
+	var hProfile CmsHPROFILE
 	var LUT *cmsPipeline
 
-	hProfile = cmsCreateRGBProfileTHR(ContextID, cmsD50_xyY(), nil, nil)
+	hProfile = CmsCreateRGBProfileTHR(ContextID, cmsD50_xyY(), nil, nil)
 	if hProfile == nil {
 		return nil
 	}
 
 	cmsSetProfileVersion(hProfile, 2.1)
-	cmsSetDeviceClass(unsafe.Pointer(hProfile), cmsSigAbstractClass)
-	cmsSetColorSpace(unsafe.Pointer(hProfile), cmsSigLabData)
-	cmsSetPCS(unsafe.Pointer(hProfile), cmsSigLabData)
+	cmsSetDeviceClass(hProfile, cmsSigAbstractClass)
+	cmsSetColorSpace(hProfile, cmsSigLabData)
+	cmsSetPCS(hProfile, cmsSigLabData)
 
 	if !SetTextTags(hProfile, StringToUTF16Slice("Lab identity built-in")) {
 		return nil
@@ -472,28 +472,28 @@ Error:
 		cmsPipelineFree(LUT)
 	}
 	if hProfile != nil {
-		cmsCloseProfile(hProfile)
+		CmsCloseProfile(hProfile)
 	}
 	return nil
 }
 
-func cmsCreateLab2Profile(WhitePoint *cmsCIExyY) cmsHPROFILE {
+func CmsCreateLab2Profile(WhitePoint *CmsCIExyY) CmsHPROFILE {
 	return cmsCreateLab2ProfileTHR(nil, WhitePoint)
 }
 
-func cmsCreateLab4ProfileTHR(ContextID cmsContext, WhitePoint *cmsCIExyY) cmsHPROFILE {
-	var hProfile cmsHPROFILE
+func cmsCreateLab4ProfileTHR(ContextID CmsContext, WhitePoint *CmsCIExyY) CmsHPROFILE {
+	var hProfile CmsHPROFILE
 	var LUT *cmsPipeline
 
-	hProfile = cmsCreateRGBProfileTHR(ContextID, cmsD50_xyY(), nil, nil)
+	hProfile = CmsCreateRGBProfileTHR(ContextID, cmsD50_xyY(), nil, nil)
 	if hProfile == nil {
 		return nil
 	}
 
 	cmsSetProfileVersion(hProfile, 4.4)
-	cmsSetDeviceClass(unsafe.Pointer(hProfile), cmsSigAbstractClass)
-	cmsSetColorSpace(unsafe.Pointer(hProfile), cmsSigLabData)
-	cmsSetPCS(unsafe.Pointer(hProfile), cmsSigLabData)
+	cmsSetDeviceClass(hProfile, cmsSigAbstractClass)
+	cmsSetColorSpace(hProfile, cmsSigLabData)
+	cmsSetPCS(hProfile, cmsSigLabData)
 
 	if !SetTextTags(hProfile, StringToUTF16Slice("Lab identity built-in")) {
 		goto Error
@@ -519,28 +519,28 @@ Error:
 		cmsPipelineFree(LUT)
 	}
 	if hProfile != nil {
-		cmsCloseProfile(hProfile)
+		CmsCloseProfile(hProfile)
 	}
 	return nil
 }
 
-func cmsCreateLab4Profile(WhitePoint *cmsCIExyY) cmsHPROFILE {
+func cmsCreateLab4Profile(WhitePoint *CmsCIExyY) CmsHPROFILE {
 	return cmsCreateLab4ProfileTHR(nil, WhitePoint)
 }
 
-func cmsCreateXYZProfileTHR(ContextID cmsContext) cmsHPROFILE {
-	var hProfile cmsHPROFILE
+func cmsCreateXYZProfileTHR(ContextID CmsContext) CmsHPROFILE {
+	var hProfile CmsHPROFILE
 	var LUT *cmsPipeline
 
-	hProfile = cmsCreateRGBProfileTHR(ContextID, cmsD50_xyY(), nil, nil)
+	hProfile = CmsCreateRGBProfileTHR(ContextID, cmsD50_xyY(), nil, nil)
 	if hProfile == nil {
 		return nil
 	}
 
 	cmsSetProfileVersion(hProfile, 4.4)
-	cmsSetDeviceClass(unsafe.Pointer(hProfile), cmsSigAbstractClass)
-	cmsSetColorSpace(unsafe.Pointer(hProfile), cmsSigXYZData)
-	cmsSetPCS(unsafe.Pointer(hProfile), cmsSigXYZData)
+	cmsSetDeviceClass(hProfile, cmsSigAbstractClass)
+	cmsSetColorSpace(hProfile, cmsSigXYZData)
+	cmsSetPCS(hProfile, cmsSigXYZData)
 
 	if !SetTextTags(hProfile, StringToUTF16Slice("XYZ identity built-in")) {
 		goto Error
@@ -566,11 +566,88 @@ Error:
 		cmsPipelineFree(LUT)
 	}
 	if hProfile != nil {
-		cmsCloseProfile(hProfile)
+		CmsCloseProfile(hProfile)
 	}
 	return nil
 }
 
-func cmsCreateXYZProfile() cmsHPROFILE {
+func CmsCreateXYZProfile() CmsHPROFILE {
 	return cmsCreateXYZProfileTHR(nil)
+}
+
+//sRGB Curves are defined by:
+//
+//If  R'sRGB,G'sRGB, B'sRGB < 0.04045
+//
+//    R =  R'sRGB / 12.92
+//    G =  G'sRGB / 12.92
+//    B =  B'sRGB / 12.92
+//
+//
+//else if  R'sRGB,G'sRGB, B'sRGB >= 0.04045
+//
+//    R = ((R'sRGB + 0.055) / 1.055)^2.4
+//    G = ((G'sRGB + 0.055) / 1.055)^2.4
+//    B = ((B'sRGB + 0.055) / 1.055)^2.4
+
+func Build_sRGBGamma(ContextID CmsContext) *CmsToneCurve {
+	var Parameters [5]float64
+
+	Parameters[0] = 2.4
+	Parameters[1] = 1. / 1.055
+	Parameters[2] = 0.055 / 1.055
+	Parameters[3] = 1. / 12.92
+	Parameters[4] = 0.04045
+
+	return cmsBuildParametricToneCurve(ContextID, 4, &Parameters[0])
+}
+
+func CmsCreate_sRGBProfileTHR(ContextID CmsContext) CmsHPROFILE {
+	// Define the D65 white point
+	var D65 CmsCIExyY
+	D65.x = 0.3127
+	D65.y = 0.3290
+	D65.Y = 1.0
+
+	// Define Rec709 primaries
+	var Rec709Primaries CmsCIExyYTRIPLE
+	Rec709Primaries.Red.x = 0.6400
+	Rec709Primaries.Red.y = 0.3300
+	Rec709Primaries.Red.Y = 1.0
+	Rec709Primaries.Green.x = 0.3000
+	Rec709Primaries.Green.y = 0.6000
+	Rec709Primaries.Green.Y = 1.0
+	Rec709Primaries.Blue.x = 0.1500
+	Rec709Primaries.Blue.y = 0.0600
+	Rec709Primaries.Blue.Y = 1.0
+
+	// Allocate Gamma22 tone curves
+	var Gamma22 [3]*CmsToneCurve
+	Gamma22[0] = Build_sRGBGamma(ContextID)
+	Gamma22[1] = Gamma22[0]
+	Gamma22[2] = Gamma22[0]
+
+	if Gamma22[0] == nil {
+		return nil
+	}
+
+	// Create the RGB profile
+	hsRGB := CmsCreateRGBProfileTHR(ContextID, &D65, &Rec709Primaries, Gamma22[:])
+	CmsFreeToneCurve(Gamma22[0]) // Free the tone curve memory
+
+	if hsRGB == nil {
+		return nil
+	}
+
+	// Set the text tags
+	if !SetTextTags(hsRGB, "sRGB built-in") {
+		CmsCloseProfile(hsRGB)
+		return nil
+	}
+
+	return hsRGB
+}
+
+func CmsCreate_sRGBProfile() CmsHPROFILE {
+	return CmsCreate_sRGBProfileTHR(nil)
 }

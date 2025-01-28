@@ -17,14 +17,14 @@ func cmsD50_XYZ() *cmsCIEXYZ {
 	return &cmsCIEXYZ{X: cmsD50X, Y: cmsD50Y, Z: cmsD50Z}
 }
 
-func cmsD50_xyY() *cmsCIExyY {
-	d50xyY := &cmsCIExyY{}
+func cmsD50_xyY() *CmsCIExyY {
+	d50xyY := &CmsCIExyY{}
 	cmsXYZ2xyY(d50xyY, cmsD50_XYZ())
 	return d50xyY
 }
 
 // Obtains WhitePoint from Temperature
-func cmsWhitePointFromTemp(WhitePoint *cmsCIExyY, TempK float64) error {
+func cmsWhitePointFromTemp(WhitePoint *CmsCIExyY, TempK float64) error {
 	var x, y, T, T2, T3 float64
 
 	if WhitePoint == nil {
@@ -101,7 +101,7 @@ var NISO = len(isotempdata)
 // cmsTempFromWhitePoint calculates the correlated color temperature (CCT) from a given white point.
 
 // Robertson's method
-func cmsTempFromWhitePoint(TempK *float64, WhitePoint *cmsCIExyY) bool {
+func cmsTempFromWhitePoint(TempK *float64, WhitePoint *CmsCIExyY) bool {
 	if WhitePoint == nil || TempK == nil {
 		return false
 	}
@@ -167,7 +167,7 @@ func ComputeChromaticAdaptation(Conversion *cmsMAT3, SourceWhitePoint, DestWhite
 
 // _cmsAdaptMatrixToD50 computes the adaptation matrix to the D50 white point.
 // The source white point is provided in the xyY representation.
-func _cmsAdaptMatrixToD50(r *cmsMAT3, SourceWhitePt *cmsCIExyY) bool {
+func _cmsAdaptMatrixToD50(r *cmsMAT3, SourceWhitePt *CmsCIExyY) bool {
 	if r == nil || SourceWhitePt == nil {
 		return false
 	}
@@ -203,7 +203,7 @@ func cmsAdaptationMatrix(r *cmsMAT3, ConeMatrix *cmsMAT3, FromIll, ToIll *cmsCIE
 
 	return ComputeChromaticAdaptation(r, FromIll, ToIll, ConeMatrix)
 }
-func cmsAdaptMatrixToD50(r *cmsMAT3, SourceWhitePt *cmsCIExyY) bool {
+func cmsAdaptMatrixToD50(r *cmsMAT3, SourceWhitePt *CmsCIExyY) bool {
 	var (
 		Dn       cmsCIEXYZ
 		Bradford cmsMAT3
@@ -249,7 +249,7 @@ func cmsAdaptMatrixToD50(r *cmsMAT3, SourceWhitePt *cmsCIExyY) bool {
 //  2. Evaluate the source white point across this matrix to obtain transformation coefficients.
 //  3. Apply these coefficients to the original matrix.
 
-func cmsBuildRGB2XYZtransferMatrix(r *cmsMAT3, WhitePt *cmsCIExyY, Primrs *cmsCIExyYTRIPLE) bool {
+func cmsBuildRGB2XYZtransferMatrix(r *cmsMAT3, WhitePt *CmsCIExyY, Primrs *CmsCIExyYTRIPLE) bool {
 	var (
 		WhitePoint, Coef  cmsVEC3
 		Result, Primaries cmsMAT3

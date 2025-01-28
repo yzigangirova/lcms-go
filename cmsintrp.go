@@ -12,7 +12,7 @@ func DefaultInterpolatorsFactory(nInputChannels, nOutputChannels, dwFlags uint32
 }
 
 // cmsAllocInterpPluginChunk allocates and duplicates the interpolation plug-in memory chunk.
-func cmsAllocInterpPluginChunk(ctx, src *cmsContextStruct) {
+func cmsAllocInterpPluginChunk(ctx, src *CmsContextStruct) {
 	var from unsafe.Pointer
 
 	if src != nil {
@@ -27,9 +27,9 @@ func cmsAllocInterpPluginChunk(ctx, src *cmsContextStruct) {
 }
 
 // cmsRegisterInterpPlugin is the main entry for interpolation plug-in registration.
-func cmsRegisterInterpPlugin(ContextID cmsContext, Data *cmsPluginBase) bool {
+func cmsRegisterInterpPlugin(ContextID CmsContext, Data *cmsPluginBase) bool {
 	plugin := (*cmsPluginInterpolation)(unsafe.Pointer(Data))
-	ptr := (*cmsInterpPluginChunkType)(cmsContextGetClientChunk(ContextID, InterpPlugin))
+	ptr := (*cmsInterpPluginChunkType)(CmsContextGetClientChunk(ContextID, InterpPlugin))
 
 	if Data == nil {
 		ptr.Interpolators = nil
@@ -42,8 +42,8 @@ func cmsRegisterInterpPlugin(ContextID cmsContext, Data *cmsPluginBase) bool {
 }
 
 // cmsSetInterpolationRoutine sets the interpolation method.
-func cmsSetInterpolationRoutine(ContextID cmsContext, p *cmsInterpParams) bool {
-	ptr := (*cmsInterpPluginChunkType)(cmsContextGetClientChunk(ContextID, InterpPlugin))
+func cmsSetInterpolationRoutine(ContextID CmsContext, p *cmsInterpParams) bool {
+	ptr := (*cmsInterpPluginChunkType)(CmsContextGetClientChunk(ContextID, InterpPlugin))
 
 	// Reset the interpolation function
 	p.Interpolation.Lerp16 = nil
@@ -68,7 +68,7 @@ func cmsSetInterpolationRoutine(ContextID cmsContext, p *cmsInterpParams) bool {
 
 // cmsComputeInterpParamsEx precalculates parameters to speed up interpolation.
 func cmsComputeInterpParamsEx(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	nSamples *uint32,
 	InputChan uint32,
 	OutputChan uint32,
@@ -120,7 +120,7 @@ func cmsComputeInterpParamsEx(
 
 // cmsComputeInterpParams is a wrapper assuming all directions have the same number of nodes.
 func cmsComputeInterpParams(
-	ContextID cmsContext,
+	ContextID CmsContext,
 	nSamples uint32,
 	InputChan uint32,
 	OutputChan uint32,
