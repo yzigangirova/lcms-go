@@ -299,10 +299,9 @@ func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE,
 	var MinL, MaxL, lo, hi float64
 	var NearlyStraightMidrange bool
 	var n, l int
-	var devClass cmsProfileClassSignature
 
 	// Ensure the device class is adequate
-	devClass = cmsGetDeviceClass(hProfile)
+	devClass := cmsGetDeviceClass(hProfile)
 	if devClass == cmsSigLinkClass ||
 		devClass == cmsSigAbstractClass ||
 		devClass == cmsSigNamedColorClass {

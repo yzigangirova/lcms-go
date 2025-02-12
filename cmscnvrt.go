@@ -36,6 +36,9 @@ func initDefaultIntents() {
 	}
 }
 
+// A pointer to the beginning of the list
+var cmsIntentsPluginChunk = cmsIntentsPluginChunkType{ Intents: nil }
+
 func init() {
 	initDefaultIntents()
 }
@@ -347,6 +350,7 @@ func DefaultICCintents(
 
 		cmsPipelineFree(Lut)
 		Lut = nil
+        // Update current space
 		CurrentColorSpace = ColorSpaceOut
 	}
 

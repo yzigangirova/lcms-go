@@ -186,9 +186,8 @@ func cmsDetectTAC(hProfile CmsHPROFILE) float64 {
 	var bp cmsTACestimator
 	var dwFormatter uint32
 	var gridPoints [MAX_INPUT_DIMENSIONS]uint32
-	var contextID CmsContext
 
-	contextID = cmsGetProfileContextID(hProfile)
+	contextID := cmsGetProfileContextID(hProfile)
 
 	// TAC only works on output profiles
 	if cmsGetDeviceClass(hProfile) != cmsSigOutputClass {

@@ -60,10 +60,16 @@ func cmsSetAdaptationState(d float64) float64 {
 }
 
 // Default alarm codes
+
+// -----------------------------------------------------------------------
+
+// Alarm codes for 16-bit transformations, because the fixed range of containers there are
+// no values left to mark out of gamut.
+
 var DEFAULT_ALARM_CODES_VALUE = [cmsMAXCHANNELS]uint16{0x7F00, 0x7F00, 0x7F00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
 // Global default alarm codes chunk
-//var globalAlarmCodesChunk = cmsAlarmCodesChunkType{DEFAULT_ALARM_CODES_VALUE}
+var cmsAlarmCodesChunk = cmsAlarmCodesChunkType{DEFAULT_ALARM_CODES_VALUE}
 
 // Mutex for thread-safe access
 //var alarmCodeMutex sync.Mutex
@@ -205,6 +211,45 @@ func CmsDoTransform(Transform CmsHTRANSFORM, InputBuffer, OutputBuffer unsafe.Po
 
 	// Perform the transformation
 	p.Xform(p, InputBuffer, OutputBuffer, Size, 1, &stride)
+}
+func CmsDoTransformStride(
+	Transform CmsHTRANSFORM,
+	InputBuffer unsafe.Pointer,
+	OutputBuffer unsafe.Pointer,
+	Size uint32,
+	Stride uint32) {
+
+	p := (*cmsTRANSFORM)(Transform)
+	var stride cmsStride
+
+	stride.BytesPerLineIn = 0
+	stride.BytesPerLineOut = 0
+	stride.BytesPerPlaneIn = Stride
+	stride.BytesPerPlaneOut = Stride
+
+	p.Xform(p, InputBuffer, OutputBuffer, Size, 1, &stride)
+}
+
+func CmsDoTransformLineStride(
+	Transform CmsHTRANSFORM,
+	InputBuffer unsafe.Pointer,
+	OutputBuffer unsafe.Pointer,
+	PixelsPerLine uint32,
+	LineCount uint32,
+	BytesPerLineIn uint32,
+	BytesPerLineOut uint32,
+	BytesPerPlaneIn uint32,
+	BytesPerPlaneOut uint32) {
+
+	p := (*cmsTRANSFORM)(Transform)
+	var stride cmsStride
+
+	stride.BytesPerLineIn = BytesPerLineIn
+	stride.BytesPerLineOut = BytesPerLineOut
+	stride.BytesPerPlaneIn = BytesPerPlaneIn
+	stride.BytesPerPlaneOut = BytesPerPlaneOut
+
+	p.Xform(p, InputBuffer, OutputBuffer, PixelsPerLine, LineCount, &stride)
 }
 
 // Transform routines ----------------------------------------------------------------------------------------------------------
@@ -878,16 +923,16 @@ func GetXFormColorSpaces(
 		default:
 			ColorSpaceIn = cmsGetPCS(hProfile)
 			ColorSpaceOut = CmsGetColorSpace(hProfile)
-
-			if i == 0 {
-				*Input = ColorSpaceIn
-			}
-
-			PostColorSpace = ColorSpaceOut
+		}
+		if i == 0 {
+			*Input = ColorSpaceIn
 		}
 
-		*Output = PostColorSpace
+		PostColorSpace = ColorSpaceOut
 	}
+
+	*Output = PostColorSpace
+
 	return true
 }
 

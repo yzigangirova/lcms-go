@@ -98,10 +98,11 @@ func cmsReadUInt16Number(io *cmsIOHANDLER, n *uint16) bool {
 }
 
 // cmsReadUInt16Array reads an array of uint16 numbers.
-func cmsReadUInt16Array(io *cmsIOHANDLER, n uint32, array []uint16) bool {
+func cmsReadUInt16Array(io *cmsIOHANDLER, n uint32, array *uint16) bool {
 	for i := uint32(0); i < n; i++ {
 		if array != nil {
-			if !cmsReadUInt16Number(io, &array[i]) {
+			arrayptr := (*uint16)(unsafe.Add(unsafe.Pointer(array), uintptr(i)*unsafe.Sizeof(uint16(0))))
+			if !cmsReadUInt16Number(io, arrayptr) {
 				return false
 			}
 		} else {
@@ -208,7 +209,7 @@ func cmsWriteUInt8Number(io *cmsIOHANDLER, n uint8) bool {
 		panic("nil pointer in cmsWriteUInt8Number")
 	}
 
-	if io.Write((*cms_io_handler)(io), 1, unsafe.Pointer(&n)) != true {
+	if !io.Write((*cms_io_handler)(io), 1, unsafe.Pointer(&n)) {
 		return false
 	}
 	return true
@@ -220,7 +221,7 @@ func cmsWriteUInt16Number(io *cmsIOHANDLER, n uint16) bool {
 	}
 
 	tmp := cmsAdjustEndianess16(n)
-	if io.Write((*cms_io_handler)(io), 2, unsafe.Pointer(&tmp)) != true {
+	if !io.Write((*cms_io_handler)(io), 2, unsafe.Pointer(&tmp)) {
 		return false
 	}
 	return true
@@ -384,9 +385,10 @@ func cmsWriteTypeBase(io *cmsIOHANDLER, sig cmsTagTypeSignature) bool {
 // Alignment Functions
 
 func cmsReadAlignment(io *cmsIOHANDLER) bool {
-	currentPos := io.Tell((*cms_io_handler)(io))
-	nextAligned := cmsALIGNLONG(currentPos)
-	bytesToNextAlignedPos := nextAligned - currentPos
+	At := io.Tell((*cms_io_handler)(io))
+	nextAligned := cmsALIGNLONG(At)
+	bytesToNextAlignedPos := nextAligned - At
+	var buffer [4]uint8
 
 	if bytesToNextAlignedPos == 0 {
 		return true
@@ -395,25 +397,20 @@ func cmsReadAlignment(io *cmsIOHANDLER) bool {
 		return false
 	}
 
-	buffer := make([]byte, bytesToNextAlignedPos)
 	return io.Read((*cms_io_handler)(io), unsafe.Pointer(&buffer), uint32(unsafe.Sizeof(buffer)), 1) == 1
 }
 
 func cmsWriteAlignment(io *cmsIOHANDLER) bool {
-	currentPos := io.Tell((*cms_io_handler)(io))
-	nextAligned := cmsALIGNLONG(currentPos)
-	bytesToNextAlignedPos := nextAligned - currentPos
+	At := io.Tell((*cms_io_handler)(io))
+	nextAligned := cmsALIGNLONG(At)
+	bytesToNextAlignedPos := nextAligned - At
+	var buffer [4]uint8
 
 	if bytesToNextAlignedPos == 0 {
 		return true
 	}
 	if bytesToNextAlignedPos > 4 {
 		return false
-	}
-
-	buffer := make([]byte, bytesToNextAlignedPos)
-	for i := range buffer {
-		buffer[i] = 0
 	}
 	return io.Write((*cms_io_handler)(io), uint32(len(buffer)), unsafe.Pointer(&buffer))
 }
@@ -535,14 +532,11 @@ var (
 // Global mutex to ensure thread safety
 var contextMutex sync.Mutex
 
-// Use sync.Once to ensure initialization happens exactly once
-var initOnce sync.Once
-
 // Initialize the context mutex
 func InitContextMutex() bool {
 	var initializationSuccessful bool
 
-	initOnce.Do(func() {
+	initializedMutex.Do(func() {
 		defer func() {
 			// Recover from any unexpected panic during initialization
 			if r := recover(); r != nil {

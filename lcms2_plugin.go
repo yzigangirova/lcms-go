@@ -43,13 +43,6 @@ type cmsTagTypeSignature uint32
 
 type cmsTagSignature uint32
 
-// Vectors and Matrices Operations
-func _cmsVEC3Init(r *cmsVEC3, x, y, z float64) {
-	r.N[0] = x
-	r.N[1] = y
-	r.N[2] = z
-}
-
 // Constants for interpolation flags
 const (
 	CMS_LERP_FLAGS_16BITS    uint32 = 0x0000 // Default
@@ -313,10 +306,10 @@ const MAX_TYPES_IN_LCMS_PLUGIN = 20
 type cmsMallocFnPtrType func(contextID CmsContext, size uint32) unsafe.Pointer
 
 // _cmsFreeFnPtrType defines a function that frees allocated memory.
-type cmsFreeFnPtrType func(contextID CmsContext, ptr unsafe.Pointer)
+type cmsFreeFnPtrType func(contextID CmsContext, ptr unsafe.Pointer, size uint32)
 
 // _cmsReallocFnPtrType defines a function that reallocates memory.
-type cmsReallocFnPtrType func(contextID CmsContext, ptr unsafe.Pointer, newSize uint32) unsafe.Pointer
+type cmsReallocFnPtrType func(contextID CmsContext, ptr unsafe.Pointer, oldSize uint32, newSize uint32) unsafe.Pointer
 
 // _cmsMalloZerocFnPtrType defines a function that allocates zero-initialized memory.
 type cmsMalloZerocFnPtrType func(contextID CmsContext, size uint32) unsafe.Pointer
@@ -339,10 +332,10 @@ type cmsPluginMemHandler struct {
 }
 
 // Type aliases for function pointer types.
-type cmsCreateMutexFnPtrType func(ContextID CmsContext) unsafe.Pointer
-type cmsDestroyMutexFnPtrType func(ContextID CmsContext, mtx unsafe.Pointer)
-type cmsLockMutexFnPtrType func(ContextID CmsContext, mtx unsafe.Pointer) bool
-type cmsUnlockMutexFnPtrType func(ContextID CmsContext, mtx unsafe.Pointer)
+type cmsCreateMutexFnPtrType func() unsafe.Pointer
+type cmsDestroyMutexFnPtrType func(mtx unsafe.Pointer)
+type cmsLockMutexFnPtrType func(mtx unsafe.Pointer) bool
+type cmsUnlockMutexFnPtrType func(mtx unsafe.Pointer)
 
 // Mutex plugin structure.
 type cmsPluginMutex struct {
@@ -361,10 +354,4 @@ type cmsPluginParalellization struct {
 	WorkerFlags uint32          // Reserved
 	SchedulerFn cmsTransform2Fn // callback to setup functions
 
-}
-
-// ICC base tag
-type cmsTagBas struct {
-	sig      cmsTagTypeSignature
-	reserved [4]uint8
 }

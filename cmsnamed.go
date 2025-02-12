@@ -84,28 +84,12 @@ func SearchMLUEntry(mlu *cmsMLU, LanguageCode, CountryCode uint16) int {
 		return -1
 	}
 	for i := uint32(0); i < mlu.UsedEntries; i++ {
-		// Convert the base pointer to uintptr for arithmetic
-		basePtr := uintptr(unsafe.Pointer(mlu.Entries))
-
-		// Calculate the address of the current entry
-		entryPtr := unsafe.Pointer(basePtr + uintptr(i)*unsafe.Sizeof(cmsMLUentry{}))
-
-		// Cast the calculated address back to a *cmsMLUentry
-		entry := (*cmsMLUentry)(entryPtr)
-
+		entry := (*cmsMLUentry)(unsafe.Add(unsafe.Pointer(mlu.Entries), uintptr(i)*unsafe.Sizeof(cmsMLUentry{})))
 		// Compare the fields
 		if entry.Country == CountryCode && entry.Language == LanguageCode {
 			return int(i)
 		}
 	}
-	//old piece
-	/*for i := uint32(0); i < mlu.UsedEntries; i++ {
-		entry := (*cmsMLUentry)(unsafe.Pointer(uintptr(mlu.Entries) + uintptr(i)*unsafe.Sizeof(cmsMLUentry{})))
-		if entry.Country == CountryCode && entry.Language == LanguageCode {
-			return int(i)
-		}
-	}*/
-
 	return -1
 }
 
@@ -140,14 +124,8 @@ func AddMLUBlock(mlu *cmsMLU, size uint32, block *uint16, LanguageCode, CountryC
 	memmove(unsafe.Add(unsafe.Pointer(ptr), offset), unsafe.Pointer(block), uintptr(size))
 	mlu.PoolUsed += size
 
-	//entry := mlu.Entries[mlu.UsedEntries]
-	// Convert the base pointer to uintptr for arithmetic
-	basePtr := uintptr(unsafe.Pointer(mlu.Entries))
 	// Calculate the address of the current entry
-	entryPtr := unsafe.Pointer(basePtr + uintptr(mlu.UsedEntries)*unsafe.Sizeof(cmsMLUentry{}))
-	// Cast the calculated address back to a *cmsMLUentry
-	entry := (*cmsMLUentry)(entryPtr)
-
+	entry := (*cmsMLUentry)(unsafe.Add(unsafe.Pointer(mlu.Entries), uintptr(mlu.UsedEntries)*unsafe.Sizeof(cmsMLUentry{})))
 	entry.StrW = offset
 	entry.Len = size
 	entry.Country = CountryCode
@@ -295,13 +273,11 @@ func _cmsMLUgetWide(mlu *cmsMLU, length *uint32, LanguageCode, CountryCode uint1
 	}
 
 	// Convert the base pointer to uintptr for arithmetic
-	basePtr := uintptr(unsafe.Pointer(mlu.Entries))
 	var bestMatch int = -1
 	for i := uint32(0); i < mlu.UsedEntries; i++ {
 		// Calculate the address of the current entry
-		entryPtr := unsafe.Pointer(basePtr + uintptr(i)*unsafe.Sizeof(cmsMLUentry{}))
-		// Cast the calculated address back to a *cmsMLUentry
-		entry := (*cmsMLUentry)(entryPtr)
+		entry := (*cmsMLUentry)(unsafe.Add(unsafe.Pointer(mlu.Entries), uintptr(i)*unsafe.Sizeof(cmsMLUentry{})))
+
 		if entry.Language == LanguageCode {
 			if bestMatch == -1 {
 				bestMatch = int(i)
@@ -324,9 +300,9 @@ func _cmsMLUgetWide(mlu *cmsMLU, length *uint32, LanguageCode, CountryCode uint1
 	if bestMatch == -1 {
 		bestMatch = 0
 	}
-	entryPtr := unsafe.Pointer(basePtr + uintptr(bestMatch)*unsafe.Sizeof(cmsMLUentry{}))
 	// Cast the calculated address back to a *cmsMLUentry
-	entry := (*cmsMLUentry)(entryPtr)
+	entry := (*cmsMLUentry)(unsafe.Add(unsafe.Pointer(mlu.Entries), uintptr(bestMatch)*unsafe.Sizeof(cmsMLUentry{})))
+
 	if UsedLanguageCode != nil {
 		*UsedLanguageCode = entry.Language
 	}
@@ -464,12 +440,9 @@ func cmsMLUtranslationsCodes(mlu *cmsMLU, idx uint32, LanguageCode, CountryCode 
 	if mlu == nil || idx >= mlu.UsedEntries {
 		return false
 	}
-	basePtr := uintptr(unsafe.Pointer(mlu.Entries))
 	// Calculate the address of the current entry
-	entryPtr := unsafe.Pointer(basePtr + uintptr(idx)*unsafe.Sizeof(cmsMLUentry{}))
+	entry := (*cmsMLUentry)(unsafe.Add(unsafe.Pointer(mlu.Entries), uintptr(idx)*unsafe.Sizeof(cmsMLUentry{})))
 	// Cast the calculated address back to a *cmsMLUentry
-	entry := (*cmsMLUentry)(entryPtr)
-
 	if LanguageCode != nil {
 		*LanguageCode = strFrom16(entry.Language)
 	}

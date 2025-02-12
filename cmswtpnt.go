@@ -165,28 +165,6 @@ func ComputeChromaticAdaptation(Conversion *cmsMAT3, SourceWhitePoint, DestWhite
 	return true
 }
 
-// _cmsAdaptMatrixToD50 computes the adaptation matrix to the D50 white point.
-// The source white point is provided in the xyY representation.
-func _cmsAdaptMatrixToD50(r *cmsMAT3, SourceWhitePt *CmsCIExyY) bool {
-	if r == nil || SourceWhitePt == nil {
-		return false
-	}
-
-	var Dn cmsCIEXYZ
-	var Bradford, Tmp cmsMAT3
-
-	cmsxyY2XYZ(&Dn, SourceWhitePt)
-
-	if !cmsAdaptationMatrix(&Bradford, nil, &Dn, cmsD50_XYZ()) {
-		return false
-	}
-
-	Tmp = *r
-	cmsMAT3per(r, &Bradford, &Tmp)
-
-	return true
-}
-
 // Returns the final chromatic adaptation matrix from illuminant FromIll to ToIll
 func cmsAdaptationMatrix(r *cmsMAT3, ConeMatrix *cmsMAT3, FromIll, ToIll *cmsCIEXYZ) bool {
 	var LamRigg = cmsMAT3{
@@ -203,6 +181,9 @@ func cmsAdaptationMatrix(r *cmsMAT3, ConeMatrix *cmsMAT3, FromIll, ToIll *cmsCIE
 
 	return ComputeChromaticAdaptation(r, FromIll, ToIll, ConeMatrix)
 }
+// cmsAdaptMatrixToD50 computes the adaptation matrix to the D50 white point.
+// The source white point is provided in the xyY representation.
+
 func cmsAdaptMatrixToD50(r *cmsMAT3, SourceWhitePt *CmsCIExyY) bool {
 	var (
 		Dn       cmsCIEXYZ

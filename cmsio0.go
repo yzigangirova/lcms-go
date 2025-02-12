@@ -324,6 +324,74 @@ func cmsGetProfileVersion(hProfile CmsHPROFILE) float64 {
 	versionPart := icc.Version >> 16
 	return float64(BaseToBase(versionPart, 16, 10)) / 100.0
 }
+func cmsOpenProfileFromFileTHR(ContextID CmsContext, lpFileName string, sAccess string) CmsHPROFILE {
+	var NewIcc *cmsICCPROFILE
+	hEmpty := cmsCreateProfilePlaceholder(ContextID)
+
+	if hEmpty == nil {
+		return nil
+	}
+
+	NewIcc = (*cmsICCPROFILE)(hEmpty)
+
+	NewIcc.IOhandler = cmsOpenIOhandlerFromFile(ContextID, lpFileName, sAccess)
+	if NewIcc.IOhandler == nil {
+		goto Error
+	}
+
+	// Check if access mode is write
+	if sAccess == "W" || sAccess == "w" {
+		NewIcc.IsWrite = true
+		return hEmpty
+	}
+
+	// Read profile header
+	if !cmsReadHeader(NewIcc) {
+		goto Error
+	}
+
+	return hEmpty
+
+Error:
+	CmsCloseProfile(hEmpty)
+	return nil
+}
+
+func CmsOpenProfileFromFile(ICCProfile string, sAccess string) CmsHPROFILE {
+	return cmsOpenProfileFromFileTHR(nil, ICCProfile, sAccess)
+}
+
+func cmsOpenProfileFromMemTHR(ContextID CmsContext, MemPtr unsafe.Pointer, dwSize uint32) CmsHPROFILE {
+	var NewIcc *cmsICCPROFILE
+	hEmpty := cmsCreateProfilePlaceholder(ContextID)
+
+	if hEmpty == nil {
+		return nil
+	}
+
+	NewIcc = (*cmsICCPROFILE)(hEmpty)
+
+	// Open the IO handler from memory
+	NewIcc.IOhandler = cmsOpenIOhandlerFromMem(ContextID, MemPtr, dwSize, "r")
+	if NewIcc.IOhandler == nil {
+		goto Error
+	}
+
+	// Read the profile header
+	if !cmsReadHeader(NewIcc) {
+		goto Error
+	}
+
+	return hEmpty
+
+Error:
+	CmsCloseProfile(hEmpty)
+	return nil
+}
+
+func CmsOpenProfileFromMem(MemPtr unsafe.Pointer, dwSize uint32) CmsHPROFILE {
+	return cmsOpenProfileFromMemTHR(nil, MemPtr, dwSize)
+}
 
 func cmsSaveProfileToIOhandler(hProfile CmsHPROFILE, io *cmsIOHANDLER) uint32 {
 	Icc := (*cmsICCPROFILE)(hProfile)
@@ -660,10 +728,9 @@ Error:
 // cmsGetTagTrueType translates to Go
 func cmsGetTagTrueType(hProfile CmsHPROFILE, sig cmsTagSignature) cmsTagTypeSignature {
 	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile)) // Cast hProfile to *cmsICCPROFILE
-	var n int
 
 	// Search for the given tag in ICC profile directory
-	n = cmsSearchTag(Icc, sig, true)
+	n := cmsSearchTag(Icc, sig, true)
 	if n < 0 {
 		return cmsTagTypeSignature(0) // Not found, return 0
 	}
@@ -1265,7 +1332,7 @@ func MemoryRead(iohandler *cms_io_handler, buffer unsafe.Pointer, size, count ui
 
 	if resData.Pointer+length > resData.Size {
 		length = resData.Size - resData.Pointer
-		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_READ, "Read from memory error. Got bytes, block should be of bytes")
+		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_READ, fmt.Sprintf("Read from memory error. Got %d bytes, block should be of %d bytes", length, count * size))
 		return 0
 	}
 

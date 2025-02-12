@@ -6,11 +6,40 @@ import (
 	"math"
 	"sync"
 	"unicode"
-
-	//"reflect"
 	"unsafe"
 	//"syscall"
 )
+
+// ---------------------------------------------------------------------------------------------------------
+
+// This is our default log error
+
+// Context0 storage, which is global
+var cmsLogErrorChunk = cmsLogErrorChunkType{DefaultLogErrorHandlerFunction}
+
+// Allocates and inits error logger container for a given context. If src is NULL, only initializes the value
+// to the default. Otherwise, it duplicates the value. The interface is standard across all context clients
+/*func cmsAllocLogErrorChunk(struct _cmsContext_struct* ctx,
+                            const struct _cmsContext_struct* src){
+    static _cmsLogErrorChunkType LogErrorChunk = { DefaultLogErrorHandlerFunction };
+    void* from;
+
+     if (src != NULL) {
+        from = src ->chunks[Logger];
+    }
+    else {
+       from = &LogErrorChunk;
+    }
+
+    ctx ->chunks[Logger] = cmsSubAllocDup(ctx ->MemPool, from, sizeof(_cmsLogErrorChunkType));
+}*/
+
+// The default error logger does nothing.
+func DefaultLogErrorHandlerFunction(ContextID CmsContext, ErrorCode uint32, text string) {
+	// fprintf(stderr, "[lcms]: %s\n", Text);
+	// fflush(stderr);
+
+}
 
 // cmsSignalError simulates error signaling
 func cmsSignalError(id unsafe.Pointer, code int, message string) {
@@ -71,7 +100,7 @@ func cmsFreeDefaultFn(ContextID CmsContext, Ptr unsafe.Pointer, size uint32) {
 }
 
 // Default realloc function
-func cmsReallocDefaultFn(ContextID CmsContext, Ptr unsafe.Pointer, oldSize, newSize uint32) unsafe.Pointer {
+func cmsReallocDefaultFn(ContextID CmsContext, Ptr unsafe.Pointer, newSize uint32, oldSize uint32) unsafe.Pointer {
 	if newSize > MAX_MEMORY_FOR_ALLOC {
 		return nil
 	}
@@ -79,11 +108,11 @@ func cmsReallocDefaultFn(ContextID CmsContext, Ptr unsafe.Pointer, oldSize, newS
 	if newPtr == nil {
 		return nil
 	}
-	if Ptr != nil && oldSize > 0 {
+	if Ptr != nil {
 		src := (*[1 << 30]byte)(Ptr)[:oldSize:oldSize]
 		dst := (*[1 << 30]byte)(newPtr)[:newSize:newSize]
 		copy(dst, src)
-		freeMemory(Ptr, uintptr(oldSize))
+		freeMemory(Ptr, uintptr(oldSize)) //need to know old size, but that would spoil function  prototype!
 	}
 	return newPtr
 }
@@ -110,6 +139,10 @@ func cmsDupDefaultFn(ContextID CmsContext, Org unsafe.Pointer, size uint32) unsa
 	}
 	return mem
 }
+
+// Pointers to memory manager functions in Context0
+var cmsMemPluginChunk = cmsMemPluginChunkType{cmsMallocDefaultFn, cmsMallocZeroDefaultFn, cmsFreeDefaultFn,
+	cmsReallocDefaultFn, cmsCallocDefaultFn, cmsDupDefaultFn}
 
 // Plug-in replacement entry
 func cmsRegisterMemHandlerPlugin(context CmsContext, data *cmsPluginBase) bool {
@@ -157,9 +190,9 @@ func cmsMalloc(contextID CmsContext, size uint32) unsafe.Pointer {
 // Generic allocate & zero
 func cmsMallocZero(contextID CmsContext, size uint32) unsafe.Pointer {
 	ptr := (*cmsMemPluginChunkType)(CmsContextGetClientChunk(contextID, MemPlugin))
-	if ptr == nil || ptr.MallocZeroPtr == nil {
+	/*	if ptr == nil || ptr.MallocZeroPtr == nil {
 		return nil
-	}
+	}*/
 	return ptr.MallocZeroPtr(contextID, size)
 }
 
@@ -178,7 +211,7 @@ func cmsRealloc(contextID CmsContext, oldPtr unsafe.Pointer, size uint32) unsafe
 	if ptr == nil || ptr.ReallocPtr == nil {
 		return nil
 	}
-	return ptr.ReallocPtr(contextID, oldPtr, size)
+	return ptr.ReallocPtr(contextID, oldPtr, size, size)
 }
 
 // Generic free memory
@@ -186,7 +219,7 @@ func cmsFree(contextID CmsContext, oldPtr unsafe.Pointer) {
 	if oldPtr != nil {
 		ptr := (*cmsMemPluginChunkType)(CmsContextGetClientChunk(contextID, MemPlugin))
 		if ptr != nil && ptr.FreePtr != nil {
-			ptr.FreePtr(contextID, oldPtr)
+			ptr.FreePtr(contextID, oldPtr, 0) //have to thing about freeing memory and size variable
 		}
 	}
 }
@@ -331,6 +364,36 @@ func cmsInstallAllocFunctions(plugin *cmsPluginMemHandler, ptr *cmsMemPluginChun
 	}
 }
 
+// Pointers to memory manager functions in Context0
+var cmsMutexPluginChunk = cmsMutexPluginChunkType{CreateMutexPtr: defMtxCreate, DestroyMutexPtr: defMtxDestroy, LockMutexPtr: defMtxLock, UnlockMutexPtr: defMtxUnlock}
+
+// Define a Mutex wrapper to emulate the behavior of _cmsMutex
+type MutexWrapper struct {
+	mutex sync.Mutex
+}
+
+// Equivalent of defMtxCreate
+func defMtxCreate() unsafe.Pointer {
+	return unsafe.Pointer(&MutexWrapper{})
+}
+
+// Equivalent of defMtxDestroy
+func defMtxDestroy(mtx unsafe.Pointer) {
+	// In Go, there's no need for explicit destruction of Mutex.
+	// We simply stop using it, and garbage collection will clean it up.
+}
+
+// Equivalent of defMtxLock
+func defMtxLock(mtx unsafe.Pointer) bool {
+	((*MutexWrapper)(mtx)).mutex.Lock()
+	return true // Always returns true in Go since mutex locking doesn't fail.
+}
+
+// Equivalent of defMtxUnlock
+func defMtxUnlock(mtx unsafe.Pointer) {
+	((*MutexWrapper)(mtx)).mutex.Unlock()
+}
+
 func cmsRegisterMutexPlugin(ContextID CmsContext, Data *cmsPluginBase) bool {
 	ctx := (*cmsMutexPluginChunkType)(CmsContextGetClientChunk(ContextID, MutexPlugin))
 	Plugin := (*cmsPluginMutex)(unsafe.Pointer(Data))
@@ -359,6 +422,8 @@ func cmsRegisterMutexPlugin(ContextID CmsContext, Data *cmsPluginBase) bool {
 	// All is ok.
 	return true
 }
+
+var cmsParallelizationPluginChunk = cmsParallelizationPluginChunkType{}
 
 // Register parallel processing plugin.
 func cmsRegisterParallelizationPlugin(ContextID CmsContext, Data unsafe.Pointer) bool {
@@ -395,7 +460,7 @@ func cmsCreateMutex(ContextID CmsContext) unsafe.Pointer {
 		return nil
 	}
 
-	return ptr.CreateMutexPtr(ContextID)
+	return ptr.CreateMutexPtr()
 }
 
 // Destroy a mutex.
@@ -405,7 +470,7 @@ func cmsDestroyMutex(ContextID CmsContext, mtx unsafe.Pointer) {
 
 	if ptr.DestroyMutexPtr != nil {
 
-		ptr.DestroyMutexPtr(ContextID, mtx)
+		ptr.DestroyMutexPtr(mtx)
 	}
 }
 
@@ -418,7 +483,7 @@ func cmsLockMutex(ContextID CmsContext, mtx unsafe.Pointer) bool {
 		return true
 	}
 
-	return ptr.LockMutexPtr(ContextID, mtx)
+	return ptr.LockMutexPtr(mtx)
 }
 
 // Unlock the mutex.
@@ -427,7 +492,7 @@ func cmsUnlockMutex(ContextID CmsContext, mtx unsafe.Pointer) {
 
 	if ptr.UnlockMutexPtr != nil {
 
-		ptr.UnlockMutexPtr(ContextID, mtx)
+		ptr.UnlockMutexPtr(mtx)
 	}
 }
 

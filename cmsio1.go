@@ -877,3 +877,45 @@ func cmsCompileProfileSequence(ContextID CmsContext, nProfiles uint32, hProfiles
 
 	return seq
 }
+func GetInfo(hProfile CmsHPROFILE, Info CmsInfoType) *cmsMLU {
+	var sig cmsTagSignature
+
+	switch Info {
+	case cmsInfoDescription:
+		sig = cmsSigProfileDescriptionTag
+	case cmsInfoManufacturer:
+		sig = cmsSigDeviceMfgDescTag
+	case cmsInfoModel:
+		sig = cmsSigDeviceModelDescTag
+	case cmsInfoCopyright:
+		sig = cmsSigCopyrightTag
+	default:
+		return nil
+	}
+
+	return (*cmsMLU)(cmsReadTag(hProfile, sig))
+}
+func cmsGetProfileInfo(hProfile CmsHPROFILE, Info CmsInfoType,
+	LanguageCode string, CountryCode string,
+	Buffer *uint16, BufferSize uint32) uint32 {
+
+	mlu := GetInfo(hProfile, Info)
+	if mlu == nil {
+		return 0
+	}
+
+	return cmsMLUgetWide(mlu, LanguageCode, CountryCode, Buffer, BufferSize)
+}
+
+func CmsGetProfileInfoASCII(hProfile CmsHPROFILE, Info CmsInfoType, 
+	LanguageCode string, CountryCode string, 
+	Buffer *byte, BufferSize uint32) uint32 {
+
+	mlu := GetInfo(hProfile, Info)
+	if mlu == nil {
+		return 0
+	}
+
+	// Call the corresponding function to get ASCII info
+	return cmsMLUgetASCII(mlu, LanguageCode, CountryCode, Buffer, BufferSize)
+}

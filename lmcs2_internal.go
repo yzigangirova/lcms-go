@@ -268,30 +268,6 @@ type cmsStageEvalFn func(In *float32, Out *float32, mpe *cmsStage)
 type cmsStageDupElemFn func(mpe *cmsStage) unsafe.Pointer
 type cmsStageFreeElemFn func(mpe *cmsStage)
 
-// Placeholder function allocation
-/*func cmsStageAllocPlaceholder(
-	ContextID CmsContext,
-	Type cmsStageSignature,
-	InputChannels uint32,
-	OutputChannels uint32,
-	EvalPtr cmsStageEvalFn,
-	DupElemPtr cmsStageDupElemFn,
-	FreePtr cmsStageFreeElemFn,
-	Data {},interface
-) *cmsStage {
-	return &cmsStage{
-		ContextID:      ContextID,
-		Type:           Type,
-		InputChannels:  InputChannels,
-		OutputChannels: OutputChannels,
-		EvalPtr:        EvalPtr,
-		DupElemPtr:     DupElemPtr,
-		FreePtr:        FreePtr,
-		Data:           Data,
-		Next:           nil, // Default to nil for linked list
-	}
-}*/
-
 // cmsPluginMultiProcessElement struct definition
 type cmsPluginMultiProcessElement struct {
 	Base    cmsPluginBase
@@ -408,7 +384,7 @@ type cmsLogErrorChunkType struct {
 }
 
 // The global Context0 storage for error logger
-var cmsLogErrorChunk cmsLogErrorChunkType
+//var cmsLogErrorChunk cmsLogErrorChunkType
 
 // Container for alarm codes -- not a plug-in
 type cmsAlarmCodesChunkType struct {
@@ -416,7 +392,7 @@ type cmsAlarmCodesChunkType struct {
 }
 
 // The global Context0 storage for alarm codes
-var cmsAlarmCodesChunk cmsAlarmCodesChunkType
+//var cmsAlarmCodesChunk cmsAlarmCodesChunkType
 
 // Container for adaptation state -- not a plug-in
 type cmsAdaptationStateChunkType struct {
@@ -424,7 +400,7 @@ type cmsAdaptationStateChunkType struct {
 }
 
 // The global Context0 storage for memory management
-var cmsMemPluginChunk cmsMemPluginChunkType
+//var cmsMemPluginChunk cmsMemPluginChunkType
 
 // Container for interpolation plug-in
 type cmsInterpPluginChunkType struct {
@@ -432,7 +408,7 @@ type cmsInterpPluginChunkType struct {
 }
 
 // The global Context0 storage for interpolation plug-in
-var cmsInterpPluginChunk cmsInterpPluginChunkType
+//var cmsInterpPluginChunk cmsInterpPluginChunkType
 
 // Container for parametric curves plug-in
 type cmsCurvesPluginChunkType struct {
@@ -440,7 +416,7 @@ type cmsCurvesPluginChunkType struct {
 }
 
 // The global Context0 storage for tone curves plug-in
-var cmsCurvesPluginChunk cmsCurvesPluginChunkType
+//var cmsCurvesPluginChunk cmsCurvesPluginChunkType
 
 // Container for formatters plug-in
 type cmsFormattersPluginChunkType struct {
@@ -464,8 +440,8 @@ type cms_curve_struct struct {
 	Table16  *uint16 // The table itself
 }
 
-// The global Context0 storage for formatters plug-in
-var cmsFormattersPluginChunk cmsFormattersPluginChunkType
+// The global Context0 storage for formatters plug-in//
+//var cmsFormattersPluginChunk cmsFormattersPluginChunkType
 
 // Allocate and init formatters container.
 //type cmsAllocFormattersPluginChunkFunc func(ctx, src CmsContext)
@@ -476,10 +452,10 @@ type cmsTagTypePluginChunkType struct {
 }
 
 // The global Context0 storage for tag types plug-in
-var cmsTagTypePluginChunk cmsTagTypePluginChunkType
+//var cmsTagTypePluginChunk cmsTagTypePluginChunkType
 
 // The global Context0 storage for multi-process elements plug-in
-var cmsMPETypePluginChunk cmsTagTypePluginChunkType
+//var cmsMPETypePluginChunk cmsTagTypePluginChunkType
 
 // Container for tag plug-in
 type cmsTagPluginChunkType struct {
@@ -487,7 +463,7 @@ type cmsTagPluginChunkType struct {
 }
 
 // The global Context0 storage for tag plug-in
-var cmsTagPluginChunk cmsTagPluginChunkType
+//var cmsTagPluginChunk cmsTagPluginChunkType
 
 // Container for intents plug-in
 type cmsIntentsPluginChunkType struct {
@@ -495,7 +471,7 @@ type cmsIntentsPluginChunkType struct {
 }
 
 // The global Context0 storage for intents plug-in
-var cmsIntentsPluginChunk cmsIntentsPluginChunkType
+//var cmsIntentsPluginChunk cmsIntentsPluginChunkType
 
 // Container for optimization plug-in  see cmsxform
 
@@ -539,7 +515,7 @@ type cmsMutexPluginChunkType struct {
 }
 
 // Global context storage for mutex plugin.
-var cmsMutexPluginChunk cmsMutexPluginChunkType
+//var cmsMutexPluginChunk cmsMutexPluginChunkType
 
 // Parallelization plugin container structure.
 type cmsParallelizationPluginChunkType struct {
@@ -564,7 +540,7 @@ func memset(ptr unsafe.Pointer, value int, num uintptr) {
 }
 
 // Global context storage for parallelization plugin.
-var cmsParallelizationPluginChunk cmsParallelizationPluginChunkType
+//var cmsParallelizationPluginChunk cmsParallelizationPluginChunkType
 
 // memmove copies `n` bytes from `src` to `dst`.
 // It works like C's memmove, supporting overlapping memory regions.

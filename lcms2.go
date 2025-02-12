@@ -1,37 +1,11 @@
 package golcms
 
 import (
-	"math"
+	//"math"
 	//"reflect"
 	"unsafe"
 )
 
-// Base types
-/*type (
-	uint8   uint8
-	int8    int8
-	float32 float32
-	float64 float64
-)
-
-// 16-bit base types
-type (
-	uint16 uint16
-	int16  int16
-)
-
-// 32-bit base types
-type (
-	uint32 uint32
-	int32  int32
-)
-
-// 64-bit base types
-// These are defined only if Go's types natively support 64-bit integers.
-type (
-	uint64 uint64
-	int64  int64
-)*/
 const LCMS_VERSION = 2150
 
 // //////////////////LCMS placeholders////////////////////////
@@ -65,7 +39,7 @@ const (
 	LCMS_USED_AS_PROOF  = 2
 )
 
-type cmsInfoType int
+type CmsInfoType int
 
 type cmsDICTentry struct {
 	Next *cmsDICTentry
@@ -171,7 +145,7 @@ type cmsLogErrorHandlerFunction func(ContextID CmsContext, ErrorCode uint32, Tex
 // type cmsInfoType C.int
 // Constants representing the info type in the CMS library
 const (
-	cmsInfoDescription cmsInfoType = iota
+	cmsInfoDescription CmsInfoType = iota
 	cmsInfoManufacturer
 	cmsInfoModel
 	cmsInfoCopyright
@@ -900,7 +874,7 @@ type (
 )
 
 // Ensure proper type sizes at compile-time (if desired, otherwise not necessary in Go due to well-defined type sizes).
-const (
+/*const (
 	cmsCheckUInt8Size  = uint8(math.MaxUint8) == 255
 	cmsCheckInt8Size   = int8(math.MaxInt8) == 127
 	cmsCheckUInt16Size = uint16(math.MaxUint16) == 65535
@@ -909,7 +883,7 @@ const (
 	cmsCheckInt32Size  = int32(math.MaxInt32) == 2147483647
 	cmsCheckUInt64Size = uint64(math.MaxUint64) == 18446744073709551615
 	cmsCheckInt64Size  = int64(math.MaxInt64) == 9223372036854775807
-)
+)*/
 
 // Pixel format description:
 // Bit fields for defining the format of a pixel are defined as follows:

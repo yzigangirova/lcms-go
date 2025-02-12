@@ -1056,11 +1056,7 @@ func cmsPipelineInsertStage(lut *cmsPipeline, loc cmsStageLoc, mpe *cmsStage) bo
 		return false
 	}
 
-	if !BlessLUT(lut) {
-		return false
-	}
-
-	return true
+	return BlessLUT(lut) 
 }
 func cmsPipelineUnlinkStage(lut *cmsPipeline, loc cmsStageLoc, mpe **cmsStage) {
 	if lut.Elements == nil {
@@ -1431,7 +1427,7 @@ func cmsStageAllocCLut16bitGranular(
 	ContextID CmsContext,
 	clutPoints []uint32,
 	inputChan, outputChan uint32,
-	Table []uint16,
+	Table *uint16,
 ) *cmsStage {
 	if clutPoints == nil {
 		return nil
@@ -1467,9 +1463,10 @@ func cmsStageAllocCLut16bitGranular(
 	if Table != nil {
 		for i := 0; i < int(NewElem.NEntries); i++ {
 			// Calculate the address of the ith element in the allocated memory
-			ptr := (*uint16)(unsafe.Add(unsafe.Pointer(NewElem.Tab.T), uintptr(i)*unsafe.Sizeof(uint16(0))))
+			ptrT := (*uint16)(unsafe.Add(unsafe.Pointer(NewElem.Tab.T), uintptr(i)*unsafe.Sizeof(uint16(0))))
+			ptrTable := (*uint16)(unsafe.Add(unsafe.Pointer(Table), uintptr(i)*unsafe.Sizeof(uint16(0))))
 			// Copy the value from Table to the allocated memory
-			*ptr = Table[i]
+			*ptrT = *ptrTable
 		}
 	}
 
@@ -1486,13 +1483,13 @@ func cmsStageAllocCLut16bitGranular(
 func cmsStageAllocCLut16bit(
 	ContextID CmsContext,
 	nGridPoints, inputChan, outputChan uint32,
-	Table []uint16,
+	Table *uint16,
 ) *cmsStage {
-	Dimensions := make([]uint32, MAX_INPUT_DIMENSIONS)
+	var Dimensions [MAX_INPUT_DIMENSIONS]uint32
 	for i := range Dimensions {
 		Dimensions[i] = nGridPoints
 	}
-	return cmsStageAllocCLut16bitGranular(ContextID, Dimensions, inputChan, outputChan, Table)
+	return cmsStageAllocCLut16bitGranular(ContextID, Dimensions[:], inputChan, outputChan, Table)
 }
 
 // Allocates a floating-point CLUT with the same granularity on all dimensions.
@@ -1501,11 +1498,11 @@ func cmsStageAllocCLutFloat(
 	nGridPoints, inputChan, outputChan uint32,
 	Table []float32,
 ) *cmsStage {
-	Dimensions := make([]uint32, MAX_INPUT_DIMENSIONS)
+	var Dimensions [MAX_INPUT_DIMENSIONS]uint32
 	for i := range Dimensions {
 		Dimensions[i] = nGridPoints
 	}
-	return cmsStageAllocCLutFloatGranular(ContextID, Dimensions, inputChan, outputChan, Table)
+	return cmsStageAllocCLutFloatGranular(ContextID, Dimensions[:], inputChan, outputChan, Table)
 }
 
 // Allocates a floating-point multidimensional CLUT. Table may have different granularity on each dimension.

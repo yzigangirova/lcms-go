@@ -940,9 +940,9 @@ func PrelinEval8(Input *uint16, Output *uint16, D unsafe.Pointer) {
 			c1, c2, c3 = 0, 0, 0
 		}
 
-		Rest := uint16(c1)*rx + uint16(c2)*ry + uint16(c3)*rz + 0x8001
+		Rest := c1*cmsS15Fixed16Number(rx) + c2*cmsS15Fixed16Number(ry) + c3*cmsS15Fixed16Number(rz) + 0x8001
 		outputPtr := (*uint16)(unsafe.Add(unsafe.Pointer(Output), uintptr(OutChan)*unsafe.Sizeof(uint16(0))))
-		*outputPtr = uint16(c0) + uint16((Rest+(Rest>>16))>>16)
+		*outputPtr = uint16(cmsS15Fixed16Number(c0) + ((Rest + (Rest >> 16)) >> 16))
 	}
 }
 
@@ -1063,6 +1063,7 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 
 	for t := uint32(0); t < OriginalLut.InputChannels; t++ {
 		if !cmsIsToneCurveLinear(Trans[t]) {
+			//keep C code similarity, although var is unused
 			//lIsLinear = false
 		}
 		if !cmsIsToneCurveMonotonic(Trans[t]) || IsDegenerated(Trans[t]) {
@@ -1724,10 +1725,14 @@ var DefaultOptimization []cmsOptimizationCollection
 
 func init() {
 	DefaultOptimization = []cmsOptimizationCollection{
-		{OptimizePtr: OptimizeByJoiningCurves, Next: &DefaultOptimization[1]},
-		{OptimizePtr: OptimizeMatrixShaper, Next: &DefaultOptimization[2]},
-		{OptimizePtr: OptimizeByComputingLinearization, Next: &DefaultOptimization[3]},
+		{OptimizePtr: OptimizeByJoiningCurves, Next: nil},
+		{OptimizePtr: OptimizeMatrixShaper, Next: nil},
+		{OptimizePtr: OptimizeByComputingLinearization, Next: nil},
 		{OptimizePtr: OptimizeByResampling, Next: nil},
+	}
+	// Link the list
+	for i := 0; i < len(DefaultOptimization)-1; i++ {
+		DefaultOptimization[i].Next = &DefaultOptimization[i+1]
 	}
 }
 

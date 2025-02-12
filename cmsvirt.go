@@ -166,7 +166,7 @@ func CmsCreateRGBProfileTHR(ContextID CmsContext, WhitePoint *CmsCIExyY, Primari
 		}
 	}
 
-	if TransferFunction != nil {
+	if &TransferFunction[0] != nil {
 		if !cmsWriteTag(hICC, cmsSigRedTRCTag, unsafe.Pointer(TransferFunction[0])) {
 			goto Error
 		}
@@ -437,8 +437,11 @@ func cmsCreateInkLimitingDeviceLink(ColorSpace cmsColorSpaceSignature, Limit flo
 func cmsCreateLab2ProfileTHR(ContextID CmsContext, WhitePoint *CmsCIExyY) CmsHPROFILE {
 	var hProfile CmsHPROFILE
 	var LUT *cmsPipeline
-
-	hProfile = CmsCreateRGBProfileTHR(ContextID, cmsD50_xyY(), nil, nil)
+	if WhitePoint == nil {
+		hProfile = CmsCreateRGBProfileTHR(ContextID, cmsD50_xyY(), nil, nil)
+	} else {
+		hProfile = CmsCreateRGBProfileTHR(ContextID, WhitePoint, nil, nil)
+	}
 	if hProfile == nil {
 		return nil
 	}
@@ -485,7 +488,11 @@ func cmsCreateLab4ProfileTHR(ContextID CmsContext, WhitePoint *CmsCIExyY) CmsHPR
 	var hProfile CmsHPROFILE
 	var LUT *cmsPipeline
 
-	hProfile = CmsCreateRGBProfileTHR(ContextID, cmsD50_xyY(), nil, nil)
+	if WhitePoint == nil {
+		hProfile = CmsCreateRGBProfileTHR(ContextID, cmsD50_xyY(), nil, nil)
+	} else {
+		hProfile = CmsCreateRGBProfileTHR(ContextID, WhitePoint, nil, nil)
+	}
 	if hProfile == nil {
 		return nil
 	}
@@ -640,7 +647,7 @@ func CmsCreate_sRGBProfileTHR(ContextID CmsContext) CmsHPROFILE {
 	}
 
 	// Set the text tags
-	if !SetTextTags(hsRGB, "sRGB built-in") {
+	if !SetTextTags(hsRGB, StringToUTF16Slice("sRGB built-in")) {
 		CmsCloseProfile(hsRGB)
 		return nil
 	}

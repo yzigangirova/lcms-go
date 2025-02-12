@@ -2581,6 +2581,8 @@ type cmsFormattersFactoryList struct {
 	Next    *cmsFormattersFactoryList
 }
 
+
+var cmsFormattersPluginChunk = cmsFormattersPluginChunkType{ FactoryList: nil }
 // Duplicate the zone of memory used by the plugin in the new context
 func DupFormatterFactoryList(ctx CmsContext, src CmsContext) {
 	var newHead cmsFormattersPluginChunkType
@@ -2698,6 +2700,7 @@ func cmsFormatterForPCSOfProfile(hProfile CmsHPROFILE, nBytes uint32, isFloat bo
 	colorSpace := cmsGetPCS(hProfile)
 	colorSpaceBits := cmsLCMScolorSpace(colorSpace)
 	nOutputChans := cmsChannelsOf(colorSpace)
+	//this is senseless comparison from C code
 	if nOutputChans < 0 {
 		return 0
 	}

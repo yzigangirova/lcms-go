@@ -5,10 +5,10 @@ import (
 	"unsafe"
 )
 
-func DSWAP(x, y float64) {
-	tmp := (x)
-	(x) = (y)
-	(y) = tmp
+func DSWAP(x, y *float64) {
+	tmp := (*x)
+	(*x) = (*y)
+	(*y) = tmp
 }
 
 // Initiate a vector
@@ -61,7 +61,7 @@ func cmsMAT3identity(a *cmsMAT3) {
 }
 
 func CloseEnough(a, b float64) bool {
-	return math.Abs(b-a) < (1.0 / 65535.0) == true
+	return math.Abs(b-a) < (1.0 / 65535.0)
 }
 
 func cmsMAT3isIdentity(a *cmsMAT3) bool {

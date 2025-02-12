@@ -35,6 +35,9 @@ var DefaultCurves = cmsParametricCurvesCollection{
 	Next:           nil,
 }
 
+// The linked list head
+var cmsCurvesPluginChunk = cmsCurvesPluginChunkType{ ParametricCurves: nil }
+
 func cmsRegisterParametricCurvesPlugin(ContextID CmsContext, Data *cmsPluginBase) bool {
 	ctx := (*cmsCurvesPluginChunkType)(CmsContextGetClientChunk(ContextID, CurvesPlugin))
 	Plugin := (*cmsPluginParametricCurves)(unsafe.Pointer(Data))
@@ -294,7 +297,7 @@ func CmsFreeToneCurve(Curve *CmsToneCurve) {
 	}
 
 	if Curve.Evals != nil {
-		//garbage collector
+		//garbage collector - evals is a slice
 		//cmsFree(ContextID, unsafe.Pointer(Curve.Evals))
 	}
 
@@ -339,7 +342,7 @@ func cmsJoinToneCurve(ContextID CmsContext, X, Y *CmsToneCurve, nResultingPoints
 	var (
 		out       *CmsToneCurve
 		Yreversed *CmsToneCurve
-		Res       []float32
+		Res       *float32
 	)
 
 	// Reverse the Y tone curve
@@ -349,20 +352,28 @@ func cmsJoinToneCurve(ContextID CmsContext, X, Y *CmsToneCurve, nResultingPoints
 	}
 
 	// Allocate result array
-	Res = make([]float32, nResultingPoints)
-
+    Res = (*float32) (cmsCalloc(ContextID, nResultingPoints, uint32(unsafe.Sizeof(float32(0)))))
+    if(Res == nil){
+		goto Error
+	}
 	// Iterate and compute
 	for i := uint32(0); i < nResultingPoints; i++ {
 		t := float32(i) / float32(nResultingPoints-1)
 		x := cmsEvalToneCurveFloat(X, t)
-		Res[i] = cmsEvalToneCurveFloat(Yreversed, x)
+		resptr := (*float32)(unsafe.Add(unsafe.Pointer(Res), uintptr(i)*unsafe.Sizeof(*Res)))
+		*resptr = cmsEvalToneCurveFloat(Yreversed, x)
 	}
 
 	// Build the output tone curve
-	out = cmsBuildTabulatedToneCurveFloat(ContextID, nResultingPoints, &Res[0])
+	out = cmsBuildTabulatedToneCurveFloat(ContextID, nResultingPoints, Res)
 
-	// Cleanup
+Error:
+if (Res != nil) {
+	cmsFree(ContextID, unsafe.Pointer(Res))
+}
+if (Yreversed != nil) {
 	CmsFreeToneCurve(Yreversed)
+}
 
 	return out
 }
