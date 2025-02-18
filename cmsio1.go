@@ -442,10 +442,14 @@ func cmsReadInputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 		return Lut
 	}
 
+   // This is an attempt to reuse this function to retrieve the matrix-shaper as pipeline no
+    // matter other LUT are present and have precedence. Intent = 0xffffffff can be used for that.
 	if Intent <= INTENT_ABSOLUTE_COLORIMETRIC {
 		tag16 := Device2PCS16[Intent]
 		tagFloat := Device2PCSFloat[Intent]
 
+	        // Floating point LUT are always V4, but the encoding range is no
+            // longer 0..1.0, so we need to add an stage depending on the color space
 		if cmsIsTag(hProfile, tagFloat) {
 			return cmsReadFloatInputTag(hProfile, tagFloat)
 		}
@@ -857,7 +861,8 @@ func cmsCompileProfileSequence(ContextID CmsContext, nProfiles uint32, hProfiles
 
 		// Extract header attributes
 		cmsGetHeaderAttributes(h, &ps.attributes)
-		cmsGetHeaderProfileID(h, &ps.ProfileID.ID8[0])
+	//	cmsGetHeaderProfileID(h, &ps.ProfileID.ID8[0])
+		cmsGetHeaderProfileID(h, &ps.ProfileID[0])
 		ps.deviceMfg = cmsSignature(cmsGetHeaderManufacturer(h))
 		ps.deviceModel = cmsSignature(cmsGetHeaderModel(h))
 

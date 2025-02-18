@@ -4,7 +4,6 @@ import "C"
 import (
 	"fmt"
 	"math"
-	"sync"
 	"unicode"
 	"unsafe"
 	//"syscall"
@@ -367,31 +366,29 @@ func cmsInstallAllocFunctions(plugin *cmsPluginMemHandler, ptr *cmsMemPluginChun
 // Pointers to memory manager functions in Context0
 var cmsMutexPluginChunk = cmsMutexPluginChunkType{CreateMutexPtr: defMtxCreate, DestroyMutexPtr: defMtxDestroy, LockMutexPtr: defMtxLock, UnlockMutexPtr: defMtxUnlock}
 
-// Define a Mutex wrapper to emulate the behavior of _cmsMutex
-type MutexWrapper struct {
-	mutex sync.Mutex
-}
-
 // Equivalent of defMtxCreate
 func defMtxCreate() unsafe.Pointer {
-	return unsafe.Pointer(&MutexWrapper{})
+	ptr_mutex := &cmsMutex{}
+	cmsInitMutexPrimitive(ptr_mutex)
+	return unsafe.Pointer(ptr_mutex)
 }
 
 // Equivalent of defMtxDestroy
 func defMtxDestroy(mtx unsafe.Pointer) {
 	// In Go, there's no need for explicit destruction of Mutex.
 	// We simply stop using it, and garbage collection will clean it up.
+	cmsDestroyMutexPrimitive((*cmsMutex)(mtx))
 }
 
 // Equivalent of defMtxLock
 func defMtxLock(mtx unsafe.Pointer) bool {
-	((*MutexWrapper)(mtx)).mutex.Lock()
+	cmsLockPrimitive((*cmsMutex)(mtx))
 	return true // Always returns true in Go since mutex locking doesn't fail.
 }
 
 // Equivalent of defMtxUnlock
 func defMtxUnlock(mtx unsafe.Pointer) {
-	((*MutexWrapper)(mtx)).mutex.Unlock()
+	cmsUnlockPrimitive((*cmsMutex)(mtx))
 }
 
 func cmsRegisterMutexPlugin(ContextID CmsContext, Data *cmsPluginBase) bool {
@@ -496,13 +493,8 @@ func cmsUnlockMutex(ContextID CmsContext, mtx unsafe.Pointer) {
 	}
 }
 
-// Mutex for thread safety.
-var globalMutex sync.Mutex
-
 // Allocate and initialize mutex container.
 func cmsAllocMutexPluginChunk(ctx *CmsContextStruct, src *CmsContextStruct) {
-	globalMutex.Lock()
-	defer globalMutex.Unlock()
 
 	if src != nil {
 		// Copy the source mutex plugin chunk.
@@ -518,8 +510,6 @@ func cmsAllocMutexPluginChunk(ctx *CmsContextStruct, src *CmsContextStruct) {
 
 // Allocate and initialize parallelization container.
 func cmsAllocParallelizationPluginChunk(ctx *CmsContextStruct, src *CmsContextStruct) {
-	globalMutex.Lock()
-	defer globalMutex.Unlock()
 
 	if src != nil {
 		// Copy the source parallelization plugin chunk.

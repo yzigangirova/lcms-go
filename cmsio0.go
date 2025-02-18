@@ -326,7 +326,9 @@ func cmsGetProfileVersion(hProfile CmsHPROFILE) float64 {
 }
 func cmsOpenProfileFromFileTHR(ContextID CmsContext, lpFileName string, sAccess string) CmsHPROFILE {
 	var NewIcc *cmsICCPROFILE
+	fmt.Println("aaa")
 	hEmpty := cmsCreateProfilePlaceholder(ContextID)
+	fmt.Println("bbb")
 
 	if hEmpty == nil {
 		return nil
@@ -335,6 +337,7 @@ func cmsOpenProfileFromFileTHR(ContextID CmsContext, lpFileName string, sAccess 
 	NewIcc = (*cmsICCPROFILE)(hEmpty)
 
 	NewIcc.IOhandler = cmsOpenIOhandlerFromFile(ContextID, lpFileName, sAccess)
+	fmt.Println("ccc")
 	if NewIcc.IOhandler == nil {
 		goto Error
 	}
@@ -349,6 +352,7 @@ func cmsOpenProfileFromFileTHR(ContextID CmsContext, lpFileName string, sAccess 
 	if !cmsReadHeader(NewIcc) {
 		goto Error
 	}
+	fmt.Println("ddd")
 
 	return hEmpty
 
@@ -664,6 +668,8 @@ func cmsReadTag(hProfile CmsHPROFILE, sig cmsTagSignature) unsafe.Pointer {
 
 	// Read the tag
 	Icc.TagPtrs[n] = LocalTypeHandler.ReadFn(&LocalTypeHandler, io, &ElemCount, TagSize)
+	// The tag type is supported, but something wrong happened and we cannot read the tag.
+	// let know the user about this (although it is just a warning)
 	if Icc.TagPtrs[n] == nil {
 		var String [5]byte
 		cmsTagSignature2String(String, sig)
@@ -672,6 +678,8 @@ func cmsReadTag(hProfile CmsHPROFILE, sig cmsTagSignature) unsafe.Pointer {
 	}
 
 	// Check element count consistency
+	// This is a weird error that may be a symptom of something more serious, the number of
+	// stored item is actually less than the number of required elements.
 	if ElemCount < TagDescriptor.ElemCount {
 		var String [5]byte
 		cmsTagSignature2String(String, sig)
@@ -1012,24 +1020,29 @@ func validatedVersion(dWord uint32) uint32 {
 }
 
 // validDeviceClass checks if the given device class is valid.
-func validDeviceClass(cl uint32) bool {
+func validDeviceClass(cl cmsProfileClassSignature) bool {
 	if cl == 0 {
 		return true // Allow zero for older compatibility.
 	}
 
 	switch cl {
-	case 0x73636E72: // cmsSigInputClass
-	case 0x64697370: // cmsSigDisplayClass
-	case 0x70727472:
-	case 0x6C696E6B: // cmsSigLinkClass
-	case 0x61627374: // cmsSigAbstractClass
-	case 0x73706163: // cmsSigColorSpaceClass
-	case 0x6E6D636C: // cmsSigNamedColorClass
+	case cmsSigInputClass:
+		return true
+	case cmsSigDisplayClass:
+		return true
+	case cmsSigOutputClass:
+		return true
+	case cmsSigLinkClass:
+		return true
+	case cmsSigAbstractClass:
+		return true
+	case cmsSigColorSpaceClass:
+		return true
+	case cmsSigNamedColorClass:
 		return true
 	default:
 		return false
 	}
-	return false
 }
 
 // cmsReadHeader reads and validates the profile header.
@@ -1038,17 +1051,19 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 	var Header cmsICCHeader
 	var HeaderSize, TagCount uint32
 	io := Icc.IOhandler
-
+	fmt.Println("111aa unsafe.Sizeof(cmsICCHeader{}) ", unsafe.Sizeof(cmsICCHeader{}))
 	// Read the header
 	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&Header), uint32(unsafe.Sizeof(cmsICCHeader{})), 1) != 1 {
 		return false
 	}
+	fmt.Println("111bb")
 
 	// Validate file as an ICC profile
 	if cmsAdjustEndianess32(uint32(Header.Magic)) != cmsMagicNumber {
 		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_BAD_SIGNATURE, "not an ICC profile, invalid signature")
 		return false
 	}
+	fmt.Println("111cc")
 
 	// Adjust endianness of the used parameters
 	Icc.DeviceClass = cmsProfileClassSignature(cmsAdjustEndianess32(uint32(Header.DeviceClass)))
@@ -1066,11 +1081,13 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported profile version")
 		return false
 	}
+	fmt.Println("111dd")
 
-	if !validDeviceClass(uint32(Icc.DeviceClass)) {
+	if !validDeviceClass(Icc.DeviceClass) {
 		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported device class")
 		return false
 	}
+	fmt.Println("111ee")
 
 	// Get size as reported in header
 	HeaderSize = cmsAdjustEndianess32(Header.Size)
@@ -1082,16 +1099,19 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 	Icc.Created = cmsDecodeDateTimeNumber(&Header.Date)
 
 	// The profile ID are 32 raw bytes
-	memmove(unsafe.Pointer(&Icc.ProfileID.ID32[0]), unsafe.Pointer(&Header.ProfileID.ID32[0]), 16)
+	//memmove(unsafe.Pointer(&Icc.ProfileID.ID32[0]), unsafe.Pointer(&Header.ProfileID.ID32[0]), 16)
+	memmove(unsafe.Pointer(&Icc.ProfileID[0]), unsafe.Pointer(&Header.ProfileID[0]), 16)
 
 	// Read tag directory
 	if !cmsReadUInt32Number(io, &TagCount) {
 		return false
 	}
+	fmt.Println("111ii")
 	if TagCount > MAX_TABLE_TAG {
 		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_RANGE, "Too many tags")
 		return false
 	}
+	fmt.Println("111kk")
 
 	// Initialize tag directory
 	Icc.TagCount = 0
@@ -1332,7 +1352,7 @@ func MemoryRead(iohandler *cms_io_handler, buffer unsafe.Pointer, size, count ui
 
 	if resData.Pointer+length > resData.Size {
 		length = resData.Size - resData.Pointer
-		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_READ, fmt.Sprintf("Read from memory error. Got %d bytes, block should be of %d bytes", length, count * size))
+		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_READ, fmt.Sprintf("Read from memory error. Got %d bytes, block should be of %d bytes", length, count*size))
 		return 0
 	}
 

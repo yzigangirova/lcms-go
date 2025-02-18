@@ -2,6 +2,7 @@ package golcms
 
 import (
 	//"math"
+	"fmt"
 	"reflect"
 	"sync"
 	"time"
@@ -144,12 +145,14 @@ type cmsMutex struct {
 
 // Lock the mutex
 func cmsLockPrimitive(m *cmsMutex) int {
+	fmt.Println("m.mutex.Lock()")
 	m.mutex.Lock()
 	return 0
 }
 
 // Unlock the mutex
 func cmsUnlockPrimitive(m *cmsMutex) int {
+	fmt.Println("m.mutex.Unlock()")
 	m.mutex.Unlock()
 	return 0
 }

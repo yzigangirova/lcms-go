@@ -456,11 +456,7 @@ type cmsEncodedXYZNumber struct {
 }
 
 // Profile ID as computed by MD5 algorithm
-type cmsProfileID struct {
-	ID8  [16]uint8
-	ID16 [8]uint16
-	ID32 [4]uint32
-}
+type cmsProfileID [16]byte
 
 // cmsTagTypeSignature represents the base ICC type definitions.
 // Base ICC type definitions

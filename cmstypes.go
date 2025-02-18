@@ -2893,7 +2893,8 @@ func ReadSeqID(self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo unsafe.Pointer, 
 	seqSlice := unsafe.Slice(outSeq.seq, outSeq.n) // Convert pointer to slice
 	seq := &seqSlice[n]
 
-	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&seq.ProfileID.ID8), 16, 1) != 1 {
+	//	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&seq.ProfileID.ID8), 16, 1) != 1 {
+	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&seq.ProfileID[0]), 16, 1) != 1 {
 		return false
 	}
 	if !ReadEmbeddedText(self, io, &seq.Description, sizeOfTag) {
@@ -2939,7 +2940,8 @@ func WriteSeqID(self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo unsafe.Pointer,
 	currentSeq := &seqSlice[n]
 
 	// Write Profile ID
-	if io.Write((*cms_io_handler)(io), 16, unsafe.Pointer(&currentSeq.ProfileID.ID8[0])) {
+	//	if io.Write((*cms_io_handler)(io), 16, unsafe.Pointer(&currentSeq.ProfileID.ID8[0])) {
+	if io.Write((*cms_io_handler)(io), 16, unsafe.Pointer(&currentSeq.ProfileID[0])) {
 		return false
 	}
 

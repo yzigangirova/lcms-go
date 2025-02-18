@@ -534,7 +534,7 @@ var contextMutex sync.Mutex
 
 // Initialize the context mutex
 func InitContextMutex() bool {
-	var initializationSuccessful bool
+/*	var initializationSuccessful bool
 
 	initializedMutex.Do(func() {
 		defer func() {
@@ -551,9 +551,9 @@ func InitContextMutex() bool {
 
 		// Simulate some initialization logic
 		initializationSuccessful = true
-	})
+	})*/
 
-	return initializationSuccessful
+	return true
 }
 
 // Global storage for system context

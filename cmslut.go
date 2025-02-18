@@ -197,15 +197,19 @@ func CurveSetDup(mpe *cmsStage) unsafe.Pointer {
 
 	for i := uint32(0); i < newElem.NCurves; i++ {
 		// Access the original curve pointer
-		curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
+		//curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
+		curves := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(data.TheCurves)) // Cast to a large enough array
+		curve := curves[i]
 
 		// Duplicate the curve
-		duplicatedCurve := cmsDupToneCurve(*curve)
+		duplicatedCurve := cmsDupToneCurve(curve)
 		if duplicatedCurve == nil {
 			goto Error
 		}
 		// Assign the duplicated curve to the new allocated slice
-		*(*CmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil)))) = *duplicatedCurve
+		//*(*CmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil)))) = *duplicatedCurve
+		newCurves := (*[1<<30]*CmsToneCurve)(unsafe.Pointer(newElem.TheCurves))
+        newCurves[i] = duplicatedCurve
 	}
 
 	return unsafe.Pointer(newElem)

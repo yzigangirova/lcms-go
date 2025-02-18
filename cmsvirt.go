@@ -166,7 +166,7 @@ func CmsCreateRGBProfileTHR(ContextID CmsContext, WhitePoint *CmsCIExyY, Primari
 		}
 	}
 
-	if &TransferFunction[0] != nil {
+	if TransferFunction != nil {
 		if !cmsWriteTag(hICC, cmsSigRedTRCTag, unsafe.Pointer(TransferFunction[0])) {
 			goto Error
 		}
