@@ -140,7 +140,13 @@ While Go's sync.Mutex is not a one-to-one match for CRITICAL_SECTION, it provide
 
 // Define a type for the mutex
 type cmsMutex struct {
-	mutex sync.Mutex
+	mutex *sync.Mutex
+}
+
+func NewCmsMutex() *cmsMutex {
+    return &cmsMutex{
+        mutex: new(sync.Mutex), // Allocates a Mutex and assigns its pointer
+    }
 }
 
 // Lock the mutex

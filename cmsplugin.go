@@ -522,6 +522,10 @@ func cmsUnregisterPlugins() {
 	cmsUnregisterPluginsTHR(nil)
 }
 
+/* C-code The context pool (linked list head)  NOT IMPEMENTED NEEDS FURTHER CONSIDERATION
+static _cmsMutex _cmsContextPoolHeadMutex = CMS_MUTEX_INITIALIZER;
+static struct _cmsContext_struct* _cmsContextPoolHead = NULL;
+*/
 // Mutex for context pool head
 var (
 	CmsContextPoolHeadMutex sync.Mutex
@@ -529,29 +533,26 @@ var (
 	initializedMutex        sync.Once
 )
 
-// Global mutex to ensure thread safety
-var contextMutex sync.Mutex
-
 // Initialize the context mutex
 func InitContextMutex() bool {
-/*	var initializationSuccessful bool
+	/*	var initializationSuccessful bool
 
-	initializedMutex.Do(func() {
-		defer func() {
-			// Recover from any unexpected panic during initialization
-			if r := recover(); r != nil {
-				initializationSuccessful = false
-				cmsSignalError(nil, 1, "Context mutex initialization failed")
-			}
-		}()
+		initializedMutex.Do(func() {
+			defer func() {
+				// Recover from any unexpected panic during initialization
+				if r := recover(); r != nil {
+					initializationSuccessful = false
+					cmsSignalError(nil, 1, "Context mutex initialization failed")
+				}
+			}()
 
-		// Lock the global mutex to simulate initialization
-		contextMutex.Lock()
-		defer contextMutex.Unlock()
+			// Lock the global mutex to simulate initialization
+			contextMutex.Lock()
+			defer contextMutex.Unlock()
 
-		// Simulate some initialization logic
-		initializationSuccessful = true
-	})*/
+			// Simulate some initialization logic
+			initializationSuccessful = true
+		})*/
 
 	return true
 }
@@ -592,19 +593,19 @@ func cmsGetContext(ContextID CmsContext) CmsContext {
 	InitContextMutex()
 
 	// Enter critical section
-	cmsEnterCriticalSectionPrimitive(&cmsMutex{mutex: CmsContextPoolHeadMutex})
+	cmsEnterCriticalSectionPrimitive(&cmsMutex{mutex: &CmsContextPoolHeadMutex})
 
 	// Search through the context pool
 	for ctx := CmsContextPoolHead; ctx != nil; ctx = ctx.Next {
 		if id == ctx {
 			// Leave critical section and return the context
-			cmsLeaveCriticalSectionPrimitive(&cmsMutex{mutex: CmsContextPoolHeadMutex})
+			cmsLeaveCriticalSectionPrimitive(&cmsMutex{mutex: &CmsContextPoolHeadMutex})
 			return ctx
 		}
 	}
 
 	// Leave critical section if not found
-	cmsLeaveCriticalSectionPrimitive(&cmsMutex{mutex: CmsContextPoolHeadMutex})
+	cmsLeaveCriticalSectionPrimitive(&cmsMutex{mutex: &CmsContextPoolHeadMutex})
 	return &globalContext
 }
 
@@ -660,11 +661,15 @@ func cmsGetTime(ptrTime *time.Time) bool {
 	now := time.Now()
 
 	// Ensure thread safety with a mutex
-	contextMutex.Lock()
-	defer contextMutex.Unlock()
+	if !InitContextMutex() {
+		return false
+	}
+    mtx := &cmsMutex{mutex: &CmsContextPoolHeadMutex}
+	cmsEnterCriticalSectionPrimitive(mtx)
 
 	// Convert to UTC
 	utcTime := now.UTC()
+	cmsLeaveCriticalSectionPrimitive(mtx)
 
 	if ptrTime == nil {
 		return false

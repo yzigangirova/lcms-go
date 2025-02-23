@@ -2145,16 +2145,18 @@ Error:
 func Write8bitTables(ContextID CmsContext, io *cmsIOHANDLER, n uint32, tables *cmsStageToneCurvesData) bool {
 	if tables != nil {
 		for i := uint32(0); i < n; i++ {
-			curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(tables.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-			table16 := unsafe.Slice((*curve).Table16, (*curve).nEntries)
+			//curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(tables.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
+			curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(tables.TheCurves)) // Cast to a large enough array
+			curve := curvesptr[i]
+			table16 := unsafe.Slice(curve.Table16, curve.nEntries)
 			// Handle identity curves
-			if (*curve).nEntries == 2 && table16[0] == 0 && table16[1] == 65535 {
+			if curve.nEntries == 2 && table16[0] == 0 && table16[1] == 65535 {
 				for j := 0; j < 256; j++ {
 					if !cmsWriteUInt8Number(io, uint8(j)) {
 						return false
 					}
 				}
-			} else if (*curve).nEntries != 256 {
+			} else if curve.nEntries != 256 {
 				cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "LUT8 needs 256 entries on prelinearization")
 				return false
 			} else {
@@ -2233,11 +2235,13 @@ Error:
 }
 func Write16bitTables(ContextID CmsContext, io *cmsIOHANDLER, tables *cmsStageToneCurvesData) bool {
 	for i := uint32(0); i < tables.NCurves; i++ {
-		curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(tables.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		nEntries := (*curve).nEntries
+		//curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(tables.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
+		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(tables.TheCurves)) // Cast to a large enough array
+		curve := curvesptr[i]
+		nEntries := curve.nEntries
 
 		// Convert the Table16 pointer to a slice
-		table16Slice := unsafe.Slice((*curve).Table16, nEntries)
+		table16Slice := unsafe.Slice(curve.Table16, nEntries)
 
 		for j := uint32(0); j < nEntries; j++ {
 			val := table16Slice[j]
@@ -3623,12 +3627,14 @@ func WriteSetOfCurves(self *cmsTagTypeHandler, io *cmsIOHANDLER, curveType cmsTa
 
 	for i := uint32(0); i < outputChannels; i++ {
 		currentType := curveType
-		curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		if (*curve).Segments != nil {
-			segments := unsafe.Slice((*curve).Segments, (*curve).nSegments)
+		//curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
+		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(curves)) // Cast to a large enough array
+		curve := curvesptr[i]
+		if curve.Segments != nil {
+			segments := unsafe.Slice(curve.Segments, curve.nSegments)
 
 			// Determine the curve type
-			if (*curve).nSegments == 0 || ((*curve).nSegments == 2 && segments[1].Type == 0) || segments[0].Type < 0 {
+			if curve.nSegments == 0 || (curve.nSegments == 2 && segments[1].Type == 0) || segments[0].Type < 0 {
 				currentType = cmsSigCurveType
 			}
 		}
@@ -5045,9 +5051,11 @@ func TypeMPEcurveRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32,
 
 	// Free allocated resources in case of error
 	for i := uint32(0); i < uint32(inputChans); i++ {
-		curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(gammaTables), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		if *curve != nil {
-			CmsFreeToneCurve(*curve)
+		//	curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(gammaTables), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
+		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(gammaTables)) // Cast to a large enough array
+		curve := curvesptr[i]
+		if curve != nil {
+			CmsFreeToneCurve(curve)
 		}
 	}
 	if mpe != nil {
@@ -5118,9 +5126,11 @@ func WriteSegmentedCurve(io *cmsIOHANDLER, curve *CmsToneCurve) bool {
 // WriteMPECurve writes a curve for MPE
 func WriteMPECurve(self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo unsafe.Pointer, n, sizeOfTag uint32) bool {
 	curves := (*cmsStageToneCurvesData)(cargo)
-	curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(curves.TheCurves), uintptr(n)*unsafe.Sizeof((*CmsToneCurve)(nil))))
+	//	curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(curves.TheCurves), uintptr(n)*unsafe.Sizeof((*CmsToneCurve)(nil))))
+	curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(curves)) // Cast to a large enough array
+	curve := curvesptr[n]
 
-	return WriteSegmentedCurve(io, *curve)
+	return WriteSegmentedCurve(io, curve)
 }
 
 // Type_MPEcurve_Write writes the MPE curve type

@@ -208,12 +208,13 @@ func AllocateToneCurveStruct(
 
 		for i := uint32(0); i < nSegments; i++ {
 			currentSegment := (*cmsCurveSegment)(unsafe.Add(unsafe.Pointer(Segments), uintptr(i)*unsafe.Sizeof(cmsCurveSegment{})))
-			elementPtr := (**cmsInterpParams)(unsafe.Add(unsafe.Pointer(p.SegInterp), uintptr(i)*unsafe.Sizeof((*cmsInterpParams)(nil))))
-
+			//elementPtr := (**cmsInterpParams)(unsafe.Add(unsafe.Pointer(p.SegInterp), uintptr(i)*unsafe.Sizeof((*cmsInterpParams)(nil))))
+			elementPtr := (*[1 << 30]*cmsInterpParams)(unsafe.Pointer(p.SegInterp)) // Cast to a large enough array
+	
 			if currentSegment.Type == 0 {
 				// Calculate the pointer to the i-th element in the array
 				// Assign the computed value to the i-th element *elementPtr == p.SegInterp[i]
-				*elementPtr = cmsComputeInterpParams(ContextID, currentSegment.NGridPoints, 1, 1, nil, CMS_LERP_FLAGS_FLOAT)
+				elementPtr[i] = cmsComputeInterpParams(ContextID, currentSegment.NGridPoints, 1, 1, nil, CMS_LERP_FLAGS_FLOAT)
 
 			}
 
@@ -286,9 +287,10 @@ func CmsFreeToneCurve(Curve *CmsToneCurve) {
 				cmsFree(ContextID, unsafe.Pointer(currentSegment.SampledPoints))
 			}
 
-			targetPtr := (*cmsInterpParams)(unsafe.Add(unsafe.Pointer(Curve.SegInterp), uintptr(i)*unsafe.Sizeof((*cmsInterpParams)(nil))))
-			if targetPtr != nil {
-				cmsFreeInterpParams(targetPtr)
+			//targetPtr := (*cmsInterpParams)(unsafe.Add(unsafe.Pointer(Curve.SegInterp), uintptr(i)*unsafe.Sizeof((*cmsInterpParams)(nil))))
+			targetPtr := (*[1 << 30]*cmsInterpParams)(unsafe.Pointer(Curve.SegInterp)) // Cast to a large enough array
+			if targetPtr[i] != nil {
+				cmsFreeInterpParams(targetPtr[i])
 			}
 		}
 
@@ -843,7 +845,7 @@ func EvalSegmentedFn(g *CmsToneCurve, R float64) float64 {
 	var Out32 float32
 
 	segmentSize := unsafe.Sizeof(cmsCurveSegment{})
-	segInterpSize := unsafe.Sizeof((*cmsInterpParams)(nil))
+	//segInterpSize := unsafe.Sizeof((*cmsInterpParams)(nil))
 
 	for i := int(g.nSegments) - 1; i >= 0; i-- {
 		// Access the current segment
@@ -856,13 +858,14 @@ func EvalSegmentedFn(g *CmsToneCurve, R float64) float64 {
 				R1 := float32((R - float64(currentSegment.X0)) / float64(currentSegment.X1-currentSegment.X0))
 
 				// Access the current SegInterp
-				currentSegInterp := (**cmsInterpParams)(unsafe.Add(unsafe.Pointer(g.SegInterp), uintptr(i)*segInterpSize))
+				//currentSegInterp := (**cmsInterpParams)(unsafe.Add(unsafe.Pointer(g.SegInterp), uintptr(i)*segInterpSize))
+				currentSegInterp := (*[1 << 30]*cmsInterpParams)(unsafe.Pointer(g.SegInterp)) // Cast to a large enough array
 
 				// Setup the table
-				(*currentSegInterp).Table = unsafe.Pointer(currentSegment.SampledPoints)
+				(currentSegInterp[i]).Table = unsafe.Pointer(currentSegment.SampledPoints)
 
 				// Perform interpolation
-				(*currentSegInterp).Interpolation.LerpFloat(&R1, &Out32, *currentSegInterp)
+				(currentSegInterp[i]).Interpolation.LerpFloat(&R1, &Out32, currentSegInterp[i])
 				Out = float64(Out32)
 			} else {
 				// Evaluate the function for the segment

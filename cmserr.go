@@ -368,7 +368,7 @@ var cmsMutexPluginChunk = cmsMutexPluginChunkType{CreateMutexPtr: defMtxCreate, 
 
 // Equivalent of defMtxCreate
 func defMtxCreate() unsafe.Pointer {
-	ptr_mutex := &cmsMutex{}
+	ptr_mutex := NewCmsMutex()
 	cmsInitMutexPrimitive(ptr_mutex)
 	return unsafe.Pointer(ptr_mutex)
 }

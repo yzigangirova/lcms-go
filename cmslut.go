@@ -145,9 +145,10 @@ func EvaluateCurves(In *float32, Out *float32, mpe *cmsStage) {
 
 	for i := uint32(0); i < data.NCurves; i++ {
 		// Use unsafe.Add to access the i-th element of TheCurves
-		curvePtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		curve := *curvePtr
-
+		//curvePtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
+		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(data.TheCurves)) // Cast to a large enough array
+		curve := curvesptr[i]
+	
 		// Use unsafe.Add to access the i-th element of In and Out
 		inVal := *(*float32)(unsafe.Add(unsafe.Pointer(In), uintptr(i)*unsafe.Sizeof(*In)))
 		outPtr := (*float32)(unsafe.Add(unsafe.Pointer(Out), uintptr(i)*unsafe.Sizeof(*Out)))
@@ -167,9 +168,11 @@ func CurveSetElemTypeFree(mpe *cmsStage) {
 
 	if data.TheCurves != nil {
 		for i := uint32(0); i < data.NCurves; i++ {
-			curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-			if curve != nil {
-				CmsFreeToneCurve(*curve)
+			//curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
+			curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(data.TheCurves)) // Cast to a large enough array
+			curve := curvesptr[i]
+				if curve != nil {
+				CmsFreeToneCurve(curve)
 			}
 		}
 	}
@@ -217,9 +220,11 @@ func CurveSetDup(mpe *cmsStage) unsafe.Pointer {
 Error:
 	// Cleanup allocated memory in case of an error
 	for i := uint32(0); i < newElem.NCurves; i++ {
-		newCurve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		if newCurve != nil {
-			CmsFreeToneCurve(*newCurve)
+		//newCurve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
+		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(newElem.TheCurves)) // Cast to a large enough array
+		curve := curvesptr[i]
+		if curve != nil {
+			CmsFreeToneCurve(curve)
 		}
 	}
 	cmsFree(mpe.ContextID, unsafe.Pointer(newElem.TheCurves))
@@ -252,21 +257,23 @@ func cmsStageAllocToneCurves(ContextID CmsContext, nChannels uint32, Curves **Cm
 	// Handle the input curves, either creating identity curves or duplicating existing ones
 	for i := uint32(0); i < nChannels; i++ {
 		// Calculate the pointer to the i-th element of NewElem.TheCurves
-		curvePtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-
+		//curvePtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
+	    curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(newElem.TheCurves)) // Cast to a large enough array
+	
 		if Curves == nil {
 			// Assign a new tone curve if Curves is nil
-			*curvePtr = CmsBuildGamma(ContextID, 1.0)
+			curvesptr[i] = CmsBuildGamma(ContextID, 1.0)
 		} else {
 			// Calculate the pointer to the i-th element of Curves
-			srcCurvePtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-
+			//srcCurvePtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
+            srcCurvePtr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(Curves)) // Cast to a large enough array
+	        srcCurve := srcCurvePtr[i]
 			// Duplicate the tone curve and assign it to NewElem.TheCurves
-			*curvePtr = cmsDupToneCurve(*srcCurvePtr)
+			curvesptr[i]  = cmsDupToneCurve(srcCurve)
 		}
 
 		// Check if the assignment failed
-		if *curvePtr == nil {
+		if curvesptr[i] == nil {
 			cmsStageFree(newMPE)
 			return nil
 		}

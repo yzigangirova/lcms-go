@@ -2632,7 +2632,8 @@ func cmsAllocFormattersPluginChunk(ctx CmsContext, src CmsContext) {
 
 // Register formatters plugin
 func cmsRegisterFormattersPlugin(contextID CmsContext, data *cmsPluginBase) bool {
-	ctx := (*cmsFormattersPluginChunkType)((CmsContextStruct)(*contextID).chunks[FormattersPlugin])
+	//ctx := (*cmsFormattersPluginChunkType)((CmsContextStruct)(*contextID).chunks[FormattersPlugin])
+	ctx := (*cmsFormattersPluginChunkType)(CmsContextGetClientChunk(contextID, FormattersPlugin))
 	plugin := (*cmsPluginFormatters)(unsafe.Pointer(data))
 
 	if plugin == nil {
@@ -2652,8 +2653,8 @@ func cmsRegisterFormattersPlugin(contextID CmsContext, data *cmsPluginBase) bool
 
 // Get a formatter
 func cmsGetFormatter(contextID CmsContext, typeID uint32, direction cmsFormatterDirection, dwFlags uint32) cmsFormatter {
-	ctx := (*cmsFormattersPluginChunkType)((CmsContextStruct)(*contextID).chunks[FormattersPlugin])
-
+	//ctx := (*cmsFormattersPluginChunkType)((CmsContextStruct)(*contextID).chunks[FormattersPlugin])
+	ctx := (*cmsFormattersPluginChunkType)(CmsContextGetClientChunk(contextID, FormattersPlugin))
 	if T_CHANNELS(typeID) == 0 {
 		return cmsFormatter{} // Return a null formatter
 	}

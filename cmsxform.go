@@ -459,11 +459,12 @@ func CachedXFORM(
 	strideIn, strideOut = 0, 0
 
 	for i := uint32(0); i < LineCount; i++ {
-		accum := (*[1 << 30]uint8)(unsafe.Add(in, uintptr(strideIn)))[:Stride.BytesPerPlaneIn*PixelsPerLine]
-		output := (*[1 << 30]uint8)(unsafe.Add(out, uintptr(strideOut)))[:Stride.BytesPerPlaneOut*PixelsPerLine]
-
+		accumPtr := (*uint8)(unsafe.Add(in, uintptr(strideIn)))
+		outputPtr := (*uint8)(unsafe.Add(out, uintptr(strideOut)))
+		accum := unsafe.Slice(accumPtr, 4)
+		output := unsafe.Slice(outputPtr, 3)
 		for j := uint32(0); j < PixelsPerLine; j++ {
-			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
+			accumPtr = &(p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn))[0]
 
 			if reflect.DeepEqual(wIn, cache.CacheIn) {
 				copy(wOut[:], cache.CacheOut[:])
@@ -473,7 +474,9 @@ func CachedXFORM(
 				copy(cache.CacheOut[:], wOut[:])
 			}
 
-			output = p.ToOutput(p, wOut[:], output, Stride.BytesPerPlaneOut)
+			outputPtr = &(p.ToOutput(p, wOut[:], output, Stride.BytesPerPlaneOut))[0]
+			accum = unsafe.Slice(accumPtr, 4)
+			output = unsafe.Slice(outputPtr, 3)
 		}
 
 		strideIn += Stride.BytesPerLineIn

@@ -809,7 +809,7 @@ func cmsReadProfileSequence(hProfile CmsHPROFILE) *cmsSEQ {
 			ProfileIdSeqPtr := (*cmsPSEQDESC)(unsafe.Add(unsafe.Pointer(ProfileId.seq), uintptr(i)*unsafe.Sizeof(cmsPSEQDESC{})))
 
 			// Copy the ProfileID
-			memmove(unsafe.Pointer(&NewSeqSeqPtr.ProfileID), unsafe.Pointer(&ProfileIdSeqPtr.ProfileID), unsafe.Sizeof(cmsProfileID{}))
+			memmove(unsafe.Pointer(&((*NewSeqSeqPtr).ProfileID)), unsafe.Pointer(&((*ProfileIdSeqPtr).ProfileID)), unsafe.Sizeof(cmsProfileID{}))
 
 			// Duplicate the Description
 			NewSeqSeqPtr.Description = cmsMLUdup(ProfileIdSeqPtr.Description)
