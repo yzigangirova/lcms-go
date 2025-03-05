@@ -36,8 +36,8 @@ type Prelin16Data struct {
 	CLUTParams *cmsInterpParams // Not-owned pointer
 
 	// Output curves
-	EvalCurveOut16   *cmsInterpFn16    // Points to an array of curve evaluators in 16 bits (not-owned pointer)
-	ParamsCurveOut16 **cmsInterpParams // Points to an array of references to interpolation params (not-owned pointer)
+	EvalCurveOut16   []cmsInterpFn16    // Points to an array of curve evaluators in 16 bits (not-owned pointer)
+	ParamsCurveOut16 []*cmsInterpParams // Points to an array of references to interpolation params (not-owned pointer)
 }
 type cmsS1Fixed14Number int32 // May hold more than 16 bits
 
@@ -65,9 +65,9 @@ type MatShaper8Data struct {
 type Curves16Data struct {
 	ContextID CmsContext
 
-	NCurves   uint32   // Number of curves
-	NElements uint32   // Elements in curves
-	Curves    **uint16 // Points to a dynamically allocated array
+	NCurves   uint32     // Number of curves
+	NElements uint32     // Elements in curves
+	Curves    [][]uint16 // Points to a dynamically allocated array
 }
 
 // _RemoveElement removes an element from the linked chain.
@@ -166,14 +166,14 @@ func _MultiplyMatrix(Lut *cmsPipeline) bool {
 				return false
 			}
 
-			cmsMAT3per(&res, (*cmsMAT3)(unsafe.Pointer(m2.Double)), (*cmsMAT3)(unsafe.Pointer(m1.Double)))
+			cmsMAT3per(&res, (*cmsMAT3)(unsafe.Pointer(&m2.Double[0])), (*cmsMAT3)(unsafe.Pointer(&m1.Double[0])))
 
 			chain := (*pt2).Next
 			RemoveElement(pt2)
 			RemoveElement(pt1)
 
 			if !isFloatMatrixIdentity(&res) {
-				Multmat := cmsStageAllocMatrix(Lut.ContextID, 3, 3, (*float64)(&res.V[0].N[0]), nil)
+				Multmat := cmsStageAllocMatrix(Lut.ContextID, 3, 3, (res.V[0].N[:]), nil)
 				if Multmat == nil {
 					return false
 				}
@@ -217,63 +217,37 @@ func PreOptimize(Lut *cmsPipeline) bool {
 	return anyOpt
 }
 
-func Eval16nop1D(Input *uint16, Output *uint16, params *cmsInterpParams) {
+func Eval16nop1D(Input []uint16, Output []uint16, params *cmsInterpParams) {
 	//same as Output[0] = Input[0] like in C
-	*Output = *Input
+	Output[0] = Input[0]
 }
 
 // PrelinEval16 implements the optimized interpolation for 16-bit input
 // PrelinEval16 implements the optimized interpolation for 16-bit input
-func PrelinEval16(Input *uint16, Output *uint16, D unsafe.Pointer) {
+func PrelinEval16(Input []uint16, Output []uint16, D unsafe.Pointer) {
 	p16 := (*Prelin16Data)(D)
 	var StageABC [16]uint16
 	var StageDEF [16]uint16
 
 	// Handle input curves
 	for i := uint32(0); i < p16.NInputs; i++ {
-		// Access the i-th element of Input using unsafe.Pointer
-		inputPtr := (*uint16)(unsafe.Add(unsafe.Pointer(Input), uintptr(i)*unsafe.Sizeof(uint16(0))))
-
-		// Access the i-th element of StageABC using unsafe.Pointer
-		stageABCPtr := (*uint16)(unsafe.Add(unsafe.Pointer(&StageABC[0]), uintptr(i)*unsafe.Sizeof(uint16(0))))
-
-		// Access the i-th ParamsCurveIn16 using unsafe.Pointer
-	//	paramsCurveInPtr := (**cmsInterpParams)(unsafe.Add(unsafe.Pointer(&p16.ParamsCurveIn16[0]), uintptr(i)*unsafe.Sizeof((*cmsInterpParams)(nil))))
-		paramsCurveInPtr := (*[1 << 30]*cmsInterpParams)(unsafe.Pointer(&p16.ParamsCurveIn16[0])) // Cast to a large enough array
-
 		// Call the interpolation function
-		p16.EvalCurveIn16[i](inputPtr, stageABCPtr, paramsCurveInPtr[i])
+		p16.EvalCurveIn16[i](Input[i:], StageABC[i:], p16.ParamsCurveIn16[i])
 	}
 
 	// Evaluate the CLUT
-	p16.EvalCLUT(&StageABC[0], &StageDEF[0], p16.CLUTParams)
+	p16.EvalCLUT(StageABC[:], StageDEF[:], p16.CLUTParams)
 
 	// Handle output curves
 	for i := uint32(0); i < p16.NOutputs; i++ {
-		// Access the i-th element of StageDEF using unsafe.Pointer
-		stageDEFPtr := (*uint16)(unsafe.Add(unsafe.Pointer(&StageDEF[0]), uintptr(i)*unsafe.Sizeof(uint16(0))))
-
-		// Access the i-th element of Output using unsafe.Pointer
-		outputPtr := (*uint16)(unsafe.Add(unsafe.Pointer(Output), uintptr(i)*unsafe.Sizeof(uint16(0))))
-
-		// Access the i-th EvalCurveOut16 using unsafe.Pointer
-		evalCurveOut := *(*cmsInterpFn16)(unsafe.Add(unsafe.Pointer(p16.EvalCurveOut16), uintptr(i)*unsafe.Sizeof(cmsInterpFn16(nil))))
-
-		// Access the i-th ParamsCurveOut16 using unsafe.Pointer
-		//paramsCurveOut := (**cmsInterpParams)(unsafe.Add(unsafe.Pointer(p16.ParamsCurveOut16), uintptr(i)*unsafe.Sizeof((*cmsInterpParams)(nil))))
-		paramsCurveOut := (*[1 << 30]*cmsInterpParams)(unsafe.Pointer(&p16.ParamsCurveOut16)) // Cast to a large enough array
-
-		// Call the interpolation function
-		evalCurveOut(stageDEFPtr, outputPtr, paramsCurveOut[i])
+		p16.EvalCurveOut16[i](StageDEF[i:], Output[i:], p16.ParamsCurveOut16[i])
 	}
 }
 
 // PrelinOpt16free frees memory associated with Prelin16Data
 func PrelinOpt16free(ContextID CmsContext, ptr unsafe.Pointer) {
 	p16 := (*Prelin16Data)(ptr)
-	cmsFree(ContextID, unsafe.Pointer(p16.EvalCurveOut16))
-	cmsFree(ContextID, unsafe.Pointer(p16.ParamsCurveOut16))
-	cmsFree(ContextID, ptr)
+	cmsFree(ContextID, unsafe.Pointer(p16))
 }
 
 // Prelin16dup duplicates the Prelin16Data structure
@@ -285,15 +259,15 @@ func Prelin16dup(ContextID CmsContext, ptr unsafe.Pointer) unsafe.Pointer {
 		return nil
 	}
 
-	Duped.EvalCurveOut16 = (*cmsInterpFn16)(cmsDupMem(ContextID, unsafe.Pointer(p16.EvalCurveOut16), p16.NOutputs*uint32(unsafe.Sizeof((*cmsInterpFn16)(nil)))))
-	Duped.ParamsCurveOut16 = (**cmsInterpParams)(cmsDupMem(ContextID, unsafe.Pointer(p16.ParamsCurveOut16), p16.NOutputs*uint32(unsafe.Sizeof((*cmsInterpParams)(nil)))))
+	Duped.EvalCurveOut16 = ([]cmsInterpFn16)(cmsDupMemSlice(p16.EvalCurveOut16))
+	Duped.ParamsCurveOut16 = ([]*cmsInterpParams)(cmsDupMemSlice(p16.ParamsCurveOut16))
 
 	return unsafe.Pointer(Duped)
 }
 
 // PrelinOpt16alloc allocates and initializes Prelin16Data
 // PrelinOpt16alloc allocates and initializes Prelin16Data
-func PrelinOpt16alloc(ContextID CmsContext, ColorMap *cmsInterpParams, nInputs uint32, In **CmsToneCurve, nOutputs uint32, Out **CmsToneCurve) *Prelin16Data {
+func PrelinOpt16alloc(ContextID CmsContext, ColorMap *cmsInterpParams, nInputs uint32, In []*CmsToneCurve, nOutputs uint32, Out []*CmsToneCurve) *Prelin16Data {
 	p16 := (*Prelin16Data)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(Prelin16Data{}))))
 	if p16 == nil {
 		return nil
@@ -304,17 +278,13 @@ func PrelinOpt16alloc(ContextID CmsContext, ColorMap *cmsInterpParams, nInputs u
 
 	// Handle input curves
 	for i := uint32(0); i < nInputs; i++ {
-		// Access the i-th element of In
-		//inPtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(In), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(In)) // Cast to a large enough array
-		curve := curvesptr[i]
 
-		if In == nil || curve == nil {
+		if In == nil {
 			p16.ParamsCurveIn16[i] = nil
 			p16.EvalCurveIn16[i] = Eval16nop1D
 		} else {
-			p16.ParamsCurveIn16[i] = curve.InterpParams
-			p16.EvalCurveIn16[i] = curve.InterpParams.Interpolation.Lerp16
+			p16.ParamsCurveIn16[i] = In[i].InterpParams
+			p16.EvalCurveIn16[i] = In[i].InterpParams.Interpolation.Lerp16
 		}
 	}
 
@@ -322,39 +292,26 @@ func PrelinOpt16alloc(ContextID CmsContext, ColorMap *cmsInterpParams, nInputs u
 	p16.EvalCLUT = ColorMap.Interpolation.Lerp16
 
 	// Allocate memory for EvalCurveOut16 and ParamsCurveOut16
-	p16.EvalCurveOut16 = (*cmsInterpFn16)(cmsCalloc(ContextID, nOutputs, uint32(unsafe.Sizeof((*cmsInterpFn16)(nil)))))
+	p16.EvalCurveOut16 = make([]cmsInterpFn16, nOutputs)
 	if p16.EvalCurveOut16 == nil {
 		cmsFree(ContextID, unsafe.Pointer(p16))
 		return nil
 	}
 
-	p16.ParamsCurveOut16 = (**cmsInterpParams)(cmsCalloc(ContextID, nOutputs, uint32(unsafe.Sizeof((*cmsInterpParams)(nil)))))
+	p16.ParamsCurveOut16 = make([]*cmsInterpParams, nOutputs)
 	if p16.ParamsCurveOut16 == nil {
-		cmsFree(ContextID, unsafe.Pointer(p16.EvalCurveOut16))
 		cmsFree(ContextID, unsafe.Pointer(p16))
 		return nil
 	}
 
 	// Handle output curves
 	for i := uint32(0); i < nOutputs; i++ {
-		// Access the i-th element of ParamsCurveOut16
-		//paramsCurveOutPtr := (**cmsInterpParams)(unsafe.Add(unsafe.Pointer(p16.ParamsCurveOut16), uintptr(i)*unsafe.Sizeof((*cmsInterpParams)(nil))))
-		paramsCurveOutPtr := (*[1 << 30]*cmsInterpParams)(unsafe.Pointer(p16.ParamsCurveOut16)) // Cast to a large enough array
-
-		// Access the i-th element of EvalCurveOut16
-		evalCurveOutPtr := (*cmsInterpFn16)(unsafe.Add(unsafe.Pointer(p16.EvalCurveOut16), uintptr(i)*unsafe.Sizeof((*cmsInterpFn16)(nil))))
-
-		// Access the i-th element of Out
-		//	outPtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(Out), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(Out)) // Cast to a large enough array
-		curve := curvesptr[i]
-
-		if Out == nil || curve == nil {
-			paramsCurveOutPtr[i] = nil
-			*evalCurveOutPtr = Eval16nop1D
+		if Out == nil {
+			p16.ParamsCurveOut16[i] = nil
+			p16.EvalCurveOut16[i] = Eval16nop1D
 		} else {
-			paramsCurveOutPtr[i] = curve.InterpParams
-			*evalCurveOutPtr = curve.InterpParams.Interpolation.Lerp16
+			p16.ParamsCurveOut16[i] = Out[i].InterpParams
+			p16.EvalCurveOut16[i] = p16.ParamsCurveOut16[i].Interpolation.Lerp16
 		}
 	}
 
@@ -397,11 +354,7 @@ func AllCurvesAreLinear(mpe *cmsStage) bool {
 	n := cmsStageOutputChannels(mpe)
 
 	for i := uint32(0); i < n; i++ {
-		// Access the i-th curve using unsafe
-		//curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		curveptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(Curves)) // Cast to a large enough array
-		curve := curveptr[i]
-		if !cmsIsToneCurveLinear(curve) {
+		if !cmsIsToneCurveLinear(Curves[i]) {
 			return false
 		}
 	}
@@ -475,7 +428,7 @@ func PatchLUT(CLUT *cmsStage, At []uint16, Value []uint16, nChannelsOut, nChanne
 	}
 
 	for i := 0; i < int(nChannelsOut); i++ {
-		*(*uint16)(unsafe.Add(unsafe.Pointer(Grid.Tab.T), uintptr(index+i)*unsafe.Sizeof(uint16(0)))) = Value[i]
+		Grid.Tab.T[index+i] = Value[i]
 	}
 
 	return true
@@ -538,10 +491,7 @@ func FixWhiteMisalignment(Lut *cmsPipeline, EntryColorSpace, ExitColorSpace cmsC
 	if PreLin != nil {
 		Curves := cmsStageGetPtrToCurveSet(PreLin)
 		for i := uint32(0); i < nIns; i++ {
-			//curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-			curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(Curves)) // Cast to a large enough array
-			curve := curvesptr[i]
-			WhiteIn[i] = cmsEvalToneCurve16(curve, WhitePointIn[i])
+			WhiteIn[i] = cmsEvalToneCurve16(Curves[i], WhitePointIn[i])
 		}
 	} else {
 		for i := uint32(0); i < nIns; i++ {
@@ -553,10 +503,7 @@ func FixWhiteMisalignment(Lut *cmsPipeline, EntryColorSpace, ExitColorSpace cmsC
 	if PostLin != nil {
 		Curves := cmsStageGetPtrToCurveSet(PostLin)
 		for i := uint32(0); i < nOuts; i++ {
-			//curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-			curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(Curves)) // Cast to a large enough array
-			curve := curvesptr[i]
-			InversePostLin := cmsReverseToneCurve(curve)
+			InversePostLin := cmsReverseToneCurve(Curves[i])
 			if InversePostLin == nil {
 				WhiteOut[i] = WhitePointOut[i]
 			} else {
@@ -598,8 +545,8 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		ColorSpace       cmsColorSpaceSignature
 		OutputColorSpace cmsColorSpaceSignature
 		DataCLUT         *cmsStageCLutData
-		DataSetIn        **CmsToneCurve
-		DataSetOut       **CmsToneCurve
+		DataSetIn        []*CmsToneCurve
+		DataSetOut       []*CmsToneCurve
 		p16              *Prelin16Data
 	)
 
@@ -682,15 +629,15 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	DataCLUT = (*cmsStageCLutData)(CLUT.Data)
 
 	if NewPreLin != nil {
-		DataSetIn = (**CmsToneCurve)(((*cmsStageToneCurvesData)(NewPreLin.Data)).TheCurves)
+		DataSetIn = (((*cmsStageToneCurvesData)(NewPreLin.Data)).TheCurves)
 	}
 	if NewPostLin != nil {
-		DataSetOut = (**CmsToneCurve)(((*cmsStageToneCurvesData)(NewPostLin.Data)).TheCurves)
+		DataSetOut = (((*cmsStageToneCurvesData)(NewPostLin.Data)).TheCurves)
 	}
 
 	if DataSetIn == nil && DataSetOut == nil {
 		// Define the adapter function as a closure
-		adapterFn1 := func(In *uint16, Out *uint16, Data unsafe.Pointer) {
+		adapterFn1 := func(In []uint16, Out []uint16, Data unsafe.Pointer) {
 			params := (*cmsInterpParams)(Data) // Convert Data back to *cmsInterpParams
 			DataCLUT.Params.Interpolation.Lerp16(In, Out, params)
 		}
@@ -749,20 +696,20 @@ func SlopeLimiting(g *CmsToneCurve) {
 		EndVal = 0xffff
 	}
 
-	Val = float64(*(*uint16)(unsafe.Add(unsafe.Pointer(g.Table16), uintptr(AtBegin)*unsafe.Sizeof(uint16(0)))))
+	Val = float64(g.Table16[AtBegin])
 	Slope = (Val - float64(BeginVal)) / float64(AtBegin)
 	beta = Val - Slope*float64(AtBegin)
 
 	for i := 0; i < AtBegin; i++ {
-		*(*uint16)(unsafe.Add(unsafe.Pointer(g.Table16), uintptr(i)*unsafe.Sizeof(uint16(0)))) = cmsQuickSaturateWord(float64(i)*Slope + beta)
+		g.Table16[i] = cmsQuickSaturateWord(float64(i)*Slope + beta)
 	}
 
-	Val = float64(*(*uint16)(unsafe.Add(unsafe.Pointer(g.Table16), uintptr(AtEnd)*unsafe.Sizeof(uint16(0)))))
+	Val = float64(g.Table16[AtEnd])
 	Slope = (float64(EndVal) - Val) / float64(AtBegin)
 	beta = Val - Slope*float64(AtEnd)
 
 	for i := AtEnd; i < int(g.nEntries); i++ {
-		*(*uint16)(unsafe.Add(unsafe.Pointer(g.Table16), uintptr(i)*unsafe.Sizeof(uint16(0)))) = cmsQuickSaturateWord(float64(i)*Slope + beta)
+		g.Table16[i] = cmsQuickSaturateWord(float64(i)*Slope + beta)
 	}
 }
 
@@ -809,95 +756,20 @@ func Prelin8dup(ContextID CmsContext, ptr unsafe.Pointer) unsafe.Pointer {
 	return cmsDupMem(ContextID, ptr, uint32(unsafe.Sizeof(ptr)))
 }
 
-/*
-	func PrelinEval8(Input *uint16, Output *uint16, D unsafe.Pointer) {
-		p8 := (*Prelin8Data)(D)
-		p := p8.P
-		TotalOut := int(p.nOutputs)
-		LutTable := (*[1 << 30]uint16)(p.Table) // Access table with a large assumed size
-
-		// DENS implementation
-		DENS := func(i, j, k, outChan uint32) cmsS15Fixed16Number {
-			return cmsS15Fixed16Number(LutTable[int(i+j+k+outChan)])
-		}
-
-		r := uint8(Input[0] >> 8)
-		g := uint8(Input[1] >> 8)
-		b := uint8(Input[2] >> 8)
-
-		X0 := cmsS15Fixed16Number(p8.X0[r])
-		Y0 := cmsS15Fixed16Number(p8.Y0[g])
-		Z0 := cmsS15Fixed16Number(p8.Z0[b])
-
-		rx := p8.Rx[r]
-		ry := p8.Ry[g]
-		rz := p8.Rz[b]
-
-		X1 := X0
-		if rx != 0 {
-			X1 += cmsS15Fixed16Number(p.opta[2])
-		}
-		Y1 := Y0
-		if ry != 0 {
-			Y1 += cmsS15Fixed16Number(p.opta[1])
-		}
-		Z1 := Z0
-		if rz != 0 {
-			Z1 += cmsS15Fixed16Number(p.opta[0])
-		}
-
-		for OutChan := 0; OutChan < TotalOut; OutChan++ {
-			c0 := DENS(uint32(X0), uint32(Y0), uint32(Z0), uint32(OutChan))
-
-			var c1, c2, c3 cmsS15Fixed16Number
-			if rx >= ry && ry >= rz {
-				c1 = DENS(uint32(X1), uint32(Y0), uint32(Z0), uint32(OutChan)) - c0
-				c2 = DENS(uint32(X1), uint32(Y1), uint32(Z0), uint32(OutChan)) - DENS(uint32(X1), uint32(Y0), uint32(Z0), uint32(OutChan))
-				c3 = DENS(uint32(X1), uint32(Y1), uint32(Z1), uint32(OutChan)) - DENS(uint32(X1), uint32(Y1), uint32(Z0), uint32(OutChan))
-			} else if rx >= rz && rz >= ry {
-				c1 = DENS(uint32(X1), uint32(Y0), uint32(Z0), uint32(OutChan)) - c0
-				c2 = DENS(uint32(X1), uint32(Y1), uint32(Z1), uint32(OutChan)) - DENS(uint32(X1), uint32(Y0), uint32(Z1), uint32(OutChan))
-				c3 = DENS(uint32(X1), uint32(Y0), uint32(Z1), uint32(OutChan)) - DENS(uint32(X1), uint32(Y0), uint32(Z0), uint32(OutChan))
-			} else if rz >= rx && rx >= ry {
-				c1 = DENS(uint32(X1), uint32(Y0), uint32(Z1), uint32(OutChan)) - DENS(uint32(X0), uint32(Y0), uint32(Z1), uint32(OutChan))
-				c2 = DENS(uint32(X1), uint32(Y1), uint32(Z1), uint32(OutChan)) - DENS(uint32(X1), uint32(Y0), uint32(Z1), uint32(OutChan))
-				c3 = DENS(uint32(X0), uint32(Y0), uint32(Z1), uint32(OutChan)) - c0
-			} else if ry >= rx && rx >= rz {
-				c1 = DENS(uint32(X1), uint32(Y1), uint32(Z0), uint32(OutChan)) - DENS(uint32(X0), uint32(Y1), uint32(Z0), uint32(OutChan))
-				c2 = DENS(uint32(X0), uint32(Y1), uint32(Z0), uint32(OutChan)) - c0
-				c3 = DENS(uint32(X1), uint32(Y1), uint32(Z1), uint32(OutChan)) - DENS(uint32(X1), uint32(Y1), uint32(Z0), uint32(OutChan))
-			} else if ry >= rz && rz >= rx {
-				c1 = DENS(uint32(X1), uint32(Y1), uint32(Z1), uint32(OutChan)) - DENS(uint32(X0), uint32(Y1), uint32(Z1), uint32(OutChan))
-				c2 = DENS(uint32(X0), uint32(Y1), uint32(Z0), uint32(OutChan)) - c0
-				c3 = DENS(uint32(X0), uint32(Y1), uint32(Z1), uint32(OutChan)) - DENS(uint32(X0), uint32(Y1), uint32(Z0), uint32(OutChan))
-			} else if rz >= ry && ry >= rx {
-				c1 = DENS(uint32(X1), uint32(Y1), uint32(Z1), uint32(OutChan)) - DENS(uint32(X0), uint32(Y1), uint32(Z1), uint32(OutChan))
-				c2 = DENS(uint32(X0), uint32(Y1), uint32(Z1), uint32(OutChan)) - DENS(uint32(X0), uint32(Y0), uint32(Z1), uint32(OutChan))
-				c3 = DENS(uint32(X0), uint32(Y0), uint32(Z1), uint32(OutChan)) - c0
-			} else {
-				c1, c2, c3 = 0, 0, 0
-			}
-
-			Rest := uint16(c1)*rx + uint16(c2)*ry + uint16(c3)*rz + 0x8001
-			Output[OutChan] = uint16(uint16(c0) + ((Rest + (Rest >> 16)) >> 16))
-		}
-	}
-*/
-func PrelinEval8(Input *uint16, Output *uint16, D unsafe.Pointer) {
+func PrelinEval8(Input []uint16, Output []uint16, D unsafe.Pointer) {
 	p8 := (*Prelin8Data)(D)
 	p := p8.P
 	TotalOut := int(p.nOutputs)
-	LutTable := (*[1 << 30]uint16)(p.Table) // Access table with a large assumed size
+	LutTable := p.Table // Access table with a large assumed size
 
-	// DENS function implementation for accessing LutTable
+	// DENS implementation
 	DENS := func(i, j, k, outChan uint32) cmsS15Fixed16Number {
 		return cmsS15Fixed16Number(LutTable[int(i+j+k+outChan)])
 	}
 
-	// Access Input values using unsafe.Pointer indexing
-	r := uint8(*(*uint16)(unsafe.Add(unsafe.Pointer(Input), uintptr(0)*unsafe.Sizeof(uint16(0)))) >> 8)
-	g := uint8(*(*uint16)(unsafe.Add(unsafe.Pointer(Input), uintptr(1)*unsafe.Sizeof(uint16(0)))) >> 8)
-	b := uint8(*(*uint16)(unsafe.Add(unsafe.Pointer(Input), uintptr(2)*unsafe.Sizeof(uint16(0)))) >> 8)
+	r := uint8(Input[0] >> 8)
+	g := uint8(Input[1] >> 8)
+	b := uint8(Input[2] >> 8)
 
 	X0 := cmsS15Fixed16Number(p8.X0[r])
 	Y0 := cmsS15Fixed16Number(p8.Y0[g])
@@ -920,7 +792,6 @@ func PrelinEval8(Input *uint16, Output *uint16, D unsafe.Pointer) {
 		Z1 += cmsS15Fixed16Number(p.opta[0])
 	}
 
-	// Loop over output channels
 	for OutChan := 0; OutChan < TotalOut; OutChan++ {
 		c0 := DENS(uint32(X0), uint32(Y0), uint32(Z0), uint32(OutChan))
 
@@ -953,9 +824,8 @@ func PrelinEval8(Input *uint16, Output *uint16, D unsafe.Pointer) {
 			c1, c2, c3 = 0, 0, 0
 		}
 
-		Rest := c1*cmsS15Fixed16Number(rx) + c2*cmsS15Fixed16Number(ry) + c3*cmsS15Fixed16Number(rz) + 0x8001
-		outputPtr := (*uint16)(unsafe.Add(unsafe.Pointer(Output), uintptr(OutChan)*unsafe.Sizeof(uint16(0))))
-		*outputPtr = uint16(cmsS15Fixed16Number(c0) + ((Rest + (Rest >> 16)) >> 16))
+		Rest := uint16(c1)*rx + uint16(c2)*ry + uint16(c3)*rz + 0x8001
+		Output[OutChan] = uint16(uint16(c0) + ((Rest + (Rest >> 16)) >> 16))
 	}
 }
 
@@ -963,11 +833,10 @@ func IsDegenerated(g *CmsToneCurve) bool {
 	Zeros, Poles := 0, 0
 
 	for i := uint32(0); i < g.nEntries; i++ {
-		value := *(*uint16)(unsafe.Add(unsafe.Pointer(g.Table16), uintptr(i)*unsafe.Sizeof(uint16(0))))
-		if value == 0x0000 {
+		if g.Table16[i] == 0x0000 {
 			Zeros++
 		}
-		if value == 0xffff {
+		if g.Table16[i] == 0xffff {
 			Poles++
 		}
 	}
@@ -996,7 +865,7 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 		OptimizedLUT          *cmsPipeline
 		LutPlusCurves         *cmsPipeline
 		OptimizedPrelinMpe    *cmsStage
-		OptimizedPrelinCurves **CmsToneCurve
+		OptimizedPrelinCurves []*CmsToneCurve
 		OptimizedPrelinCLUT   *cmsStageCLutData
 		OptimizedCLUTmpe      *cmsStage
 	)
@@ -1042,10 +911,7 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 	if cmsStageType(last) == cmsSigCurveSetElemType {
 		Data := (*cmsStageToneCurvesData)(cmsStageData(last))
 		for i := uint32(0); i < Data.NCurves; i++ {
-			//			curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(Data.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-			curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(Data.TheCurves)) // Cast to a large enough array
-			curve := curvesptr[i]
-			if IsDegenerated(curve) {
+			if IsDegenerated(Data.TheCurves[i]) {
 				goto Error
 			}
 		}
@@ -1066,9 +932,7 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 		cmsPipelineEvalFloat(In[:], Out[:], OriginalLut)
 
 		for t := uint32(0); t < OriginalLut.InputChannels; t++ {
-			tablePtr := Trans[t].Table16 // Get the pointer to the Table16
-			tableElem := (*uint16)(unsafe.Add(unsafe.Pointer(tablePtr), uintptr(i)*unsafe.Sizeof(*tablePtr)))
-			*tableElem = cmsQuickSaturateWord(float64(Out[t]) * 65535.0)
+			Trans[t].Table16[i] = cmsQuickSaturateWord(float64(Out[t]) * 65535.0)
 		}
 	}
 
@@ -1103,7 +967,7 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 		goto Error
 	}
 
-	if !cmsPipelineInsertStage(LutPlusCurves, cmsAT_BEGIN, cmsStageAllocToneCurves(OriginalLut.ContextID, OriginalLut.InputChannels, &TransReverse[0])) {
+	if !cmsPipelineInsertStage(LutPlusCurves, cmsAT_BEGIN, cmsStageAllocToneCurves(OriginalLut.ContextID, OriginalLut.InputChannels, TransReverse[:])) {
 		goto Error
 	}
 
@@ -1112,7 +976,7 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 		goto Error
 	}
 
-	OptimizedPrelinMpe = cmsStageAllocToneCurves(OriginalLut.ContextID, OriginalLut.InputChannels, &Trans[0])
+	OptimizedPrelinMpe = cmsStageAllocToneCurves(OriginalLut.ContextID, OriginalLut.InputChannels, Trans[:])
 	if !cmsPipelineInsertStage(OptimizedLUT, cmsAT_BEGIN, OptimizedPrelinMpe) {
 		goto Error
 	}
@@ -1188,174 +1052,138 @@ Error:
 
 	return false
 }
-func ConvertToToneCurveArray(curves **CmsToneCurve) [3]*CmsToneCurve {
+func ConvertToToneCurveArray(curves []*CmsToneCurve) [3]*CmsToneCurve {
 	var result [3]*CmsToneCurve
-	for i := 0; i < 3; i++ {
-		// Use unsafe.Add to calculate the address of each curve
-		//curvePtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(curves)) // Cast to a large enough array
-		curve := curvesptr[i]
-		result[i] = curve
-	}
+	copy(result[:], curves[:3]) // Convert slice to array
 	return result
 }
 func CurvesFree(ContextID CmsContext, ptr unsafe.Pointer) {
-	data := (*Curves16Data)(ptr)
-
-	// Free each curve in the Curves array
-	for i := uint32(0); i < data.NCurves; i++ {
-		curvePtr := (**uint16)(unsafe.Add(unsafe.Pointer(data.Curves), uintptr(i)*unsafe.Sizeof((*uint16)(nil))))
-		cmsFree(ContextID, unsafe.Pointer(*curvePtr))
-	}
-
-	// Free the Curves array and the data structure itself
-	cmsFree(ContextID, unsafe.Pointer(data.Curves))
 	cmsFree(ContextID, ptr)
 }
+
+// CurvesDup duplicates a Curves16Data structure
 func CurvesDup(ContextID CmsContext, ptr unsafe.Pointer) unsafe.Pointer {
 	srcData := (*Curves16Data)(ptr)
-	data := (*Curves16Data)(cmsDupMem(ContextID, unsafe.Pointer(srcData), uint32(unsafe.Sizeof(Curves16Data{}))))
-	if data == nil {
+	if srcData == nil {
 		return nil
 	}
 
-	// Duplicate the Curves array
-	data.Curves = (**uint16)(cmsDupMem(ContextID, unsafe.Pointer(srcData.Curves), srcData.NCurves*uint32(unsafe.Sizeof((*uint16)(nil)))))
-	if data.Curves == nil {
-		cmsFree(ContextID, unsafe.Pointer(data))
-		return nil
+	// Step 1: Allocate a new Curves16Data struct
+	data := &Curves16Data{
+		NCurves:   srcData.NCurves,
+		NElements: srcData.NElements,
+		Curves:    make([][]uint16, srcData.NCurves), // Allocate slice of slices
 	}
 
-	// Duplicate each curve
-	for i := uint32(0); i < data.NCurves; i++ {
-		srcCurvePtr := (**uint16)(unsafe.Add(unsafe.Pointer(srcData.Curves), uintptr(i)*unsafe.Sizeof((*uint16)(nil))))
-		destCurvePtr := (**uint16)(unsafe.Add(unsafe.Pointer(data.Curves), uintptr(i)*unsafe.Sizeof((*uint16)(nil))))
+	// Step 2: Copy each curve (each row in 2D array)
+	for i := uint32(0); i < srcData.NCurves; i++ {
+		if srcData.Curves[i] != nil {
+			// Allocate new slice for each curve
+			data.Curves[i] = make([]uint16, srcData.NElements)
 
-		*destCurvePtr = (*uint16)(cmsDupMem(ContextID, unsafe.Pointer(*srcCurvePtr), srcData.NElements*uint32(unsafe.Sizeof(uint16(0)))))
-		if *destCurvePtr == nil {
-			CurvesFree(ContextID, unsafe.Pointer(data))
-			return nil
+			// Copy the curve data
+			copy(data.Curves[i], srcData.Curves[i])
 		}
 	}
 
 	return unsafe.Pointer(data)
 }
-func CurvesAlloc(ContextID CmsContext, nCurves, nElements uint32, G **CmsToneCurve) *Curves16Data {
-	c16 := (*Curves16Data)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(Curves16Data{}))))
-	if c16 == nil {
-		return nil
+
+func CurvesAlloc(ContextID CmsContext, nCurves, nElements uint32, G []*CmsToneCurve) *Curves16Data {
+	// Step 1: Allocate the main structure
+	c16 := &Curves16Data{
+		NCurves:   nCurves,
+		NElements: nElements,
+		Curves:    make([][]uint16, nCurves), // Allocate slice of slices
 	}
 
-	c16.NCurves = nCurves
-	c16.NElements = nElements
-
-	// Allocate the Curves array
-	c16.Curves = (**uint16)(cmsCalloc(ContextID, nCurves, uint32(unsafe.Sizeof((*uint16)(nil)))))
-	if c16.Curves == nil {
-		cmsFree(ContextID, unsafe.Pointer(c16))
-		return nil
-	}
-
-	// Allocate and initialize each curve
+	// Step 2: Allocate memory for each curve (each row in 2D array)
 	for i := uint32(0); i < nCurves; i++ {
-		curvePtr := (**uint16)(unsafe.Add(unsafe.Pointer(c16.Curves), uintptr(i)*unsafe.Sizeof((*uint16)(nil))))
-		*curvePtr = (*uint16)(cmsCalloc(ContextID, nElements, uint32(unsafe.Sizeof(uint16(0)))))
+		c16.Curves[i] = make([]uint16, nElements) // Allocate slice for each row
 
-		if *curvePtr == nil {
-			for j := uint32(0); j < i; j++ {
-				prevCurvePtr := (**uint16)(unsafe.Add(unsafe.Pointer(c16.Curves), uintptr(j)*unsafe.Sizeof((*uint16)(nil))))
-				cmsFree(ContextID, unsafe.Pointer(*prevCurvePtr))
-			}
-			cmsFree(ContextID, unsafe.Pointer(c16.Curves))
-			cmsFree(ContextID, unsafe.Pointer(c16))
-			return nil
-		}
-		//TUT proishodit fignya, correct unsafe.Add for cmsToneCurve, make it step by step
+		// Step 3: Fill the curve with evaluated values
 		for j := uint32(0); j < nElements; j++ {
 			if nElements == 256 {
-				//FROM_8_TO_16(uint8(j) is a strange piece in C-code,  uint32 must be reduced to uint8
-				curveptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(G)) // Cast to a large enough array
-				curve := curveptr[i]
-				res := cmsEvalToneCurve16(curve, FROM_8_TO_16(uint8(j)))
-				(*(*uint16)(unsafe.Add(unsafe.Pointer(*curvePtr), uintptr(j)*unsafe.Sizeof(uint16(0))))) = res
+				c16.Curves[i][j] = cmsEvalToneCurve16(G[i], FROM_8_TO_16(uint8(j)))
 			} else {
-				curveptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(G)) // Cast to a large enough array
-				curve := curveptr[i]
-				res := cmsEvalToneCurve16(curve, uint16(j))
-				(*(*uint16)(unsafe.Add(unsafe.Pointer(*curvePtr), uintptr(j)*unsafe.Sizeof(uint16(0))))) = res
+				c16.Curves[i][j] = cmsEvalToneCurve16(G[i], uint16(j))
 			}
 		}
 	}
 
 	return c16
 }
-func FastEvaluateCurves8(In *uint16, Out *uint16, D unsafe.Pointer) {
+
+func FastEvaluateCurves8(In []uint16, Out []uint16, D unsafe.Pointer) {
 	data := (*Curves16Data)(D)
 
-	for i := uint32(0); i < data.NCurves; i++ {
-		// Access the i-th curve pointer
-		curvePtr := (**uint16)(unsafe.Add(unsafe.Pointer(data.Curves), uintptr(i)*unsafe.Sizeof((*uint16)(nil))))
+	// Ensure Out has enough space
+	if len(Out) < int(data.NCurves) || len(In) < int(data.NCurves) {
+		return
+	}
 
-		// Ensure the curve pointer is valid
-		if curvePtr == nil {
+	for i := uint32(0); i < data.NCurves; i++ {
+		// Directly access the i-th curve using slices
+		if data.Curves[i] == nil {
 			continue
 		}
 
-		// Access the curve data
-		curveData := *curvePtr
-
 		// Access the i-th input value
-		inValue := *(*uint16)(unsafe.Add(unsafe.Pointer(In), uintptr(i)*unsafe.Sizeof(uint16(0))))
+		inValue := In[i]
 
 		// Calculate the index in the curve
-		x := inValue >> 8
+		x := inValue >> 8 // Equivalent to dividing by 256
 
-		// Safely access the curve value using the index
-		OutValuePtr := (*uint16)(unsafe.Add(unsafe.Pointer(curveData), uintptr(x)*unsafe.Sizeof(uint16(0))))
-		*(*uint16)(unsafe.Add(unsafe.Pointer(Out), uintptr(i)*unsafe.Sizeof(uint16(0)))) = *OutValuePtr
+		// Lookup value in the curve safely
+		Out[i] = data.Curves[i][x]
 	}
 }
 
-func FastEvaluateCurves16(In *uint16, Out *uint16, D unsafe.Pointer) {
+func FastEvaluateCurves16(In []uint16, Out []uint16, D unsafe.Pointer) {
 	data := (*Curves16Data)(D)
 
-	for i := uint32(0); i < data.NCurves; i++ {
-		// Access the i-th curve pointer
-		curvePtr := (**uint16)(unsafe.Add(unsafe.Pointer(data.Curves), uintptr(i)*unsafe.Sizeof((*uint16)(nil))))
+	// Ensure Out and In have enough space
+	if len(Out) < int(data.NCurves) || len(In) < int(data.NCurves) {
+		return
+	}
 
-		// Ensure the curve pointer is valid
-		if curvePtr == nil {
+	for i := uint32(0); i < data.NCurves; i++ {
+		// Directly access the i-th curve using slices
+		if data.Curves[i] == nil {
 			continue
 		}
 
-		// Access the curve data
-		curveData := *curvePtr
+		// Get the input value for this curve
+		inValue := In[i]
 
-		// Access the i-th input value
-		inValue := *(*uint16)(unsafe.Add(unsafe.Pointer(In), uintptr(i)*unsafe.Sizeof(uint16(0))))
-
-		// Safely access the curve value using the input value as the index
-		OutValuePtr := (*uint16)(unsafe.Add(unsafe.Pointer(curveData), uintptr(inValue)*unsafe.Sizeof(uint16(0))))
-		*(*uint16)(unsafe.Add(unsafe.Pointer(Out), uintptr(i)*unsafe.Sizeof(uint16(0)))) = *OutValuePtr
+		// Lookup value in the curve using `inValue` as index
+		Out[i] = data.Curves[i][inValue]
 	}
 }
-
-func FastIdentity16(In *uint16, Out *uint16, D unsafe.Pointer) {
+func FastIdentity16(In []uint16, Out []uint16, D unsafe.Pointer) {
 	Lut := (*cmsPipeline)(D)
 
-	for i := uint32(0); i < Lut.InputChannels; i++ {
-		// Access the i-th input value
-		inValue := *(*uint16)(unsafe.Add(unsafe.Pointer(In), uintptr(i)*unsafe.Sizeof(uint16(0))))
+	// Ensure Out and In have enough space
+	if len(Out) < int(Lut.InputChannels) || len(In) < int(Lut.InputChannels) {
+		return
+	}
 
-		// Write the input value directly to the output
-		*(*uint16)(unsafe.Add(unsafe.Pointer(Out), uintptr(i)*unsafe.Sizeof(uint16(0)))) = inValue
+	for i := uint32(0); i < Lut.InputChannels; i++ {
+		// Directly copy input value to output using slice indexing
+		Out[i] = In[i]
 	}
 }
 
 // cmsOPToptimizeFn defines the function type for optimizations.
-func OptimizeByJoiningCurves(Lut **cmsPipeline, Intent uint32, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) bool {
+func OptimizeByJoiningCurves(
+	Lut **cmsPipeline,
+	Intent uint32,
+	InputFormat *uint32,
+	OutputFormat *uint32,
+	dwFlags *uint32,
+) bool {
 	var (
-		GammaTables    **CmsToneCurve
+		GammaTables    []*CmsToneCurve
 		InFloat        [cmsMAXCHANNELS]float32
 		OutFloat       [cmsMAXCHANNELS]float32
 		i, j           uint32
@@ -1385,25 +1213,18 @@ func OptimizeByJoiningCurves(Lut **cmsPipeline, Intent uint32, InputFormat *uint
 		return false
 	}
 
-	// Allocate GammaTables
-	GammaTables = (**CmsToneCurve)(cmsCalloc(Src.ContextID, Src.InputChannels, uint32(unsafe.Sizeof((*CmsToneCurve)(nil)))))
-	if GammaTables == nil {
-		goto Error
-	}
+	//  Allocate GammaTables as a slice instead of using `unsafe.Pointer`
+	GammaTables = make([]*CmsToneCurve, Src.InputChannels)
 
-	// Initialize GammaTables
-
-	// Initialize GammaTables
+	//  Initialize GammaTables using slice indexing
 	for i = 0; i < Src.InputChannels; i++ {
-		//	ptr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(GammaTables), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(GammaTables)) // Cast to a large enough array
-		curvesptr[i] = cmsBuildTabulatedToneCurve16(Src.ContextID, PRELINEARIZATION_POINTS, nil)
-		if curvesptr[i] == nil {
+		GammaTables[i] = cmsBuildTabulatedToneCurve16(Src.ContextID, PRELINEARIZATION_POINTS, nil)
+		if GammaTables[i] == nil {
 			goto Error
 		}
 	}
 
-	// Compute 16-bit results using floating-point values
+	//  Compute 16-bit results using floating-point values
 	for i = 0; i < PRELINEARIZATION_POINTS; i++ {
 		for j = 0; j < Src.InputChannels; j++ {
 			InFloat[j] = float32(float64(i) / float64(PRELINEARIZATION_POINTS-1))
@@ -1411,38 +1232,27 @@ func OptimizeByJoiningCurves(Lut **cmsPipeline, Intent uint32, InputFormat *uint
 
 		cmsPipelineEvalFloat(InFloat[:], OutFloat[:], Src)
 		for j = 0; j < Src.InputChannels; j++ {
-			// Access the tone curve pointer
-			//toneCurve := *(*CmsToneCurve)(unsafe.Add(unsafe.Pointer(GammaTables), uintptr(j)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-			curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(GammaTables)) // Cast to a large enough array
-			toneCurve := curvesptr[i]
-			// Calculate the address of the desired index in Table16 and assign the value
-			tablePtr := (*uint16)(unsafe.Add(unsafe.Pointer(toneCurve.Table16), uintptr(i)*unsafe.Sizeof(uint16(0))))
-			*tablePtr = cmsQuickSaturateWord(float64(OutFloat[j]) * 65535.0)
+			//  Access the tone curve directly using slice indexing
+			toneCurve := GammaTables[j]
+
+			//  Update the table value safely
+			toneCurve.Table16[i] = cmsQuickSaturateWord(float64(OutFloat[j]) * 65535.0)
 		}
 	}
 
-	// Allocate obtained curves
+	//  Allocate obtained curves using slice
 	ObtainedCurves = cmsStageAllocToneCurves(Src.ContextID, Src.InputChannels, GammaTables)
 	if ObtainedCurves == nil {
 		goto Error
 	}
 
-	// Free GammaTables
+	//  Free GammaTables properly
 	for i = 0; i < Src.InputChannels; i++ {
-		// Calculate the address of GammaTables[i]
-		//ptr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(GammaTables), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(GammaTables)) // Cast to a large enough array
-
-		// Dereference to get the actual *CmsToneCurve
-		curve := curvesptr[i]
-
-		// Free the memory for the curve
-		CmsFreeToneCurve(curve)
+		CmsFreeToneCurve(GammaTables[i])
 	}
+	GammaTables = nil // Ensure it’s cleared
 
-	cmsFree(Src.ContextID, unsafe.Pointer(GammaTables))
-
-	// Check if all curves are linear
+	//  Check if all curves are linear
 	if !AllCurvesAreLinear(ObtainedCurves) {
 		Data := (*cmsStageToneCurvesData)(cmsStageData(ObtainedCurves))
 
@@ -1479,7 +1289,7 @@ func OptimizeByJoiningCurves(Lut **cmsPipeline, Intent uint32, InputFormat *uint
 		cmsPipelineSetOptimizationParameters(Dest, FastIdentity16, unsafe.Pointer(Dest), nil, nil)
 	}
 
-	// Replace the source LUT with the optimized LUT
+	//  Replace the source LUT with the optimized LUT
 	cmsPipelineFree(Src)
 	*Lut = Dest
 	return true
@@ -1490,20 +1300,17 @@ Error:
 	}
 	if GammaTables != nil {
 		for i = 0; i < Src.InputChannels; i++ {
-			//curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(GammaTables), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-			curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(GammaTables)) // Cast to a large enough array
-			curve := curvesptr[i]
-			if curve != nil {
-				CmsFreeToneCurve(curve)
+			if GammaTables[i] != nil {
+				CmsFreeToneCurve(GammaTables[i])
 			}
 		}
-		cmsFree(Src.ContextID, unsafe.Pointer(GammaTables))
 	}
 	if Dest != nil {
 		cmsPipelineFree(Dest)
 	}
 	return false
 }
+
 func FreeMatShaper(ContextID CmsContext, Data unsafe.Pointer) {
 	if Data != nil {
 		cmsFree(ContextID, Data)
@@ -1512,34 +1319,38 @@ func FreeMatShaper(ContextID CmsContext, Data unsafe.Pointer) {
 func DupMatShaper(ContextID CmsContext, Data unsafe.Pointer) unsafe.Pointer {
 	return cmsDupMem(ContextID, Data, uint32(unsafe.Sizeof(MatShaper8Data{})))
 }
-func MatShaperEval16(In *uint16, Out *uint16, D unsafe.Pointer) {
+func MatShaperEval16(In []uint16, Out []uint16, D unsafe.Pointer) {
 	p := (*MatShaper8Data)(D)
-	var ri, gi, bi uint32
 
-	// Extract indices from input
-	ri = uint32(*(*uint16)(unsafe.Add(unsafe.Pointer(In), uintptr(0)*unsafe.Sizeof(uint16(0))))) & 0xFF
-	gi = uint32(*(*uint16)(unsafe.Add(unsafe.Pointer(In), uintptr(1)*unsafe.Sizeof(uint16(0))))) & 0xFF
-	bi = uint32(*(*uint16)(unsafe.Add(unsafe.Pointer(In), uintptr(2)*unsafe.Sizeof(uint16(0))))) & 0xFF
+	//  Ensure In and Out have at least 3 elements
+	if len(In) < 3 || len(Out) < 3 {
+		return
+	}
 
-	// Apply the first shaper
+	//  Extract indices from input using slice indexing
+	ri := uint32(In[0] & 0xFF)
+	gi := uint32(In[1] & 0xFF)
+	bi := uint32(In[2] & 0xFF)
+
+	//  Apply the first shaper using slice indexing
 	r := p.Shaper1R[ri]
 	g := p.Shaper1G[gi]
 	b := p.Shaper1B[bi]
 
-	// Evaluate the matrix
+	//  Evaluate the matrix
 	l1 := (p.Mat[0][0]*r + p.Mat[0][1]*g + p.Mat[0][2]*b + p.Off[0] + 0x2000) >> 14
 	l2 := (p.Mat[1][0]*r + p.Mat[1][1]*g + p.Mat[1][2]*b + p.Off[1] + 0x2000) >> 14
 	l3 := (p.Mat[2][0]*r + p.Mat[2][1]*g + p.Mat[2][2]*b + p.Off[2] + 0x2000) >> 14
 
-	// Clip to 0..1.0 range
+	//  Clip to 0..1.0 range
 	ri = clipToRange(l1, 0, 16384)
 	gi = clipToRange(l2, 0, 16384)
 	bi = clipToRange(l3, 0, 16384)
 
-	// Apply the second shaper
-	*(*uint16)(unsafe.Add(unsafe.Pointer(Out), uintptr(0)*unsafe.Sizeof(uint16(0)))) = p.Shaper2R[ri]
-	*(*uint16)(unsafe.Add(unsafe.Pointer(Out), uintptr(1)*unsafe.Sizeof(uint16(0)))) = p.Shaper2G[gi]
-	*(*uint16)(unsafe.Add(unsafe.Pointer(Out), uintptr(2)*unsafe.Sizeof(uint16(0)))) = p.Shaper2B[bi]
+	//  Apply the second shaper using slice indexing
+	Out[0] = p.Shaper2R[ri]
+	Out[1] = p.Shaper2G[gi]
+	Out[2] = p.Shaper2B[bi]
 }
 
 func clipToRange(value cmsS1Fixed14Number, min, max cmsS1Fixed14Number) uint32 {
@@ -1550,38 +1361,46 @@ func clipToRange(value cmsS1Fixed14Number, min, max cmsS1Fixed14Number) uint32 {
 	}
 	return uint32(value)
 }
-func FillFirstShaper(Table *cmsS1Fixed14Number, Curve *CmsToneCurve) {
+func FillFirstShaper(Table []cmsS1Fixed14Number, Curve *CmsToneCurve) {
 	for i := 0; i < 256; i++ {
 		R := float32(i) / 255.0
 		y := cmsEvalToneCurveFloat(Curve, R)
 
 		if y < 131072.0 {
-			*(*cmsS1Fixed14Number)(unsafe.Add(unsafe.Pointer(Table), uintptr(i)*unsafe.Sizeof(cmsS1Fixed14Number(0)))) = DOUBLE_TO_1FIXED14(float64(y))
+			Table[i] = DOUBLE_TO_1FIXED14(float64(y))
 		} else {
-			*(*cmsS1Fixed14Number)(unsafe.Add(unsafe.Pointer(Table), uintptr(i)*unsafe.Sizeof(cmsS1Fixed14Number(0)))) = 0x7FFFFFFF
+			Table[i] = 0x7fffffff
 		}
 	}
 }
-func FillSecondShaper(Table *uint16, Curve *CmsToneCurve, Is8BitsOutput bool) {
+func FillSecondShaper(Table []uint16, Curve *CmsToneCurve, Is8BitsOutput bool) {
+	//  Ensure Table has enough elements to prevent out-of-bounds errors
+	if len(Table) < 16385 {
+		return
+	}
+
 	for i := 0; i < 16385; i++ {
 		R := float32(i) / 16384.0
 		Val := cmsEvalToneCurveFloat(Curve, R)
 
+		//  Clip value to range [0, 1]
 		if Val < 0 {
 			Val = 0
 		} else if Val > 1.0 {
 			Val = 1.0
 		}
 
+		//  Use slice indexing instead of ``unsafe
 		if Is8BitsOutput {
 			w := cmsQuickSaturateWord(float64(Val * 65535.0))
 			b := FROM_16_TO_8(w)
-			*(*uint16)(unsafe.Add(unsafe.Pointer(Table), uintptr(i)*unsafe.Sizeof(uint16(0)))) = FROM_8_TO_16(b)
+			Table[i] = FROM_8_TO_16(b) //  Direct slice assignment
 		} else {
-			*(*uint16)(unsafe.Add(unsafe.Pointer(Table), uintptr(i)*unsafe.Sizeof(uint16(0)))) = cmsQuickSaturateWord(float64(Val * 65535.0))
+			Table[i] = cmsQuickSaturateWord(float64(Val * 65535.0)) //  Direct slice assignment
 		}
 	}
 }
+
 func SetMatShaper(Dest *cmsPipeline, Curve1 [3]*CmsToneCurve, Mat *cmsMAT3, Off *cmsVEC3, Curve2 [3]*CmsToneCurve, OutputFormat *uint32) bool {
 	p := (*MatShaper8Data)(cmsMalloc(Dest.ContextID, uint32(unsafe.Sizeof(MatShaper8Data{}))))
 	if p == nil {
@@ -1591,13 +1410,13 @@ func SetMatShaper(Dest *cmsPipeline, Curve1 [3]*CmsToneCurve, Mat *cmsMAT3, Off 
 	p.ContextID = Dest.ContextID
 
 	// Fill the first and second shapers
-	FillFirstShaper(&p.Shaper1R[0], Curve1[0])
-	FillFirstShaper(&p.Shaper1G[0], Curve1[1])
-	FillFirstShaper(&p.Shaper1B[0], Curve1[2])
+	FillFirstShaper(p.Shaper1R[:], Curve1[0])
+	FillFirstShaper(p.Shaper1G[:], Curve1[1])
+	FillFirstShaper(p.Shaper1B[:], Curve1[2])
 
-	FillSecondShaper(&p.Shaper2R[0], Curve2[0], cmsFormatterIs8bit(*OutputFormat))
-	FillSecondShaper(&p.Shaper2G[0], Curve2[1], cmsFormatterIs8bit(*OutputFormat))
-	FillSecondShaper(&p.Shaper2B[0], Curve2[2], cmsFormatterIs8bit(*OutputFormat))
+	FillSecondShaper(p.Shaper2R[:], Curve2[0], cmsFormatterIs8bit(*OutputFormat))
+	FillSecondShaper(p.Shaper2G[:], Curve2[1], cmsFormatterIs8bit(*OutputFormat))
+	FillSecondShaper(p.Shaper2B[:], Curve2[2], cmsFormatterIs8bit(*OutputFormat))
 
 	// Convert the matrix to fixed-point representation
 	for i := 0; i < 3; i++ {
@@ -1628,7 +1447,7 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	var res cmsMAT3
 	var IdentityMat bool
 	var Dest, Src *cmsPipeline
-	var Offset *float64
+	var Offset []float64
 
 	// Only works for RGB to RGB
 	if T_CHANNELS(*InputFormat) != 3 || T_CHANNELS(*OutputFormat) != 3 {
@@ -1663,7 +1482,7 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		}
 
 		// Multiply both matrices to get the result
-		cmsMAT3per(&res, (*cmsMAT3)(unsafe.Pointer(Data2.Double)), (*cmsMAT3)(unsafe.Pointer(Data1.Double)))
+		cmsMAT3per(&res, (*cmsMAT3)(unsafe.Pointer(&Data2.Double[0])), (*cmsMAT3)(unsafe.Pointer(&Data1.Double[0])))
 
 		// Only the second matrix has an offset
 		Offset = Data2.Offset
@@ -1678,7 +1497,7 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		Data := (*cmsStageMatrixData)(cmsStageData(Matrix1))
 
 		// Copy the matrix to the result
-		memcpy(unsafe.Pointer(&res), unsafe.Pointer(Data.Double), unsafe.Sizeof(res))
+		Memcpy(res.V[0].N[:], Data.Double, int(unsafe.Sizeof(res.V[0].N[:])))
 
 		// Preserve the offset (may be nil for zero offset)
 		Offset = Data.Offset
@@ -1704,7 +1523,7 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	}
 
 	if !IdentityMat {
-		if !cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageAllocMatrix(Dest.ContextID, 3, 3, (*float64)(unsafe.Pointer(&res)), Offset)) {
+		if !cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageAllocMatrix(Dest.ContextID, 3, 3, res.V[0].N[:], Offset)) {
 			goto Error
 		}
 	}
@@ -1724,7 +1543,7 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		*dwFlags |= cmsFLAGS_NOCACHE
 
 		// Set up optimization routines
-		SetMatShaper(Dest, ConvertToToneCurveArray(mpeC1.TheCurves), &res, (*cmsVEC3)(unsafe.Pointer(Offset)), ConvertToToneCurveArray(mpeC2.TheCurves), OutputFormat)
+		SetMatShaper(Dest, ConvertToToneCurveArray(mpeC1.TheCurves), &res, (*cmsVEC3)(unsafe.Pointer(&Offset[0])), ConvertToToneCurveArray(mpeC2.TheCurves), OutputFormat)
 	}
 
 	// Free the original pipeline and replace it with the optimized one

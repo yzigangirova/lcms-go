@@ -473,13 +473,13 @@ func AddConversion(Result *cmsPipeline, InPCS cmsColorSpaceSignature, OutPCS cms
 		switch OutPCS {
 		case cmsSigXYZData: // XYZ -> XYZ
 			if !IsEmptyLayer(m, off) {
-				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, &mAsDbl[0], &offAsDbl[0])) {
+				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
 					return false
 				}
 			}
 		case cmsSigLabData: // XYZ -> Lab
 			if !IsEmptyLayer(m, off) {
-				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, &mAsDbl[0], &offAsDbl[0])) {
+				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
 					return false
 				}
 			}
@@ -497,14 +497,14 @@ func AddConversion(Result *cmsPipeline, InPCS cmsColorSpaceSignature, OutPCS cms
 				return false
 			}
 			if !IsEmptyLayer(m, off) {
-				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, &mAsDbl[0], &offAsDbl[0])) {
+				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
 					return false
 				}
 			}
 		case cmsSigLabData: // Lab -> Lab
 			if !IsEmptyLayer(m, off) {
 				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocLab2XYZ(Result.ContextID)) ||
-					!cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, &mAsDbl[0], &offAsDbl[0])) ||
+					!cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) ||
 					!cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocXYZ2Lab(Result.ContextID)) {
 					return false
 				}
@@ -586,7 +586,7 @@ func BlackPreservingGrayOnlySampler(In []uint16, Out []uint16, Cargo unsafe.Poin
 	}
 
 	// Keep normal transform for other colors
-	bp.Cmyk2Cmyk.Eval16Fn(&In[0], &Out[0], bp.Cmyk2Cmyk.Data)
+	bp.Cmyk2Cmyk.Eval16Fn(In, Out, bp.Cmyk2Cmyk.Data)
 	return int32(1)
 }
 

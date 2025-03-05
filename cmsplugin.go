@@ -98,11 +98,10 @@ func cmsReadUInt16Number(io *cmsIOHANDLER, n *uint16) bool {
 }
 
 // cmsReadUInt16Array reads an array of uint16 numbers.
-func cmsReadUInt16Array(io *cmsIOHANDLER, n uint32, array *uint16) bool {
+func cmsReadUInt16Array(io *cmsIOHANDLER, n uint32, array []uint16) bool {
 	for i := uint32(0); i < n; i++ {
 		if array != nil {
-			arrayptr := (*uint16)(unsafe.Add(unsafe.Pointer(array), uintptr(i)*unsafe.Sizeof(uint16(0))))
-			if !cmsReadUInt16Number(io, arrayptr) {
+			if !cmsReadUInt16Number(io, &array[i]) {
 				return false
 			}
 		} else {

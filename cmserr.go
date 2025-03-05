@@ -86,10 +86,6 @@ func cmsMallocZeroDefaultFn(ContextID CmsContext, size uint32) unsafe.Pointer {
 	if ptr == nil {
 		return nil
 	}
-	mem := (*[1 << 30]byte)(ptr)[:size:size]
-	for i := range mem {
-		mem[i] = 0
-	}
 	return ptr
 }
 
@@ -138,6 +134,23 @@ func cmsDupDefaultFn(ContextID CmsContext, Org unsafe.Pointer, size uint32) unsa
 	}
 	return mem
 }
+
+// DupMem duplicates a single struct or value CAN NOT USE THIS!  generic function 
+//can not be assigned
+/*func cmsDupDefaultFn[T any](src *T) *T {
+	if src == nil {
+		return nil
+	}
+
+	// Allocate new memory (Go manages this)
+	dst := new(T)
+
+	// Copy memory
+	*dst = *src
+
+	return dst
+}*/
+
 
 // Pointers to memory manager functions in Context0
 var cmsMemPluginChunk = cmsMemPluginChunkType{cmsMallocDefaultFn, cmsMallocZeroDefaultFn, cmsFreeDefaultFn,
@@ -223,7 +236,7 @@ func cmsFree(contextID CmsContext, oldPtr unsafe.Pointer) {
 	}
 }
 
-// Generic block duplication
+// Generic block duplication for structures
 func cmsDupMem(contextID CmsContext, org unsafe.Pointer, size uint32) unsafe.Pointer {
 	ptr := (*cmsMemPluginChunkType)(CmsContextGetClientChunk(contextID, MemPlugin))
 	if ptr == nil || ptr.DupPtr == nil || org == nil {
@@ -231,6 +244,23 @@ func cmsDupMem(contextID CmsContext, org unsafe.Pointer, size uint32) unsafe.Poi
 	}
 	return ptr.DupPtr(contextID, org, size)
 }
+
+//for slices
+// DupMemSlice duplicates a slice of any type
+func cmsDupMemSlice[T any](src []T) []T {
+	if len(src) == 0 {
+		return nil
+	}
+
+	// Allocate new slice
+	dst := make([]T, len(src))
+
+	// Copy contents
+	copy(dst, src)
+
+	return dst
+}
+
 
 // ********************************************************************************************
 

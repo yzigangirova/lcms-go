@@ -1269,19 +1269,23 @@ func PackChunkyWords(info *cmsTRANSFORM, wOut []uint16, output []byte, stride ui
 	extraFirst := doSwap ^ swapFirst
 
 	alphaFactor := uint32(0)
-	swap1 := output[:2*nChan] // Create a slice equivalent to the first `nChan` words
 
-	// Pointer to the current position in the output buffer
-	outputPtr := unsafe.Pointer(&output[0])
+	// Ensure the output slice has enough space and interpret it as a uint16 slice
+	if len(output) < int(2*nChan) {
+		return output // Not enough space, return unchanged
+	}
+	output16 := unsafe.Slice((*uint16)(unsafe.Pointer(&output[0])), len(output)/2)
+
+	swap1 := output16[:nChan] // Equivalent to the first `nChan` words
 
 	if extraFirst != 0 {
 		if premul != 0 && extra != 0 {
-			alphaFactor = uint32(cmsToFixedDomain(int(*(*uint16)(outputPtr))))
+			alphaFactor = uint32(cmsToFixedDomain(int(output16[0])))
 		}
-		outputPtr = unsafe.Add(outputPtr, uintptr(extra*2))
+		output16 = output16[extra:]
 	} else {
 		if premul != 0 && extra != 0 {
-			alphaFactor = uint32(cmsToFixedDomain(int(*(*uint16)(unsafe.Add(outputPtr, uintptr(nChan*2))))))
+			alphaFactor = uint32(cmsToFixedDomain(int(output16[nChan])))
 		}
 	}
 
@@ -1305,27 +1309,23 @@ func PackChunkyWords(info *cmsTRANSFORM, wOut []uint16, output []byte, stride ui
 			v = uint16((uint32(v)*alphaFactor + 0x8000) >> 16)
 		}
 
-		// Write v to the output buffer
-		*(*uint16)(outputPtr) = v
-		outputPtr = unsafe.Add(outputPtr, 2)
+		// Write v to the output16 buffer
+		output16[0] = v
+		output16 = output16[1:]
 	}
 
 	if extraFirst == 0 {
-		outputPtr = unsafe.Add(outputPtr, uintptr(extra*2))
+		output16 = output16[extra:]
 	}
 
 	if extra == 0 && swapFirst != 0 {
-		// Use memmove to shift the memory in the slice
-		memmove(
-			unsafe.Pointer(&swap1[2]), // Destination: second element in swap1
-			unsafe.Pointer(&swap1[0]), // Source: first element in swap1
-			uintptr((nChan-1)*2),      // Number of bytes to move
-		)
-		*(*uint16)(unsafe.Pointer(&swap1[0])) = wOut[nChan-1]
+		// Use copy to shift the elements in swap1
+		copy(swap1[1:], swap1[:nChan-1])
+		swap1[0] = wOut[nChan-1]
 	}
 
-	// Return the slice advanced by the number of bytes written
-	bytesWritten := uintptr(outputPtr) - uintptr(unsafe.Pointer(&output[0]))
+	// Calculate bytes written
+	bytesWritten := len(output) - len(output16)*2
 	return output[:bytesWritten]
 }
 

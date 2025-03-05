@@ -3,10 +3,10 @@ package golcms
 import (
 	//"math"
 	"fmt"
-	"reflect"
 	"sync"
 	"time"
 	"unsafe"
+	"reflect"
 )
 
 // Determinant lower than that are assumed zero (used on matrix invert)
@@ -144,9 +144,9 @@ type cmsMutex struct {
 }
 
 func NewCmsMutex() *cmsMutex {
-    return &cmsMutex{
-        mutex: new(sync.Mutex), // Allocates a Mutex and assigns its pointer
-    }
+	return &cmsMutex{
+		mutex: new(sync.Mutex), // Allocates a Mutex and assigns its pointer
+	}
 }
 
 // Lock the mutex
@@ -235,7 +235,7 @@ type cmsNAMEDCOLORLIST struct {
 	Prefix [33]byte // Prefix and suffix are defined to be 32 characters at most
 	Suffix [33]byte
 
-	List *cmsNAMEDCOLOR
+	List []cmsNAMEDCOLOR
 
 	ContextID CmsContext
 }
@@ -273,7 +273,7 @@ type cmsStage struct {
 
 // Pipelines, Multi Process Elements.
 // Define function pointer types
-type cmsStageEvalFn func(In *float32, Out *float32, mpe *cmsStage)
+type cmsStageEvalFn func(In []float32, Out []float32, mpe *cmsStage)
 type cmsStageDupElemFn func(mpe *cmsStage) unsafe.Pointer
 type cmsStageFreeElemFn func(mpe *cmsStage)
 
@@ -315,9 +315,9 @@ type cmsMLUentry struct {
 
 type cmsMLU struct {
 	ContextID        CmsContext
-	AllocatedEntries uint32       // Number of allocated entries
-	UsedEntries      uint32       // Number of used entries
-	Entries          *cmsMLUentry // probably this must be slice; it is a pointer to arrays of entries in  C; check
+	AllocatedEntries uint32 // Number of allocated entries
+	UsedEntries      uint32 // Number of used entries
+	Entries          []cmsMLUentry
 
 	PoolSize uint32         // Maximum allocated size of the pool
 	PoolUsed uint32         // Currently used size of the pool
@@ -440,13 +440,13 @@ const cmsFLAGS_CAN_CHANGE_FORMATTER = 0x02000000 // Allow change buffer format
 type cms_curve_struct struct {
 	InterpParams *cmsInterpParams              // Private optimizations for interpolation
 	nSegments    uint32                        // Number of segments in the curve. Zero for a 16-bit based tables
-	Segments     *cmsCurveSegment              // The segments
-	SegInterp    **cmsInterpParams             // Array of private optimizations for interpolation in table-based segments
+	Segments     []cmsCurveSegment             // The segments
+	SegInterp    []*cmsInterpParams            // Array of private optimizations for interpolation in table-based segments
 	Evals        []cmsParametricCurveEvaluator // Evaluators (one per segment)
 
 	// 16-bit Table-based representation follows
-	nEntries uint32  // Number of table elements
-	Table16  *uint16 // The table itself
+	nEntries uint32   // Number of table elements
+	Table16  []uint16 // The table itself
 }
 
 // The global Context0 storage for formatters plug-in//
@@ -533,6 +533,65 @@ type cmsParallelizationPluginChunkType struct {
 	SchedulerFn cmsTransform2Fn
 }
 
+// Global context storage for parallelization plugin.
+//var cmsParallelizationPluginChunk cmsParallelizationPluginChunkType
+
+func MemcpySlice[T any](dst, src []T, length int) {
+	if length > len(src)*int(unsafe.Sizeof(src[0])) || length > len(dst)*int(unsafe.Sizeof(dst[0])) {
+		panic("Memcpy: length exceeds slice bounds") // Mimic segmentation fault in C
+	}
+
+	// Convert slices to raw byte slices for true memory copying
+	dstBytes := unsafe.Slice((*byte)(unsafe.Pointer(&dst[0])), length)
+	srcBytes := unsafe.Slice((*byte)(unsafe.Pointer(&src[0])), length)
+
+	copy(dstBytes, srcBytes) // Copy raw memory bytes
+}
+
+func MemmoveSlice[T any](dest, src []T, count int) {
+	if count > len(src) || count > len(dest) {
+		panic("Memmove: count exceeds slice bounds")
+	}
+
+	byteSize := int(unsafe.Sizeof(src[0])) * count
+	srcBytes := unsafe.Slice((*byte)(unsafe.Pointer(&src[0])), byteSize)
+	destBytes := unsafe.Slice((*byte)(unsafe.Pointer(&dest[0])), byteSize)
+
+	// Convert pointers to uintptr for comparison
+	srcPtr := uintptr(unsafe.Pointer(&src[0]))
+	destPtr := uintptr(unsafe.Pointer(&dest[0]))
+
+	if destPtr > srcPtr {
+		// Copy backwards (to handle overlap correctly)
+		for i := byteSize - 1; i >= 0; i-- {
+			destBytes[i] = srcBytes[i]
+		}
+	} else {
+		// Copy normally (no overlap risk)
+		copy(destBytes, srcBytes)
+	}
+}
+
+func MemsetSlice[T any](slice []T, value T, length int) {
+	if length > len(slice) {
+		panic("Memset: length exceeds slice bounds")
+	}
+
+	// Convert slice to byte slice for raw memory manipulation
+	byteSize := int(unsafe.Sizeof(slice[0])) * length
+	byteSlice := unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), byteSize)
+
+	// Fill memory byte by byte
+	valBytes := unsafe.Slice((*byte)(unsafe.Pointer(&value)), byteSize)
+	for i := 0; i < byteSize; i++ {
+		byteSlice[i] = valBytes[0] // Repeat first byte of value
+	}
+}
+
+// memmove copies `n` bytes from `src` to `dst`.
+// It works like C's memmove, supporting overlapping memory regions.
+
+
 // memset sets a block of memory to a specified value.
 // Equivalent to C's memset function.
 func memset(ptr unsafe.Pointer, value int, num uintptr) {
@@ -548,11 +607,6 @@ func memset(ptr unsafe.Pointer, value int, num uintptr) {
 	}
 }
 
-// Global context storage for parallelization plugin.
-//var cmsParallelizationPluginChunk cmsParallelizationPluginChunkType
-
-// memmove copies `n` bytes from `src` to `dst`.
-// It works like C's memmove, supporting overlapping memory regions.
 func memmove(dst, src unsafe.Pointer, n uintptr) {
 	// Create byte slices from the pointers
 	dstSlice := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
@@ -570,6 +624,7 @@ func memmove(dst, src unsafe.Pointer, n uintptr) {
 	// Use Go's copy function which handles overlapping memory safely
 	copy(dstSlice, srcSlice)
 }
+
 
 func memcpy(dst, src unsafe.Pointer, size uintptr) {
 	dstSlice := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{

@@ -306,23 +306,23 @@ func BuildGrayInputMatrixPipeline(hProfile CmsHPROFILE) *cmsPipeline {
 
 	if cmsGetPCS(hProfile) == cmsSigLabData {
 		Zero := [2]uint16{0x8080, 0x8080}
-		EmptyTab := cmsBuildTabulatedToneCurve16(ContextID, 2, &Zero[0])
+		EmptyTab := cmsBuildTabulatedToneCurve16(ContextID, 2, Zero[:])
 		if EmptyTab == nil {
 			goto Error
 		}
 
 		LabCurves := [3]*CmsToneCurve{GrayTRC, EmptyTab, EmptyTab}
 
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 1, &OneToThreeInputMatrix[0], nil)) ||
-			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 3, &LabCurves[0])) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 1, OneToThreeInputMatrix, nil)) ||
+			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 3, LabCurves[:])) {
 			CmsFreeToneCurve(EmptyTab)
 			goto Error
 		}
 
 		CmsFreeToneCurve(EmptyTab)
 	} else {
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 1, &GrayTRC)) ||
-			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 1, &GrayInputMatrix[0], nil)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 1, []*CmsToneCurve{GrayTRC})) ||
+			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 1, GrayInputMatrix[:], nil)) {
 			goto Error
 		}
 	}
@@ -363,8 +363,8 @@ func BuildRGBInputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
 	Lut := cmsPipelineAlloc(ContextID, 3, 3)
 	if Lut != nil {
 
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 3, &Shapes[0])) ||
-			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 3, (*float64)(&(Mat.V[0].N[0])) /*unsafe.Slice(((*float64)(&(Mat.V[0].N[0]))), 9)*/, nil)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 3, Shapes[:])) ||
+			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 3, Mat.V[0].N[:], nil)) {
 			goto Error
 		}
 
@@ -442,14 +442,14 @@ func cmsReadInputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 		return Lut
 	}
 
-   // This is an attempt to reuse this function to retrieve the matrix-shaper as pipeline no
-    // matter other LUT are present and have precedence. Intent = 0xffffffff can be used for that.
+	// This is an attempt to reuse this function to retrieve the matrix-shaper as pipeline no
+	// matter other LUT are present and have precedence. Intent = 0xffffffff can be used for that.
 	if Intent <= INTENT_ABSOLUTE_COLORIMETRIC {
 		tag16 := Device2PCS16[Intent]
 		tagFloat := Device2PCSFloat[Intent]
 
-	        // Floating point LUT are always V4, but the encoding range is no
-            // longer 0..1.0, so we need to add an stage depending on the color space
+		// Floating point LUT are always V4, but the encoding range is no
+		// longer 0..1.0, so we need to add an stage depending on the color space
 		if cmsIsTag(hProfile, tagFloat) {
 			return cmsReadFloatInputTag(hProfile, tagFloat)
 		}
@@ -495,9 +495,9 @@ func cmsReadInputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 // ---------------------------------------------------------------------------------------------------------------
 
 // Gray output pipeline.
-// XYZ -> Gray or Lab -> Gray. Since we only know the GrayTRC, we need to do some assumptions. Gray component will be
+// XYZ. Gray or Lab. Gray. Since we only know the GrayTRC, we need to do some assumptions. Gray component will be
 // given by Y on XYZ PCS and by L* on Lab PCS, Both across inverse TRC curve.
-// The complete pipeline on XYZ is Matrix[3:1] -> Tone curve and in Lab Matrix[3:1] -> Tone Curve as well.
+// The complete pipeline on XYZ is Matrix[3:1]. Tone curve and in Lab Matrix[3:1]. Tone Curve as well.
 
 func BuildGrayOutputPipeline(hProfile CmsHPROFILE) *cmsPipeline {
 	ContextID := cmsGetProfileContextID(hProfile)
@@ -518,20 +518,20 @@ func BuildGrayOutputPipeline(hProfile CmsHPROFILE) *cmsPipeline {
 	}
 
 	if cmsGetPCS(hProfile) == cmsSigLabData {
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 1, 3, &PickLstarMatrix[0], nil)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 1, 3, PickLstarMatrix, nil)) {
 			CmsFreeToneCurve(RevGrayTRC)
 			cmsPipelineFree(Lut)
 			return nil
 		}
 	} else {
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 1, 3, &PickYMatrix[0], nil)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 1, 3, PickYMatrix, nil)) {
 			CmsFreeToneCurve(RevGrayTRC)
 			cmsPipelineFree(Lut)
 			return nil
 		}
 	}
 
-	if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 1, &RevGrayTRC)) {
+	if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 1, []*CmsToneCurve{RevGrayTRC})) {
 		CmsFreeToneCurve(RevGrayTRC)
 		cmsPipelineFree(Lut)
 		return nil
@@ -587,8 +587,8 @@ func BuildRGBOutputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
 			}
 		}
 
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 3, (*float64)(&(Inv.V[0].N[0])) /*unsafe.Slice(((*float64)(&(Inv.V[0].N[0]))), 9)*/, nil)) ||
-			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 3, &InvShapes[0])) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 3, Inv.V[0].N[:], nil)) ||
+			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 3, InvShapes[:])) {
 			goto Error
 		}
 	}
@@ -724,7 +724,7 @@ func cmsIsMatrixShaper(hProfile CmsHPROFILE) bool {
 	}
 }
 func cmsIsCLUT(hProfile CmsHPROFILE, Intent uint32, UsedDirection uint32) bool {
-	var TagTable *cmsTagSignature
+	var TagTable []cmsTagSignature
 
 	// For devicelinks, the supported intent is the one stated in the header
 	if cmsGetDeviceClass(hProfile) == cmsSigLinkClass {
@@ -734,10 +734,10 @@ func cmsIsCLUT(hProfile CmsHPROFILE, Intent uint32, UsedDirection uint32) bool {
 	switch UsedDirection {
 
 	case LCMS_USED_AS_INPUT:
-		TagTable = &Device2PCS16[0]
+		TagTable = Device2PCS16
 
 	case LCMS_USED_AS_OUTPUT:
-		TagTable = &PCS2Device16[0]
+		TagTable = PCS2Device16
 
 	case LCMS_USED_AS_PROOF:
 		return cmsIsIntentSupported(hProfile, Intent, LCMS_USED_AS_INPUT) &&
@@ -753,9 +753,7 @@ func cmsIsCLUT(hProfile CmsHPROFILE, Intent uint32, UsedDirection uint32) bool {
 		return false
 	}
 	// Use unsafe to index into TagTable
-	tag := *(*cmsTagSignature)(unsafe.Add(unsafe.Pointer(TagTable), uintptr(Intent)*unsafe.Sizeof(cmsTagSignature(0))))
-
-	return cmsIsTag(hProfile, tag)
+	return cmsIsTag(hProfile, TagTable[Intent])
 
 }
 
@@ -802,17 +800,11 @@ func cmsReadProfileSequence(hProfile CmsHPROFILE) *cmsSEQ {
 	NewSeq = cmsDupProfileSequenceDescription(ProfileSeq)
 
 	// Mix profile sequence ID into the new sequence
+	// Ok, proceed to the mixing
 	if NewSeq != nil {
 		for i := uint32(0); i < ProfileSeq.n; i++ {
-			// Compute the address of the ith element in the seq pointer
-			NewSeqSeqPtr := (*cmsPSEQDESC)(unsafe.Add(unsafe.Pointer(NewSeq.seq), uintptr(i)*unsafe.Sizeof(cmsPSEQDESC{})))
-			ProfileIdSeqPtr := (*cmsPSEQDESC)(unsafe.Add(unsafe.Pointer(ProfileId.seq), uintptr(i)*unsafe.Sizeof(cmsPSEQDESC{})))
-
-			// Copy the ProfileID
-			memmove(unsafe.Pointer(&((*NewSeqSeqPtr).ProfileID)), unsafe.Pointer(&((*ProfileIdSeqPtr).ProfileID)), unsafe.Sizeof(cmsProfileID{}))
-
-			// Duplicate the Description
-			NewSeqSeqPtr.Description = cmsMLUdup(ProfileIdSeqPtr.Description)
+			memmove(unsafe.Pointer(&NewSeq.seq[i].ProfileID), unsafe.Pointer(&ProfileId.seq[i].ProfileID), unsafe.Sizeof(cmsProfileID{}))
+			NewSeq.seq[i].Description = cmsMLUdup(ProfileId.seq[i].Description)
 		}
 	}
 
@@ -855,14 +847,13 @@ func cmsCompileProfileSequence(ContextID CmsContext, nProfiles uint32, hProfiles
 
 	// Iterate through profiles and populate the sequence
 	for i := uint32(0); i < nProfiles; i++ {
-		NewSeqSeqPtr := (*cmsPSEQDESC)(unsafe.Add(unsafe.Pointer(seq.seq), uintptr(i)*unsafe.Sizeof(cmsPSEQDESC{})))
-		ps := NewSeqSeqPtr // Reference to the current profile sequence descriptor
-		h := hProfiles[i]  // Current profile
+		ps := &seq.seq[i] // Reference to the current profile sequence descriptor
+		h := hProfiles[i] // Current profile
 
 		// Extract header attributes
 		cmsGetHeaderAttributes(h, &ps.attributes)
-	//	cmsGetHeaderProfileID(h, &ps.ProfileID.ID8[0])
-		cmsGetHeaderProfileID(h, &ps.ProfileID[0])
+		//	cmsGetHeaderProfileID(h, &ps.ProfileID.ID8[0])
+		cmsGetHeaderProfileID(h, &ps.ProfileID[0]) //instead of union in C
 		ps.deviceMfg = cmsSignature(cmsGetHeaderManufacturer(h))
 		ps.deviceModel = cmsSignature(cmsGetHeaderModel(h))
 
@@ -912,8 +903,8 @@ func cmsGetProfileInfo(hProfile CmsHPROFILE, Info CmsInfoType,
 	return cmsMLUgetWide(mlu, LanguageCode, CountryCode, Buffer, BufferSize)
 }
 
-func CmsGetProfileInfoASCII(hProfile CmsHPROFILE, Info CmsInfoType, 
-	LanguageCode string, CountryCode string, 
+func CmsGetProfileInfoASCII(hProfile CmsHPROFILE, Info CmsInfoType,
+	LanguageCode string, CountryCode string,
 	Buffer *byte, BufferSize uint32) uint32 {
 
 	mlu := GetInfo(hProfile, Info)

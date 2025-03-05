@@ -76,7 +76,7 @@ func ComputeKToLstar(ContextID CmsContext,
 		return nil
 	}
 
-	SampledPoints := (*float32)(cmsCalloc(ContextID, nPoints, uint32(unsafe.Sizeof(float32(0)))))
+	SampledPoints := make([]float32, nPoints)
 
 	for i := uint32(0); i < nPoints; i++ {
 		cmyk := [4]float32{0, 0, 0, float32((float64(i) * 100.0) / float64(nPoints-1))}
@@ -84,7 +84,7 @@ func ComputeKToLstar(ContextID CmsContext,
 		CmsDoTransform(xform, unsafe.Pointer(&cmyk[0]), unsafe.Pointer(&Lab), 1)
 
 		// Calculate the offset for the current index and assign the value
-		*(*float32)(unsafe.Add(unsafe.Pointer(SampledPoints), uintptr(i)*unsafe.Sizeof(float32(0)))) = float32(1.0 - Lab.L/100.0)
+		SampledPoints[i] = float32(1.0 - Lab.L/100.0) // Negate K for easier operation
 	}
 
 	out := cmsBuildTabulatedToneCurveFloat(ContextID, nPoints, SampledPoints)
@@ -523,7 +523,7 @@ func cmsDetectRGBProfileGamma(hProfile CmsHPROFILE, threshold float64) float64 {
 	}
 
 	// Build a tone curve from the normalized Y values
-	YCurve = cmsBuildTabulatedToneCurveFloat(ContextID, 256, &YNormalized[0])
+	YCurve = cmsBuildTabulatedToneCurveFloat(ContextID, 256, YNormalized[:])
 	if YCurve == nil {
 		return -1
 	}

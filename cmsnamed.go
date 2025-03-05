@@ -3,6 +3,7 @@ package golcms
 import (
 	"encoding/binary"
 	"unsafe"
+	"fmt"
 )
 
 // cmsMLUalloc allocates an empty multi-localized unicode object.
@@ -18,12 +19,7 @@ func cmsMLUalloc(ContextID CmsContext, nItems uint32) *cmsMLU {
 
 	mlu.ContextID = ContextID
 
-	mlu.Entries = (*cmsMLUentry)(cmsCalloc(ContextID, nItems, uint32(unsafe.Sizeof(cmsMLUentry{}))))
-	if mlu.Entries == nil {
-		cmsFree(ContextID, unsafe.Pointer(mlu))
-		return nil
-	}
-
+	mlu.Entries = make([]cmsMLUentry, nItems)
 	mlu.AllocatedEntries = nItems
 	mlu.UsedEntries = 0
 
@@ -62,21 +58,25 @@ func GrowMLUtable(mlu *cmsMLU) bool {
 		return false
 	}
 
+	// Calculate the new size
 	allocatedEntries := mlu.AllocatedEntries * 2
 	if allocatedEntries/2 != mlu.AllocatedEntries {
-		return false
+		return false // Overflow check
 	}
 
-	newPtr := (*cmsMLUentry)(cmsRealloc(mlu.ContextID, unsafe.Pointer(mlu.Entries), allocatedEntries*uint32(unsafe.Sizeof(cmsMLUentry{}))))
-	if newPtr == nil {
-		return false
-	}
+	// Create a new slice with the increased capacity
+	newEntries := make([]cmsMLUentry, allocatedEntries)
 
-	mlu.Entries = newPtr
+	// Copy old entries into the new slice
+	copy(newEntries, mlu.Entries)
+
+	// Assign the new slice back
+	mlu.Entries = newEntries
 	mlu.AllocatedEntries = allocatedEntries
 
 	return true
 }
+
 
 // SearchMLUEntry searches for a specific entry in the MLU based on language and country codes.
 func SearchMLUEntry(mlu *cmsMLU, LanguageCode, CountryCode uint16) int {
@@ -84,9 +84,8 @@ func SearchMLUEntry(mlu *cmsMLU, LanguageCode, CountryCode uint16) int {
 		return -1
 	}
 	for i := uint32(0); i < mlu.UsedEntries; i++ {
-		entry := (*cmsMLUentry)(unsafe.Add(unsafe.Pointer(mlu.Entries), uintptr(i)*unsafe.Sizeof(cmsMLUentry{})))
 		// Compare the fields
-		if entry.Country == CountryCode && entry.Language == LanguageCode {
+		if mlu.Entries[i].Country == CountryCode && mlu.Entries[i].Language == LanguageCode {
 			return int(i)
 		}
 	}
@@ -125,12 +124,11 @@ func AddMLUBlock(mlu *cmsMLU, size uint32, block *uint16, LanguageCode, CountryC
 	mlu.PoolUsed += size
 
 	// Calculate the address of the current entry
-	entry := (*cmsMLUentry)(unsafe.Add(unsafe.Pointer(mlu.Entries), uintptr(mlu.UsedEntries)*unsafe.Sizeof(cmsMLUentry{})))
-	entry.StrW = offset
-	entry.Len = size
-	entry.Country = CountryCode
-	entry.Language = LanguageCode
-	mlu.UsedEntries++
+	mlu.Entries[mlu.UsedEntries].StrW     = offset;
+    mlu.Entries[mlu.UsedEntries].Len      = size;
+    mlu.Entries[mlu.UsedEntries].Country  = CountryCode;
+    mlu.Entries[mlu.UsedEntries].Language = LanguageCode;
+    mlu.UsedEntries++;
 
 	return true
 }
@@ -228,7 +226,7 @@ func cmsMLUdup(mlu *cmsMLU) *cmsMLU {
 		return nil
 	}
 
-	memmove(unsafe.Pointer(newMLU.Entries), unsafe.Pointer(mlu.Entries), uintptr(mlu.UsedEntries)*unsafe.Sizeof(cmsMLUentry{}))
+	MemmoveSlice(newMLU.Entries, mlu.Entries, int(mlu.UsedEntries))
 	newMLU.UsedEntries = mlu.UsedEntries
 
 	if mlu.PoolUsed == 0 {
@@ -256,9 +254,6 @@ func cmsMLUdup(mlu *cmsMLU) *cmsMLU {
 // cmsMLUfree frees all memory used by an MLU.
 func cmsMLUfree(mlu *cmsMLU) {
 	if mlu != nil {
-		if mlu.Entries != nil {
-			cmsFree(mlu.ContextID, unsafe.Pointer(mlu.Entries))
-		}
 		if mlu.MemPool != nil {
 			cmsFree(mlu.ContextID, mlu.MemPool)
 		}
@@ -276,7 +271,7 @@ func _cmsMLUgetWide(mlu *cmsMLU, length *uint32, LanguageCode, CountryCode uint1
 	var bestMatch int = -1
 	for i := uint32(0); i < mlu.UsedEntries; i++ {
 		// Calculate the address of the current entry
-		entry := (*cmsMLUentry)(unsafe.Add(unsafe.Pointer(mlu.Entries), uintptr(i)*unsafe.Sizeof(cmsMLUentry{})))
+		entry := mlu.Entries[i]
 
 		if entry.Language == LanguageCode {
 			if bestMatch == -1 {
@@ -301,7 +296,7 @@ func _cmsMLUgetWide(mlu *cmsMLU, length *uint32, LanguageCode, CountryCode uint1
 		bestMatch = 0
 	}
 	// Cast the calculated address back to a *cmsMLUentry
-	entry := (*cmsMLUentry)(unsafe.Add(unsafe.Pointer(mlu.Entries), uintptr(bestMatch)*unsafe.Sizeof(cmsMLUentry{})))
+	entry := mlu.Entries[bestMatch]
 
 	if UsedLanguageCode != nil {
 		*UsedLanguageCode = entry.Language
@@ -441,7 +436,7 @@ func cmsMLUtranslationsCodes(mlu *cmsMLU, idx uint32, LanguageCode, CountryCode 
 		return false
 	}
 	// Calculate the address of the current entry
-	entry := (*cmsMLUentry)(unsafe.Add(unsafe.Pointer(mlu.Entries), uintptr(idx)*unsafe.Sizeof(cmsMLUentry{})))
+	entry := mlu.Entries[idx]
 	// Cast the calculated address back to a *cmsMLUentry
 	if LanguageCode != nil {
 		*LanguageCode = strFrom16(entry.Language)
@@ -572,47 +567,42 @@ func DupNamedColorList(mpe *cmsStage) unsafe.Pointer {
 // EvalNamedColorPCS evaluates the named color in PCS (Profile Connection Space).
 
 // EvalNamedColorPCS evaluates named color in PCS (Lab) space.
-func EvalNamedColorPCS(in *float32, out *float32, mpe *cmsStage) {
-	namedColorList := (*cmsNAMEDCOLORLIST)(mpe.Data)
-	index := uint16(cmsQuickSaturateWord(float64(*in) * 65535.0))
+func EvalNamedColorPCS(in []float32, out []float32, mpe *cmsStage) {
+	NamedColorList := (*cmsNAMEDCOLORLIST)(mpe.Data)
+	index := uint16(cmsQuickSaturateWord(float64(in[0]) * 65535.0))
 	// Interpret the `List` pointer as a slice of cmsNAMEDCOLOR.
-	list := unsafe.Slice(namedColorList.List, namedColorList.nColors)
 
-	for i := 0; i < 3; i++ {
-		outs := (*float32)(unsafe.Add(unsafe.Pointer(out), uintptr(i)*unsafe.Sizeof(float32(0))))
-		if uint32(index) >= namedColorList.nColors {
-			cmsSignalError(unsafe.Pointer(namedColorList.ContextID), cmsERROR_RANGE, "Color out of range")
-			*outs = 0.0
-		} else {
-			*outs = float32(list[index].PCS[i]) / 65535.0
-		}
+	if uint32(index) >= NamedColorList.nColors {
+        cmsSignalError(unsafe.Pointer(NamedColorList.ContextID), cmsERROR_RANGE,"Color %d out of range")
+        out[0] = 0.0
+		out[1] = 0.0
+		out[2] = 0.0
+    }else {
 
-	}
+            // Named color always uses Lab
+            out[0] = float32 (NamedColorList.List[index].PCS[0] / 65535.0);
+            out[1] = float32 (NamedColorList.List[index].PCS[1] / 65535.0);
+            out[2] = float32 (NamedColorList.List[index].PCS[2] / 65535.0);
+    }
 }
 
 // EvalNamedColor evaluates named color in device colorant space.
-func EvalNamedColor(in *float32, out *float32, mpe *cmsStage) {
+func EvalNamedColor(in []float32, out []float32, mpe *cmsStage) {
 	namedColorList := (*cmsNAMEDCOLORLIST)(mpe.Data)
-	index := uint16(cmsQuickSaturateWord(float64(*in) * 65535.0))
+	index := uint16(cmsQuickSaturateWord(float64(in[0]) * 65535.0))
 
 	if uint32(index) >= namedColorList.nColors {
 		cmsSignalError(unsafe.Pointer(namedColorList.ContextID), cmsERROR_RANGE, "Color out of range")
 
 		// Zero-out the output for all colorants.
 		for j := uint32(0); j < namedColorList.ColorantCount; j++ {
-			outs := (*float32)(unsafe.Add(unsafe.Pointer(out), uintptr(j)*unsafe.Sizeof(float32(0))))
-			*outs = 0.0
+			out[j] = 0.0
 		}
-		return
-	}
-
-	// Interpret the `List` pointer as a slice of cmsNAMEDCOLOR.
-	list := unsafe.Slice(namedColorList.List, namedColorList.nColors)
-
-	// Access DeviceColorant values for the selected color.
-	for j := uint32(0); j < namedColorList.ColorantCount; j++ {
-		outs := (*float32)(unsafe.Add(unsafe.Pointer(out), uintptr(j)*unsafe.Sizeof(float32(0))))
-		*outs = float32(list[index].DeviceColorant[j]) / 65535.0
+	}else{
+		// Access DeviceColorant values for the selected color.
+		for j := uint32(0); j < namedColorList.ColorantCount; j++ {
+			out[j] = float32 (namedColorList.List[index].DeviceColorant[j] / 65535.0)
+		}
 	}
 }
 
@@ -664,7 +654,7 @@ func cmsAppendNamedColor(namedColorList *cmsNAMEDCOLORLIST, name string, PCS *[3
 	index := namedColorList.nColors
 
 	// Access the list element
-	entry := (*cmsNAMEDCOLOR)(unsafe.Add(unsafe.Pointer(namedColorList.List), uintptr(index)*unsafe.Sizeof(cmsNAMEDCOLOR{})))
+	entry := namedColorList.List[index]
 
 	// Copy Colorant data
 	for i := uint32(0); i < namedColorList.ColorantCount; i++ {
@@ -704,52 +694,41 @@ func cmsNamedColorCount(namedColorList *cmsNAMEDCOLORLIST) uint32 {
 	return namedColorList.nColors
 }
 
-func cmsNamedColorInfo(namedColorList *cmsNAMEDCOLORLIST, nColor uint32, name, prefix, suffix *byte, pcs, colorant *uint16) bool {
-	if namedColorList == nil {
-		return false
-	}
-
+func cmsNamedColorInfo(namedColorList cmsNAMEDCOLORLIST, nColor uint32, name, prefix, suffix []byte, pcs, colorant []uint16) bool {
 	if nColor >= cmsNamedColorCount(namedColorList) {
 		return false
 	}
-	// Access the specific color entry using pointer arithmetic
-	colorEntry := (*cmsNAMEDCOLOR)(unsafe.Add(unsafe.Pointer(namedColorList.List), uintptr(nColor)*unsafe.Sizeof(cmsNAMEDCOLOR{})))
+
+	// Access the specific color entry
+	colorEntry := namedColorList.List[nColor]
 
 	// Copy Name
-	if name != nil {
-		src := unsafe.Slice((*byte)(unsafe.Pointer(&colorEntry.Name[0])), cmsMAX_PATH)
-		dest := unsafe.Slice(name, cmsMAX_PATH)
-		copy(dest, src)
+	if len(name) >= cmsMAX_PATH {
+		copy(name, colorEntry.Name[:cmsMAX_PATH])
 	}
 
 	// Copy Prefix and Suffix
-	if prefix != nil {
-		src := unsafe.Slice((*byte)(unsafe.Pointer(&namedColorList.Prefix[0])), cmsMAX_PATH)
-		dest := unsafe.Slice(prefix, cmsMAX_PATH)
-		copy(dest, src)
+	if len(prefix) >= cmsMAX_PATH {
+		copy(prefix, namedColorList.Prefix[:cmsMAX_PATH])
 	}
 
-	if suffix != nil {
-		src := unsafe.Slice((*byte)(unsafe.Pointer(&namedColorList.Suffix[0])), cmsMAX_PATH)
-		dest := unsafe.Slice(suffix, cmsMAX_PATH)
-		copy(dest, src)
+	if len(suffix) >= cmsMAX_PATH {
+		copy(suffix, namedColorList.Suffix[:cmsMAX_PATH])
 	}
 
 	// Copy PCS
-	if pcs != nil {
-		src := unsafe.Slice((*uint16)(unsafe.Pointer(&colorEntry.PCS[0])), 3)
-		dest := unsafe.Slice(pcs, 3)
-		copy(dest, src)
+	if len(pcs) >= 3 {
+		copy(pcs, colorEntry.PCS[:3])
 	}
 
 	// Copy Colorant
-	if colorant != nil {
-		src := unsafe.Slice((*uint16)(unsafe.Pointer(&colorEntry.DeviceColorant[0])), namedColorList.ColorantCount)
-		dest := unsafe.Slice(colorant, namedColorList.ColorantCount)
-		copy(dest, src)
+	if len(colorant) >= int(namedColorList.ColorantCount) {
+		copy(colorant, colorEntry.DeviceColorant[:namedColorList.ColorantCount])
 	}
+
 	return true
 }
+
 
 func cmsNamedColorIndex(namedColorList *cmsNAMEDCOLORLIST, name *byte) int32 {
 	if namedColorList == nil {
@@ -782,7 +761,7 @@ func cmsAllocProfileSequenceDescription(ContextID CmsContext, n uint32) *cmsSEQ 
 	}
 
 	seq.ContextID = ContextID
-	seq.seq = (*cmsPSEQDESC)(cmsCalloc(ContextID, n, uint32(unsafe.Sizeof(cmsPSEQDESC{}))))
+	seq.seq = make([]cmsPSEQDESC,n)
 	seq.n = n
 
 	if seq.seq == nil {
@@ -792,7 +771,7 @@ func cmsAllocProfileSequenceDescription(ContextID CmsContext, n uint32) *cmsSEQ 
 
 	// Initialize each entry in the sequence
 	for i := uint32(0); i < n; i++ {
-		entry := (*cmsPSEQDESC)(unsafe.Add(unsafe.Pointer(seq.seq), uintptr(i)*unsafe.Sizeof(cmsPSEQDESC{})))
+		entry := seq.seq[i]
 		entry.Manufacturer = nil
 		entry.Model = nil
 		entry.Description = nil
@@ -808,7 +787,7 @@ func cmsFreeProfileSequenceDescription(pseq *cmsSEQ) {
 	}
 
 	for i := uint32(0); i < pseq.n; i++ {
-		entry := (*cmsPSEQDESC)(unsafe.Add(unsafe.Pointer(pseq.seq), uintptr(i)*unsafe.Sizeof(cmsPSEQDESC{})))
+		entry := pseq.seq[i]
 
 		if entry.Manufacturer != nil {
 			cmsMLUfree(entry.Manufacturer)
@@ -821,9 +800,6 @@ func cmsFreeProfileSequenceDescription(pseq *cmsSEQ) {
 		}
 	}
 
-	if pseq.seq != nil {
-		cmsFree(pseq.ContextID, unsafe.Pointer(pseq.seq))
-	}
 	cmsFree(pseq.ContextID, unsafe.Pointer(pseq))
 }
 
@@ -838,7 +814,7 @@ func cmsDupProfileSequenceDescription(pseq *cmsSEQ) *cmsSEQ {
 		return nil
 	}
 
-	newSeq.seq = (*cmsPSEQDESC)(cmsCalloc(pseq.ContextID, pseq.n, uint32(unsafe.Sizeof(cmsPSEQDESC{}))))
+	newSeq.seq = make([]cmsPSEQDESC,pseq.n)
 	if newSeq.seq == nil {
 		cmsFreeProfileSequenceDescription(newSeq)
 		return nil
@@ -848,8 +824,8 @@ func cmsDupProfileSequenceDescription(pseq *cmsSEQ) *cmsSEQ {
 	newSeq.n = pseq.n
 
 	for i := uint32(0); i < pseq.n; i++ {
-		srcEntry := (*cmsPSEQDESC)(unsafe.Add(unsafe.Pointer(pseq.seq), uintptr(i)*unsafe.Sizeof(cmsPSEQDESC{})))
-		dstEntry := (*cmsPSEQDESC)(unsafe.Add(unsafe.Pointer(newSeq.seq), uintptr(i)*unsafe.Sizeof(cmsPSEQDESC{})))
+		srcEntry := pseq.seq[i]
+		dstEntry := newSeq.seq[i]
 
 		// Copy basic fields
 		dstEntry.deviceMfg = srcEntry.deviceMfg
@@ -910,7 +886,7 @@ func DupWcs(contextID CmsContext, ptr *uint16) *uint16 {
 	}
 
 	length := mywcslen(ptr) + 1
-	duplicate := (*uint16)(cmsDupMem(contextID, unsafe.Pointer(ptr), uint32(length)*uint32(unsafe.Sizeof(uint16(0)))))
+	duplicate := (*uint16)(cms(contextID, unsafe.Pointer(ptr), uint32(length)*uint32(unsafe.Sizeof(uint16(0)))))
 	return duplicate
 }
 

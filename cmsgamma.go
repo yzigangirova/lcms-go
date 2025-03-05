@@ -5,10 +5,6 @@ import (
 	"unsafe"
 )
 
-/*
-firstSegment := (*cmsCurveSegment)(unsafe.Pointer(curve.Segments))
-segmentPtr := (*cmsCurveSegment)(unsafe.Addunsafe.Pointer(curve.Segments), uintptr(index) * unsafe.Sizeof(cmsCurveSegment{})))
-*/
 // ----------------------------------------------------------------- Implementation
 // Maxim number of nodes
 const (
@@ -36,7 +32,7 @@ var DefaultCurves = cmsParametricCurvesCollection{
 }
 
 // The linked list head
-var cmsCurvesPluginChunk = cmsCurvesPluginChunkType{ ParametricCurves: nil }
+var cmsCurvesPluginChunk = cmsCurvesPluginChunkType{ParametricCurves: nil}
 
 func cmsRegisterParametricCurvesPlugin(ContextID CmsContext, Data *cmsPluginBase) bool {
 	ctx := (*cmsCurvesPluginChunkType)(CmsContextGetClientChunk(ContextID, CurvesPlugin))
@@ -55,7 +51,7 @@ func cmsRegisterParametricCurvesPlugin(ContextID CmsContext, Data *cmsPluginBase
 		return false
 	}
 
-	// Copy the parameters.
+	// Copy the parameters.[]
 	fl.Evaluator = Plugin.Evaluator
 	fl.NFunctions = Plugin.NFunctions
 
@@ -65,16 +61,8 @@ func cmsRegisterParametricCurvesPlugin(ContextID CmsContext, Data *cmsPluginBase
 	}
 
 	// Copy function types and parameter counts.
-	memmove(
-		unsafe.Pointer(&fl.FunctionTypes[0]),
-		unsafe.Pointer(&Plugin.FunctionTypes[0]),
-		uintptr(fl.NFunctions)*unsafe.Sizeof(fl.FunctionTypes[0]),
-	)
-	memmove(
-		unsafe.Pointer(&fl.ParameterCount[0]),
-		unsafe.Pointer(&Plugin.ParameterCount[0]),
-		uintptr(fl.NFunctions)*unsafe.Sizeof(fl.ParameterCount[0]),
-	)
+	memmove(unsafe.Pointer(&fl.FunctionTypes[0]), unsafe.Pointer(&Plugin.FunctionTypes[0]), uintptr(fl.NFunctions))
+	memmove(unsafe.Pointer(&fl.ParameterCount[0]), unsafe.Pointer(&Plugin.ParameterCount[0]), uintptr(fl.NFunctions))
 
 	// Update the linked list.
 	fl.Next = ctx.ParametricCurves
@@ -146,8 +134,8 @@ func AllocateToneCurveStruct(
 	ContextID CmsContext,
 	nEntries uint32,
 	nSegments uint32,
-	Segments *cmsCurveSegment,
-	Values *uint16,
+	Segments []cmsCurveSegment,
+	Values []uint16,
 ) *CmsToneCurve {
 	if nEntries > 65530 {
 		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Couldn't create tone curve of more than 65530 entries")
@@ -159,18 +147,15 @@ func AllocateToneCurveStruct(
 		return nil
 	}
 
-	p := (*CmsToneCurve)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(CmsToneCurve{}))))
-	if p == nil {
-		return nil
+	// Allocate tone curve structure
+	p := &CmsToneCurve{
+		nSegments: nSegments,
+		nEntries:  nEntries,
 	}
 
+	// Allocate segments and evaluators if needed
 	if nSegments > 0 {
-		p.Segments = (*cmsCurveSegment)(cmsCalloc(ContextID, nSegments, uint32(unsafe.Sizeof(cmsCurveSegment{}))))
-		if p.Segments == nil {
-			goto Error
-		}
-		//evals are slice of function, so that I can allocate space (I can not evaluate
-		//a size of function with sizeof like in C)
+		p.Segments = make([]cmsCurveSegment, nSegments)
 		p.Evals = allocateEvals(ContextID, nSegments)
 		if p.Evals == nil {
 			goto Error
@@ -180,57 +165,39 @@ func AllocateToneCurveStruct(
 		p.Evals = nil
 	}
 
-	p.nSegments = nSegments
-
+	// Allocate Table16 if needed
 	if nEntries > 0 {
-		p.Table16 = (*uint16)(cmsCalloc(ContextID, nEntries, uint32(unsafe.Sizeof(uint16(0)))))
-		if p.Table16 == nil {
-			goto Error
-		}
+		p.Table16 = make([]uint16, nEntries)
 	} else {
 		p.Table16 = nil
 	}
 
-	p.nEntries = nEntries
-
+	// Copy values to Table16 if provided
 	if Values != nil && nEntries > 0 {
-		for i := uint32(0); i < nEntries; i++ {
-			*(*uint16)(unsafe.Add(unsafe.Pointer(p.Table16), uintptr(i)*unsafe.Sizeof(uint16(0)))) =
-				*(*uint16)(unsafe.Add(unsafe.Pointer(Values), uintptr(i)*unsafe.Sizeof(uint16(0))))
-		}
+		copy(p.Table16, Values[:nEntries])
 	}
 
+	// Process segments if available
 	if Segments != nil && nSegments > 0 {
-		p.SegInterp = (**cmsInterpParams)(cmsCalloc(ContextID, nSegments, uint32(unsafe.Sizeof((*cmsInterpParams)(nil)))))
-		if p.SegInterp == nil {
-			goto Error
-		}
+		p.SegInterp = make([]*cmsInterpParams, nSegments)
 
 		for i := uint32(0); i < nSegments; i++ {
-			currentSegment := (*cmsCurveSegment)(unsafe.Add(unsafe.Pointer(Segments), uintptr(i)*unsafe.Sizeof(cmsCurveSegment{})))
-			//elementPtr := (**cmsInterpParams)(unsafe.Add(unsafe.Pointer(p.SegInterp), uintptr(i)*unsafe.Sizeof((*cmsInterpParams)(nil))))
-			elementPtr := (*[1 << 30]*cmsInterpParams)(unsafe.Pointer(p.SegInterp)) // Cast to a large enough array
-	
+			currentSegment := Segments[i]
+
 			if currentSegment.Type == 0 {
-				// Calculate the pointer to the i-th element in the array
-				// Assign the computed value to the i-th element *elementPtr == p.SegInterp[i]
-				elementPtr[i] = cmsComputeInterpParams(ContextID, currentSegment.NGridPoints, 1, 1, nil, CMS_LERP_FLAGS_FLOAT)
-
+				p.SegInterp[i] = cmsComputeInterpParams(ContextID, currentSegment.NGridPoints, 1, 1, nil, CMS_LERP_FLAGS_FLOAT)
 			}
 
-			memmove(
-				unsafe.Add(unsafe.Pointer(p.Segments), uintptr(i)*unsafe.Sizeof(cmsCurveSegment{})),
-				unsafe.Pointer(currentSegment),
-				unsafe.Sizeof(cmsCurveSegment{}),
-			)
+			p.Segments[i] = currentSegment // Copy segment data
 
+			// Copy sampled points if necessary
 			if currentSegment.Type == 0 && currentSegment.SampledPoints != nil {
-				segmentPointsSize := uint32(unsafe.Sizeof(float32(0))) * currentSegment.NGridPoints
-				(*currentSegment).SampledPoints = (*float32)(cmsDupMem(ContextID, unsafe.Pointer(currentSegment.SampledPoints), segmentPointsSize))
+				p.Segments[i].SampledPoints = append([]float32(nil), currentSegment.SampledPoints...)
 			} else {
-				(*currentSegment).SampledPoints = nil
+				p.Segments[i].SampledPoints = nil
 			}
 
+			// Get parametric curve evaluator
 			c := GetParametricCurveByType(ContextID, int(currentSegment.Type), nil)
 			if c != nil {
 				p.Evals[i] = c.Evaluator
@@ -238,31 +205,23 @@ func AllocateToneCurveStruct(
 		}
 	}
 
-	p.InterpParams = cmsComputeInterpParams(ContextID, p.nEntries, 1, 1, unsafe.Pointer(p.Table16), CMS_LERP_FLAGS_16BITS)
+	// Compute interpolation parameters
+	p.InterpParams = cmsComputeInterpParams(ContextID, p.nEntries, 1, 1, p.Table16, CMS_LERP_FLAGS_16BITS)
 	if p.InterpParams != nil {
 		return p
 	}
 
 Error:
-	if p.SegInterp != nil {
-		cmsFree(ContextID, unsafe.Pointer(p.SegInterp))
-	}
-	if p.Segments != nil {
-		cmsFree(ContextID, unsafe.Pointer(p.Segments))
-	}
-	/*if p.Evals != nil {
-		cmsFree(ContextID, unsafe.Pointer(p.Evals))
-	}*/ //Evals are slices, are freed by Garbage collector
-	if p.Table16 != nil {
-		cmsFree(ContextID, unsafe.Pointer(p.Table16))
-	}
-	cmsFree(ContextID, unsafe.Pointer(p))
+	// Free allocated memory in case of error
+	p.SegInterp = nil
+	p.Segments = nil
+	p.Table16 = nil
 	return nil
 }
 
 // Build a gamma table based on gamma constant
 func CmsBuildGamma(ContextID CmsContext, Gamma float64) *CmsToneCurve {
-	return cmsBuildParametricToneCurve(ContextID, 1, &Gamma)
+	return cmsBuildParametricToneCurve(ContextID, 1, []float64{Gamma})
 }
 
 // Free all memory taken by the gamma curve
@@ -272,30 +231,13 @@ func CmsFreeToneCurve(Curve *CmsToneCurve) {
 	}
 
 	ContextID := Curve.InterpParams.ContextID
-
 	cmsFreeInterpParams(Curve.InterpParams)
-
-	if Curve.Table16 != nil {
-		cmsFree(ContextID, unsafe.Pointer(Curve.Table16))
-	}
-
 	if Curve.Segments != nil {
 		for i := uint32(0); i < Curve.nSegments; i++ {
-			currentSegment := (*cmsCurveSegment)(unsafe.Add(unsafe.Pointer(Curve.Segments), uintptr(i)*unsafe.Sizeof(cmsCurveSegment{})))
-
-			if currentSegment.SampledPoints != nil {
-				cmsFree(ContextID, unsafe.Pointer(currentSegment.SampledPoints))
-			}
-
-			//targetPtr := (*cmsInterpParams)(unsafe.Add(unsafe.Pointer(Curve.SegInterp), uintptr(i)*unsafe.Sizeof((*cmsInterpParams)(nil))))
-			targetPtr := (*[1 << 30]*cmsInterpParams)(unsafe.Pointer(Curve.SegInterp)) // Cast to a large enough array
-			if targetPtr[i] != nil {
-				cmsFreeInterpParams(targetPtr[i])
+			if Curve.SegInterp[i] != nil {
+				cmsFreeInterpParams(Curve.SegInterp[i])
 			}
 		}
-
-		cmsFree(ContextID, unsafe.Pointer(Curve.Segments))
-		cmsFree(ContextID, unsafe.Pointer(Curve.SegInterp))
 	}
 
 	if Curve.Evals != nil {
@@ -344,7 +286,7 @@ func cmsJoinToneCurve(ContextID CmsContext, X, Y *CmsToneCurve, nResultingPoints
 	var (
 		out       *CmsToneCurve
 		Yreversed *CmsToneCurve
-		Res       *float32
+		Res       []float32
 	)
 
 	// Reverse the Y tone curve
@@ -354,28 +296,25 @@ func cmsJoinToneCurve(ContextID CmsContext, X, Y *CmsToneCurve, nResultingPoints
 	}
 
 	// Allocate result array
-    Res = (*float32) (cmsCalloc(ContextID, nResultingPoints, uint32(unsafe.Sizeof(float32(0)))))
-    if(Res == nil){
+	Res = make([]float32, nResultingPoints)
+	if Res == nil {
 		goto Error
 	}
 	// Iterate and compute
 	for i := uint32(0); i < nResultingPoints; i++ {
 		t := float32(i) / float32(nResultingPoints-1)
 		x := cmsEvalToneCurveFloat(X, t)
-		resptr := (*float32)(unsafe.Add(unsafe.Pointer(Res), uintptr(i)*unsafe.Sizeof(*Res)))
-		*resptr = cmsEvalToneCurveFloat(Yreversed, x)
+		Res[i] = cmsEvalToneCurveFloat(Yreversed, x)
 	}
 
 	// Build the output tone curve
 	out = cmsBuildTabulatedToneCurveFloat(ContextID, nResultingPoints, Res)
 
 Error:
-if (Res != nil) {
-	cmsFree(ContextID, unsafe.Pointer(Res))
-}
-if (Yreversed != nil) {
-	CmsFreeToneCurve(Yreversed)
-}
+
+	if Yreversed != nil {
+		CmsFreeToneCurve(Yreversed)
+	}
 
 	return out
 }
@@ -383,11 +322,8 @@ func cmsIsToneCurveLinear(Curve *CmsToneCurve) bool {
 	cmsAssert(Curve != nil, "")
 
 	for i := 0; i < int(Curve.nEntries); i++ {
-		// Access the i-th element of Table16
-		tableValue := *(*uint16)(unsafe.Add(unsafe.Pointer(Curve.Table16), uintptr(i)*unsafe.Sizeof(uint16(0))))
-
 		// Compute the difference
-		diff := int(tableValue) - int(cmsQuantizeVal(float64(i), Curve.nEntries))
+		diff := int(Curve.Table16[i]) - int(cmsQuantizeVal(float64(i), Curve.nEntries))
 		if math.Abs(float64(diff)) > 0x0f {
 			return false
 		}
@@ -412,26 +348,22 @@ func cmsIsToneCurveMonotonic(t *CmsToneCurve) bool {
 	descending := cmsIsToneCurveDescending(t)
 
 	if descending {
-		last := *(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(t.Table16))))
-
+		last := t.Table16[0]
 		for i := 1; i < int(n); i++ {
-			current := *(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(t.Table16)) + uintptr(i)*unsafe.Sizeof(*t.Table16)))
-
-			if int(current)-int(last) > 2 { // Allow some ripple
+			if int(t.Table16[i])-int(last) > 2 { // Allow some ripple
 				return false
+			} else {
+				last = t.Table16[i]
 			}
-			last = current
 		}
 	} else {
-		last := *(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(t.Table16)) + uintptr(n-1)*unsafe.Sizeof(*t.Table16)))
+		last := t.Table16[n-1]
 
 		for i := int(n) - 2; i >= 0; i-- {
-			current := *(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(t.Table16)) + uintptr(i)*unsafe.Sizeof(*t.Table16)))
-
-			if int(current)-int(last) > 2 {
+			if int(t.Table16[i])-int(last) > 2 {
 				return false
 			}
-			last = current
+			last = t.Table16[i]
 		}
 	}
 
@@ -443,12 +375,7 @@ func cmsIsToneCurveDescending(t *CmsToneCurve) bool {
 	if t == nil {
 		panic("ToneCurve cannot be nil")
 	}
-
-	// Access the first and last elements of Table16 using pointer arithmetic
-	first := *(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(t.Table16))))
-	last := *(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(t.Table16)) + uintptr(t.nEntries-1)*unsafe.Sizeof(*t.Table16)))
-
-	return first > last
+	return t.Table16[0] > t.Table16[t.nEntries-1]
 }
 
 // cmsIsToneCurveMultisegment checks if a tone curve is multisegment.
@@ -471,11 +398,7 @@ func cmsGetToneCurveParametricType(t *CmsToneCurve) int32 {
 	if t.nSegments != 1 {
 		return 0
 	}
-
-	// Access the Type field of the first segment
-	firstSegmentType := *(*int32)(unsafe.Pointer(uintptr(unsafe.Pointer(t.Segments)) + unsafe.Offsetof(t.Segments.Type)))
-
-	return firstSegmentType
+	return t.Segments[0].Type
 }
 
 // cmsEvalToneCurveFloat evaluates a tone curve at a specific point (float input and output).
@@ -501,7 +424,7 @@ func cmsEvalToneCurve16(Curve *CmsToneCurve, v uint16) uint16 {
 
 	cmsAssert(Curve != nil, "curve is nil")
 
-	Curve.InterpParams.Interpolation.Lerp16(&v, &out, Curve.InterpParams)
+	Curve.InterpParams.Interpolation.Lerp16([]uint16{v}, []uint16{out}, Curve.InterpParams)
 	return out
 }
 
@@ -544,7 +467,7 @@ func cmsEstimateGamma(t *CmsToneCurve, Precision float64) float64 {
 	// Return the mean gamma value
 	return sum / n
 }
-func cmsGetToneCurveParams(t *CmsToneCurve) *float64 {
+func cmsGetToneCurveParams(t *CmsToneCurve) []float64 {
 	// Ensure the tone curve is not nil
 	if t == nil {
 		panic("CmsToneCurve is nil")
@@ -556,11 +479,11 @@ func cmsGetToneCurveParams(t *CmsToneCurve) *float64 {
 	}
 
 	// Access the first segment's parameters using unsafe.Pointer
-	return (*float64)(unsafe.Pointer(&(*cmsCurveSegment)(unsafe.Pointer(t.Segments)).Params))
+	return t.Segments[0].Params[:]
 }
 
 // cmsBuildTabulatedToneCurve16 creates an empty gamma curve using tables.
-func cmsBuildTabulatedToneCurve16(ContextID CmsContext, nEntries uint32, Values *uint16) *CmsToneCurve {
+func cmsBuildTabulatedToneCurve16(ContextID CmsContext, nEntries uint32, Values []uint16) *CmsToneCurve {
 	return AllocateToneCurveStruct(ContextID, nEntries, 0, nil, Values)
 }
 
@@ -573,15 +496,15 @@ func EntriesByGamma(Gamma float64) uint32 {
 }
 
 // cmsBuildSegmentedToneCurve creates a segmented gamma curve and fills the table.
-func cmsBuildSegmentedToneCurve(ContextID CmsContext, nSegments uint32, Segments *cmsCurveSegment) *CmsToneCurve {
+func cmsBuildSegmentedToneCurve(ContextID CmsContext, nSegments uint32, Segments []cmsCurveSegment) *CmsToneCurve {
 	if Segments == nil {
 		cmsAssert(Segments != nil, "Segments cannot be null")
 
 	}
 
 	nGridPoints := uint32(4096)
-	if nSegments == 1 && Segments.Type == 1 {
-		nGridPoints = EntriesByGamma(Segments.Params[0])
+	if nSegments == 1 && Segments[0].Type == 1 {
+		nGridPoints = EntriesByGamma(Segments[0].Params[0])
 	}
 
 	g := AllocateToneCurveStruct(ContextID, nGridPoints, nSegments, Segments, nil)
@@ -592,14 +515,15 @@ func cmsBuildSegmentedToneCurve(ContextID CmsContext, nSegments uint32, Segments
 	for i := uint32(0); i < nGridPoints; i++ {
 		R := float64(i) / float64(nGridPoints-1)
 		Val := EvalSegmentedFn(g, R)
-		*(*uint16)(unsafe.Add(unsafe.Pointer(g.Table16), uintptr(i)*unsafe.Sizeof(uint16(0)))) = cmsQuickSaturateWord(Val * 65535.0)
+		// Round and saturate
+		g.Table16[i] = cmsQuickSaturateWord(Val * 65535.0)
 	}
 
 	return g
 }
 
 // cmsBuildTabulatedToneCurveFloat uses a segmented curve to store the floating-point table.
-func cmsBuildTabulatedToneCurveFloat(ContextID CmsContext, nEntries uint32, values *float32) *CmsToneCurve {
+func cmsBuildTabulatedToneCurveFloat(ContextID CmsContext, nEntries uint32, values []float32) *CmsToneCurve {
 	var Seg [3]cmsCurveSegment
 
 	if nEntries == 0 || values == nil {
@@ -607,15 +531,15 @@ func cmsBuildTabulatedToneCurveFloat(ContextID CmsContext, nEntries uint32, valu
 	}
 
 	// Initialize segments
-	Seg[0] = cmsCurveSegment{X0: -math.MaxFloat32, X1: 0, Type: 6, Params: [10]float64{1, 0, 0, float64(*values), 0}}
+	Seg[0] = cmsCurveSegment{X0: -math.MaxFloat32, X1: 0, Type: 6, Params: [10]float64{1, 0, 0, float64(values[0]), 0}}
 	Seg[1] = cmsCurveSegment{X0: 0, X1: 1, Type: 0, NGridPoints: nEntries, SampledPoints: values}
-	Seg[2] = cmsCurveSegment{X0: 1, X1: math.MaxFloat32, Type: 6, Params: [10]float64{1, 0, 0, float64(*(*float32)(unsafe.Add(unsafe.Pointer(values), uintptr(nEntries-1)*unsafe.Sizeof(float32(0))))), 0}}
+	Seg[2] = cmsCurveSegment{X0: 1, X1: math.MaxFloat32, Type: 6, Params: [10]float64{1, 0, 0, float64(values[nEntries-1]), 0}}
 
-	return cmsBuildSegmentedToneCurve(ContextID, 3, &Seg[0])
+	return cmsBuildSegmentedToneCurve(ContextID, 3, Seg[:])
 }
 
 // cmsBuildParametricToneCurve builds a parametric tone curve.
-func cmsBuildParametricToneCurve(ContextID CmsContext, Type int, Params *float64) *CmsToneCurve {
+func cmsBuildParametricToneCurve(ContextID CmsContext, Type int, Params []float64) *CmsToneCurve {
 	var Seg0 cmsCurveSegment
 	var Pos int
 	c := GetParametricCurveByType(ContextID, Type, &Pos)
@@ -632,9 +556,9 @@ func cmsBuildParametricToneCurve(ContextID CmsContext, Type int, Params *float64
 	}
 
 	size := c.ParameterCount[Pos] * uint32(unsafe.Sizeof(float64(0)))
-	memmove(unsafe.Pointer(&Seg0.Params[0]), unsafe.Pointer(Params), uintptr(size))
+	MemmoveSlice(Seg0.Params[:], Params, int(size))
 
-	return cmsBuildSegmentedToneCurve(ContextID, 1, &Seg0)
+	return cmsBuildSegmentedToneCurve(ContextID, 1, []cmsCurveSegment{Seg0})
 }
 
 // DefaultEvalParametricFn evaluates a parametric curve using floating point.
@@ -844,32 +768,24 @@ func EvalSegmentedFn(g *CmsToneCurve, R float64) float64 {
 	var Out float64
 	var Out32 float32
 
-	segmentSize := unsafe.Sizeof(cmsCurveSegment{})
-	//segInterpSize := unsafe.Sizeof((*cmsInterpParams)(nil))
-
 	for i := int(g.nSegments) - 1; i >= 0; i-- {
-		// Access the current segment
-		currentSegment := (*cmsCurveSegment)(unsafe.Add(unsafe.Pointer(g.Segments), uintptr(i)*segmentSize))
 
 		// Check for domain
-		if R > float64(currentSegment.X0) && R <= float64(currentSegment.X1) {
-			if currentSegment.Type == 0 {
+		if R > float64(g.Segments[i].X0) && R <= float64(g.Segments[i].X1) {
+			if g.Segments[i].Type == 0 {
 				// Type == 0 means segment is sampled
-				R1 := float32((R - float64(currentSegment.X0)) / float64(currentSegment.X1-currentSegment.X0))
+				R1 := float32((R - float64(g.Segments[i].X0)) / float64(g.Segments[i].X1-g.Segments[i].X0))
 
-				// Access the current SegInterp
-				//currentSegInterp := (**cmsInterpParams)(unsafe.Add(unsafe.Pointer(g.SegInterp), uintptr(i)*segInterpSize))
-				currentSegInterp := (*[1 << 30]*cmsInterpParams)(unsafe.Pointer(g.SegInterp)) // Cast to a large enough array
+				// Setup the table (TODO: clean that)
+				for j := 0; j < len(g.SegInterp[i].Table); j++ {
+					g.SegInterp[i].Table[j] = uint16(g.Segments[i].SampledPoints[j])
+				}
 
-				// Setup the table
-				(currentSegInterp[i]).Table = unsafe.Pointer(currentSegment.SampledPoints)
-
-				// Perform interpolation
-				(currentSegInterp[i]).Interpolation.LerpFloat(&R1, &Out32, currentSegInterp[i])
+				g.SegInterp[i].Interpolation.LerpFloat([]float32{R1}, []float32{Out32}, g.SegInterp[i])
 				Out = float64(Out32)
 			} else {
 				// Evaluate the function for the segment
-				Out = g.Evals[i](currentSegment.Type, currentSegment.Params[:], R)
+				Out = g.Evals[i](g.Segments[i].Type, g.Segments[i].Params[:], R)
 			}
 
 			// Check for infinity
@@ -882,7 +798,6 @@ func EvalSegmentedFn(g *CmsToneCurve, R float64) float64 {
 			return Out
 		}
 	}
-
 	return math.Inf(-1) // MINUS_INF
 }
 func cmsReverseToneCurveEx(nResultSamples uint32, inCurve *CmsToneCurve) *CmsToneCurve {
@@ -896,16 +811,12 @@ func cmsReverseToneCurveEx(nResultSamples uint32, inCurve *CmsToneCurve) *CmsTon
 	}
 
 	// Try to reverse it analytically if possible
-	if inCurve.nSegments == 1 &&
-		*(*uint32)(unsafe.Pointer(&inCurve.Segments.Type)) > 0 &&
-		GetParametricCurveByType(inCurve.InterpParams.ContextID,
-			int(*(*uint32)(unsafe.Pointer(&inCurve.Segments.Type))),
-			nil) != nil {
-		return cmsBuildParametricToneCurve(
-			inCurve.InterpParams.ContextID,
-			-int(*(*uint32)(unsafe.Pointer(&inCurve.Segments.Type))),
-			(*float64)(unsafe.Pointer(&inCurve.Segments.Params)),
-		)
+	if inCurve.nSegments == 1 && inCurve.Segments[0].Type > 0 &&
+		GetParametricCurveByType(inCurve.InterpParams.ContextID, int(inCurve.Segments[0].Type), nil) != nil {
+
+		return cmsBuildParametricToneCurve(inCurve.InterpParams.ContextID,
+			-int(inCurve.Segments[0].Type),
+			inCurve.Segments[0].Params[:])
 	}
 
 	// Create a new tone curve for the reversed result
@@ -921,32 +832,35 @@ func cmsReverseToneCurveEx(nResultSamples uint32, inCurve *CmsToneCurve) *CmsTon
 	for i = 0; i < int(nResultSamples); i++ {
 		y = float64(i) * 65535.0 / float64(nResultSamples-1)
 
-		// Find the interval where y is within
-		j = GetInterval(y, (*uint16)(unsafe.Pointer(inCurve.Table16)), inCurve.InterpParams)
+		// Find interval in which y is within.
+		j = GetInterval(y, inCurve.Table16, inCurve.InterpParams)
 		if j >= 0 {
-			// Get limits of the interval
-			x1 = float64(*(*uint16)(unsafe.Add(unsafe.Pointer(inCurve.Table16), uintptr(j)*unsafe.Sizeof(uint16(0)))))
-			x2 = float64(*(*uint16)(unsafe.Add(unsafe.Pointer(inCurve.Table16), uintptr(j+1)*unsafe.Sizeof(uint16(0)))))
 
-			y1 = float64(j) * 65535.0 / float64(inCurve.nEntries-1)
-			y2 = float64(j+1) * 65535.0 / float64(inCurve.nEntries-1)
+			// Get limits of interval
+			x1 = float64(inCurve.Table16[j])
+			x2 = float64(inCurve.Table16[j+1])
 
-			// If the interval is collapsed, use any value
+			y1 = float64((j * 65535.0) / (int(inCurve.nEntries) - 1))
+			y2 = float64(((j + 1) * 65535.0) / (int(inCurve.nEntries) - 1))
+
+			// If collapsed, then use any
 			if x1 == x2 {
 				if ascending {
-					*(*uint16)(unsafe.Add(unsafe.Pointer(out.Table16), uintptr(i)*unsafe.Sizeof(uint16(0)))) = cmsQuickSaturateWord(y2)
+					out.Table16[i] = cmsQuickSaturateWord(y2)
 				} else {
-					*(*uint16)(unsafe.Add(unsafe.Pointer(out.Table16), uintptr(i)*unsafe.Sizeof(uint16(0)))) = cmsQuickSaturateWord(y1)
+					out.Table16[i] = cmsQuickSaturateWord(y1)
 				}
 				continue
-			}
 
-			// Perform interpolation
-			a = (y2 - y1) / (x2 - x1)
-			b = y2 - a*x2
+			} else {
+
+				// Interpolate
+				a = (y2 - y1) / (x2 - x1)
+				b = y2 - a*x2
+			}
 		}
 
-		*(*uint16)(unsafe.Add(unsafe.Pointer(out.Table16), uintptr(i)*unsafe.Sizeof(uint16(0)))) = cmsQuickSaturateWord(a*y + b)
+		out.Table16[i] = cmsQuickSaturateWord(a*y + b)
 	}
 
 	return out
@@ -961,46 +875,52 @@ func cmsReverseToneCurve(inGamma *CmsToneCurve) *CmsToneCurve {
 	// Reverse using 4096 result samples
 	return cmsReverseToneCurveEx(4096, inGamma)
 }
-func GetInterval(In float64, LutTable *uint16, p *cmsInterpParams) int {
+func GetInterval(In float64, LutTable []uint16, p *cmsInterpParams) int {
 	// A 1-point table is not allowed
 	if p.Domain[0] < 1 {
 		return -1
 	}
+	var y0, y1 int
+	// Let's see if ascending or descending.
+	if LutTable[0] < LutTable[p.Domain[0]] {
 
-	// Determine if the table is overall ascending or descending
-	if *(*uint16)(unsafe.Add(unsafe.Pointer(LutTable), 0)) < *(*uint16)(unsafe.Add(unsafe.Pointer(LutTable), uintptr(p.Domain[0])*unsafe.Sizeof(uint16(0)))) {
 		// Table is overall ascending
 		for i := int(p.Domain[0]) - 1; i >= 0; i-- {
-			y0 := *(*uint16)(unsafe.Add(unsafe.Pointer(LutTable), uintptr(i)*unsafe.Sizeof(uint16(0))))
-			y1 := *(*uint16)(unsafe.Add(unsafe.Pointer(LutTable), uintptr(i+1)*unsafe.Sizeof(uint16(0))))
+
+			y0 = int(LutTable[i])
+			y1 = int(LutTable[i+1])
 
 			if y0 <= y1 { // Increasing
 				if In >= float64(y0) && In <= float64(y1) {
 					return i
 				}
-			} else if y1 < y0 { // Decreasing
-				if In >= float64(y1) && In <= float64(y0) {
-					return i
+			} else {
+				if y1 < y0 { // Decreasing
+					if In >= float64(y1) && In <= float64(y0) {
+						return i
+					}
 				}
 			}
 		}
 	} else {
 		// Table is overall descending
 		for i := 0; i < int(p.Domain[0]); i++ {
-			y0 := *(*uint16)(unsafe.Add(unsafe.Pointer(LutTable), uintptr(i)*unsafe.Sizeof(uint16(0))))
-			y1 := *(*uint16)(unsafe.Add(unsafe.Pointer(LutTable), uintptr(i+1)*unsafe.Sizeof(uint16(0))))
+
+			y0 = int(LutTable[i])
+			y1 = int(LutTable[i+1])
 
 			if y0 <= y1 { // Increasing
 				if In >= float64(y0) && In <= float64(y1) {
 					return i
 				}
-			} else if y1 < y0 { // Decreasing
-				if In >= float64(y1) && In <= float64(y0) {
-					return i
+			} else {
+				if y1 < y0 { // Decreasing
+					if In >= float64(y1) && In <= float64(y0) {
+						return i
+					}
 				}
 			}
 		}
 	}
-
 	return -1
 }

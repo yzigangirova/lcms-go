@@ -19,6 +19,7 @@ import (
 	"unsafe"
 )
 
+type wchar uint16
 type cmsTagTypeHandler struct {
 	Signature  cmsTagTypeSignature
 	ReadFn     func(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) unsafe.Pointer
@@ -35,20 +36,47 @@ type cmsTagTypeLinkedList struct {
 	Next    *cmsTagTypeLinkedList
 }
 
-func cmsWriteWCharArray(io *cmsIOHANDLER, n uint32, Array *uint16) bool {
+func cmsWriteWCharArray(io *cmsIOHANDLER, n uint32, Array []wchar) bool {
 	// Assert conditions
 	if io == nil || (Array == nil && n > 0) {
 		return false
 	}
 
 	for i := uint32(0); i < n; i++ {
-		// Calculate the current element's address using pointer arithmetic
-		currentElement := *(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(Array)) + uintptr(i)*unsafe.Sizeof(*Array)))
-		if !cmsWriteUInt16Number(io, currentElement) {
+		if !cmsWriteUInt16Number(io, uint16(Array[i])) {
 			return false
 		}
 	}
 
+	return true
+}
+func cmsReadWCharArray(io *cmsIOHANDLER, n uint32, array []wchar) bool {
+	if io == nil {
+		return false // Equivalent to _cmsAssert(io != NULL)
+	}
+
+	//is32 := unsafe.Sizeof(rune(0)) > unsafe.Sizeof(uint16(0))
+
+	// If we need UTF-32, delegate to a conversion function
+	//THIS IS NOT MADE YET,uint16 for now
+	/*if is32 && array != nil {
+	    return convertUTF16ToUTF32(io, n, array)
+	}*/
+
+	var tmp uint16
+
+	for i := uint32(0); i < n; i++ {
+		if array != nil {
+			if !cmsReadUInt16Number(io, &tmp) {
+				return false
+			}
+			array[i] = wchar(tmp) // Convert uint16 to rune (wchar_t)
+		} else {
+			if !cmsReadUInt16Number(io, nil) {
+				return false
+			}
+		}
+	}
 	return true
 }
 
@@ -92,27 +120,20 @@ type PositionTableEntryFn func(self *cmsTagTypeHandler, io *cmsIOHANDLER, Cargo 
 func ReadPositionTable(self *cmsTagTypeHandler, io *cmsIOHANDLER, count, baseOffset uint32, cargo unsafe.Pointer, elementFn PositionTableEntryFn) bool {
 	var currentPosition uint32
 	currentPosition = uint32(io.Tell((*cms_io_handler)(io)))
-	var elementSizes []uint32
+	var elementOffsets, elementSizes []uint32
 	// Verify there is enough space left to read at least two uint32 items for count items
 	if ((io.ReportedSize - currentPosition) / (2 * uint32(unsafe.Sizeof(uint32(0))))) < count {
 		return false
 	}
 
 	// Allocate memory for offsets and sizes
-	elementOffsets := (*[1 << 30]uint32)(cmsCalloc(io.ContextID, count, uint32(unsafe.Sizeof(uint32(0)))))[:count:count]
-	if elementOffsets == nil {
-		goto Error
-	}
-
-	elementSizes = (*[1 << 30]uint32)(cmsCalloc(io.ContextID, count, uint32(unsafe.Sizeof(uint32(0)))))[:count:count]
-	if elementSizes == nil {
-		goto Error
-	}
+	elementOffsets = make([]uint32, count)
+	elementSizes = make([]uint32, count)
 
 	// Read the offsets and sizes
 	for i := uint32(0); i < count; i++ {
 		if !cmsReadUInt32Number(io, &elementOffsets[i]) || !cmsReadUInt32Number(io, &elementSizes[i]) {
-			goto Error
+			return false
 		}
 		elementOffsets[i] += baseOffset
 	}
@@ -120,40 +141,24 @@ func ReadPositionTable(self *cmsTagTypeHandler, io *cmsIOHANDLER, count, baseOff
 	// Seek to each element and read it
 	for i := uint32(0); i < count; i++ {
 		if !io.Seek((*cms_io_handler)(io), uint32(elementOffsets[i])) {
-			goto Error
+			return false
 		}
 		// Call the reader callback
 		if !elementFn(self, io, cargo, i, elementSizes[i]) {
-			goto Error
+			return false
 		}
 	}
-
-	// Success
-	cmsFree(io.ContextID, unsafe.Pointer(&elementOffsets[0]))
-	cmsFree(io.ContextID, unsafe.Pointer(&elementSizes[0]))
 	return true
-
-Error:
-	cmsFree(io.ContextID, unsafe.Pointer(&elementOffsets[0]))
-	cmsFree(io.ContextID, unsafe.Pointer(&elementSizes[0]))
-	return false
 }
 
 func WritePositionTable(self *cmsTagTypeHandler, io *cmsIOHANDLER, sizeOfTag, count, baseOffset uint32, cargo unsafe.Pointer, elementFn PositionTableEntryFn) bool {
 	// Allocate memory for offsets and sizes
 	var currentPos uint32
 	var directoryPos uint32
-	var elementSizes []uint32
 
-	elementOffsets := (*[1 << 30]uint32)(cmsCalloc(io.ContextID, count, uint32(unsafe.Sizeof(uint32(0)))))[:count:count]
-	if elementOffsets == nil {
-		goto Error
-	}
-
-	elementSizes = (*[1 << 30]uint32)(cmsCalloc(io.ContextID, count, uint32(unsafe.Sizeof(uint32(0)))))[:count:count]
-	if elementSizes == nil {
-		goto Error
-	}
+	// Allocate memory for offsets and sizes
+	elementOffsets := make([]uint32, count)
+	elementSizes := make([]uint32, count)
 
 	// Keep starting position of curve offsets
 	directoryPos = uint32(io.Tell((*cms_io_handler)(io)))
@@ -161,7 +166,7 @@ func WritePositionTable(self *cmsTagTypeHandler, io *cmsIOHANDLER, sizeOfTag, co
 	// Write a fake directory to be filled later
 	for i := uint32(0); i < count; i++ {
 		if !cmsWriteUInt32Number(io, 0) || !cmsWriteUInt32Number(io, 0) {
-			goto Error
+			return false
 		}
 	}
 
@@ -172,7 +177,7 @@ func WritePositionTable(self *cmsTagTypeHandler, io *cmsIOHANDLER, sizeOfTag, co
 
 		// Callback to write
 		if !elementFn(self, io, cargo, i, sizeOfTag) {
-			goto Error
+			return false
 		}
 
 		// Calculate the size
@@ -182,28 +187,20 @@ func WritePositionTable(self *cmsTagTypeHandler, io *cmsIOHANDLER, sizeOfTag, co
 	// Write the directory
 	currentPos = uint32(io.Tell((*cms_io_handler)(io)))
 	if !io.Seek((*cms_io_handler)(io), directoryPos) {
-		goto Error
+		return false
 	}
 
 	for i := uint32(0); i < count; i++ {
 		if !cmsWriteUInt32Number(io, elementOffsets[i]) || !cmsWriteUInt32Number(io, elementSizes[i]) {
-			goto Error
+			return false
 		}
 	}
 
 	if !io.Seek((*cms_io_handler)(io), currentPos) {
-		goto Error
+		return false
 	}
-
-	// Success
-	cmsFree(io.ContextID, unsafe.Pointer(&elementOffsets[0]))
-	cmsFree(io.ContextID, unsafe.Pointer(&elementSizes[0]))
 	return true
 
-Error:
-	cmsFree(io.ContextID, unsafe.Pointer(&elementOffsets[0]))
-	cmsFree(io.ContextID, unsafe.Pointer(&elementSizes[0]))
-	return false
 }
 
 // Type_XYZ_Read reads XYZ color space data.
@@ -277,10 +274,6 @@ func DecideLUTtypeB2A(ICCVersion float64, Data unsafe.Pointer) cmsTagTypeSignatu
 	}
 }
 
-/*
-firstSegment := (*cmsCurveSegment)(unsafe.Pointer(curve.Segments))
-segmentPtr := (*cmsCurveSegment)(unsafe.Addunsafe.Pointer(curve.Segments), uintptr(index) * unsafe.Sizeof(cmsCurveSegment{})))
-*/
 
 // DecideCurveType decides which curve type to use when writing.
 func DecideCurveType(ICCVersion float64, Data unsafe.Pointer) cmsTagTypeSignature {
@@ -292,10 +285,10 @@ func DecideCurveType(ICCVersion float64, Data unsafe.Pointer) cmsTagTypeSignatur
 	if Curve.nSegments != 1 {
 		return cmsSigCurveType
 	}
-	if (*cmsCurveSegment)(unsafe.Pointer(Curve.Segments)).Type < 0 {
+	if Curve.Segments[0].Type < 0 {
 		return cmsSigCurveType
 	}
-	if (*cmsCurveSegment)(unsafe.Pointer(Curve.Segments)).Type > 5 {
+	if Curve.Segments[0].Type > 5 {
 		return cmsSigCurveType
 	}
 
@@ -338,7 +331,7 @@ func TypeParametricCurveWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr uns
 	curve := (*CmsToneCurve)(ptr)
 	paramsByType := []int{0, 1, 3, 4, 5, 7}
 
-	typen := (*cmsCurveSegment)(unsafe.Pointer(curve.Segments)).Type
+	typen := curve.Segments[0].Type
 
 	if curve.nSegments > 1 || typen < 1 {
 		cmsSignalError(unsafe.Pointer(self.ContextID), cmsERROR_UNKNOWN_EXTENSION, "Multisegment or Inverted parametric curves cannot be written")
@@ -352,7 +345,7 @@ func TypeParametricCurveWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr uns
 
 	nParams := paramsByType[typen]
 
-	if !cmsWriteUInt16Number(io, uint16((*cmsCurveSegment)(unsafe.Pointer(curve.Segments)).Type-1)) {
+	if !cmsWriteUInt16Number(io, uint16(curve.Segments[0].Type-1)) {
 		return false
 	}
 	if !cmsWriteUInt16Number(io, uint16(0)) {
@@ -360,7 +353,7 @@ func TypeParametricCurveWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr uns
 	}
 
 	for i := 0; i < nParams; i++ {
-		if !cmsWrite15Fixed16Number(io, (*cmsCurveSegment)(unsafe.Pointer(curve.Segments)).Params[i]) {
+		if !cmsWrite15Fixed16Number(io, curve.Segments[0].Params[i]) {
 			return false
 		}
 	}
@@ -380,7 +373,7 @@ func TypeParametricCurveFree(self *cmsTagTypeHandler, ptr unsafe.Pointer) {
 
 // Type_Text_Read reads a text type structure from the io handler.
 func TypeTextRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) unsafe.Pointer {
-	var text *byte
+	var text []byte
 
 	// Create a container
 	mlu := cmsMLUalloc(self.ContextID, 1)
@@ -396,34 +389,29 @@ func TypeTextRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, siz
 	}
 
 	// Allocate memory for the text, with space for null terminator
-	text = (*byte)(cmsMalloc(self.ContextID, uint32(uintptr(sizeOfTag)+1)))
+	text = make([]byte,sizeOfTag+1)
 	if text == nil {
 		goto Error
 	}
 
 	// Read text from the IO handler
-	if io.Read((*cms_io_handler)(io), unsafe.Pointer(text), 8, sizeOfTag) != 1 {
+	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&text[0]), 8, sizeOfTag) != 1 {
 		goto Error
 	}
 
 	// Ensure null termination
-	(*(*[1 << 30]byte)(unsafe.Pointer(text)))[sizeOfTag] = 0
+	text[sizeOfTag] = 0
 	*nItems = 1
 
 	// Store the result in the MLU
-	if !cmsMLUsetASCII(mlu, cmsNoLanguage, cmsNoCountry, (*byte)(text)) {
+	if !cmsMLUsetASCII(mlu, cmsNoLanguage, cmsNoCountry, (&text[0])) {
 		goto Error
 	}
-
-	cmsFree(self.ContextID, unsafe.Pointer(text))
 	return unsafe.Pointer(mlu)
 
 Error:
 	if mlu != nil {
 		cmsMLUfree(mlu)
-	}
-	if text != nil {
-		cmsFree(self.ContextID, unsafe.Pointer(text))
 	}
 	return nil
 }
@@ -433,7 +421,7 @@ func TypeTextWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer
 	mlu := (*cmsMLU)(ptr)
 	var size uint32
 	var rc bool
-	var text *byte
+	var text []byte
 
 	// Get the size of the ASCII representation, including null terminator
 	size = cmsMLUgetASCII(mlu, cmsNoLanguage, cmsNoCountry, nil, 0)
@@ -442,18 +430,16 @@ func TypeTextWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer
 	}
 
 	// Allocate memory for the text
-	text = (*byte)(cmsMalloc(self.ContextID, uint32(size)))
+	text = make([]byte,size)
 	if text == nil {
 		return false
 	}
 
 	// Retrieve the ASCII text
-	cmsMLUgetASCII(mlu, cmsNoLanguage, cmsNoCountry, (*byte)(text), size)
+	cmsMLUgetASCII(mlu, cmsNoLanguage, cmsNoCountry, (&text[0]), size)
 
 	// Write the text to the IO handler
-	rc = io.Write((*cms_io_handler)(io), size, unsafe.Pointer(text))
-
-	cmsFree(self.ContextID, unsafe.Pointer(text))
+	rc = io.Write((*cms_io_handler)(io), size, unsafe.Pointer(&text[0]))
 	return rc
 }
 
@@ -488,8 +474,7 @@ func DecideTextDescType(ICCVersion float64, data unsafe.Pointer) cmsTagTypeSigna
 }
 func TypeTextDescriptionRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) unsafe.Pointer {
 	var (
-		text            *byte
-		textend         *byte
+		text            []byte
 		mlu             *cmsMLU
 		asciiCount      uint32
 		unicodeCode     uint32
@@ -502,53 +487,50 @@ func TypeTextDescriptionRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *
 
 	*nItems = 0
 
-	// Check if size of tag is at least one DWORD
+	// ✅ Check if size of tag is at least one DWORD
 	if sizeOfTag < 4 {
 		return nil
 	}
 
-	// Read ASCII count
+	// ✅ Read ASCII count
 	if !cmsReadUInt32Number(io, &asciiCount) {
 		return nil
 	}
 	sizeOfTag -= 4
 
-	// Check if tag size is sufficient
+	// ✅ Check if tag size is sufficient
 	if sizeOfTag < asciiCount {
 		return nil
 	}
 
-	// Allocate the MLU
+	// ✅ Allocate the MLU
 	mlu = cmsMLUalloc(self.ContextID, 1)
 	if mlu == nil {
 		return nil
 	}
 
-	// Allocate memory for the text
-	text = (*byte)(cmsMalloc(self.ContextID, asciiCount+1))
-	if text == nil {
+	// ✅ Allocate memory for the text slice
+	text = make([]byte, asciiCount+1) // ✅ +1 to null-terminate
+	if len(text) == 0 {
 		goto Error
 	}
 
-	// Read ASCII text
-	if io.Read((*cms_io_handler)(io), unsafe.Pointer(text), 1, asciiCount) != asciiCount {
+	// ✅ Read ASCII text into slice
+	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&text[0]), 1, asciiCount) != asciiCount {
 		goto Error
 	}
 	sizeOfTag -= asciiCount
 
-	// Ensure null-terminated string
-	textend = (*byte)(unsafe.Add(unsafe.Pointer(text), uintptr(asciiCount)*unsafe.Sizeof(byte(0))))
-	*textend = 0
+	// ✅ Ensure null-terminated string (Go slices are already zero-initialized)
+	text[asciiCount] = 0
 
-	// Set the MLU entry
+	// ✅ Set the MLU entry using the byte slice
 	if !cmsMLUsetASCII(mlu, cmsNoLanguage, cmsNoCountry, text) {
 		goto Error
 	}
-	cmsFree(self.ContextID, unsafe.Pointer(text))
-
 	text = nil // Text no longer needed
 
-	// Skip Unicode code
+	// ✅ Skip Unicode code
 	if sizeOfTag < 8 {
 		goto Done
 	}
@@ -561,25 +543,24 @@ func TypeTextDescriptionRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *
 		goto Done
 	}
 
+	// ✅ Read and skip Unicode characters
 	for i = 0; i < unicodeCount; i++ {
-		if io.Read((*cms_io_handler)(io), unsafe.Pointer(&dummy), 2, 1) != 1 {
+		var tmp [2]byte
+		if io.Read((*cms_io_handler)(io), unsafe.Pointer(&tmp[0]), 2, 1) != 1 {
 			goto Done
 		}
 	}
 	sizeOfTag -= unicodeCount * 2
 
-	// Skip ScriptCode code if present. Some buggy profiles does have less
-	// data that stricttly required. We need to skip it as this type may come
-	// embedded in other types.
+	// ✅ Skip ScriptCode code if present
 	if sizeOfTag >= uint32(unsafe.Sizeof(uint16(0)))+uint32(unsafe.Sizeof(uint8(0)))+67 {
 		if !cmsReadUInt16Number(io, &scriptCodeCode) || !cmsReadUInt8Number(io, &scriptCodeCount) {
 			goto Done
 		}
 
-		for i = 0; i < 67; i++ {
-			if io.Read((*cms_io_handler)(io), unsafe.Pointer(&dummy), 1, 1) != 1 {
-				goto Error
-			}
+		var skipBuffer [67]byte
+		if io.Read((*cms_io_handler)(io), unsafe.Pointer(&skipBuffer[0]), 1, 67) != 67 {
+			goto Error
 		}
 	}
 
@@ -588,8 +569,8 @@ Done:
 	return unsafe.Pointer(mlu)
 
 Error:
-	if text != nil {
-		cmsFree(self.ContextID, unsafe.Pointer(text))
+	if len(text) > 0 {
+		text = nil // Let Go's GC handle cleanup
 	}
 	if mlu != nil {
 		cmsMLUfree(mlu)
@@ -601,8 +582,8 @@ Error:
 // Type_Text_Description_Write writes a text description tag
 func TypeTextDescriptionWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, Ptr unsafe.Pointer, nItems uint32) bool {
 	mlu := (*cmsMLU)(Ptr)
-	var Text *byte
-	var Wide *uint16
+	var Text []byte
+	var Wide []wchar
 	var lenASCII, lenText, lenTagRequirement, lenAligned uint32
 	var rc bool = false
 	var Filler [68]byte
@@ -628,24 +609,19 @@ func TypeTextDescriptionWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, Ptr uns
 	// size, with the same text size in ASCII and Unicode.
 	// Null strings
 	// Null strings
-	if lenASCII <= 0 {
-		Text = (*byte)(cmsDupMem(self.ContextID, unsafe.Pointer(&[1]byte{0}), 1))
-		Wide = (*uint16)(cmsDupMem(self.ContextID, unsafe.Pointer(&[1]uint16{0}), 1))
-	} else {
-		// Create independent buffers
-		Text = (*byte)(cmsCalloc(self.ContextID, uint32(lenASCII), 1))
-		if Text == nil {
-			goto Error
-		}
 
-		Wide = (*uint16)(cmsCalloc(self.ContextID, uint32(lenASCII), 2))
-		if Wide == nil {
-			goto Error
-		}
+	if lenASCII <= 0 {
+		// Allocate single null-terminated elements
+		Text = []byte{0}  // Equivalent to calloc(1, sizeof(byte))
+		Wide = []wchar{0} // Equivalent to calloc(1, sizeof(uint16))
+	} else {
+		// Allocate slices instead of manually allocating memory
+		Text = make([]byte, lenASCII)  // Allocates a slice of lenASCII bytes
+		Wide = make([]wchar, lenASCII) // Allocates a slice of lenASCII uint16s
 
 		// Get both representations
-		cmsMLUgetASCII(mlu, cmsNoLanguage, cmsNoCountry, Text, lenASCII)
-		cmsMLUgetWide(mlu, cmsNoLanguage, cmsNoCountry, Wide, lenASCII*2)
+		cmsMLUgetASCII(mlu, cmsNoLanguage, cmsNoCountry, &Text[0], lenASCII)
+		cmsMLUgetWide(mlu, cmsNoLanguage, cmsNoCountry, (*uint16)(&Wide[0]), lenASCII*2)
 	}
 
 	// Tell the real text len including the null terminator and padding
@@ -667,7 +643,7 @@ func TypeTextDescriptionWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, Ptr uns
 	if !cmsWriteUInt32Number(io, lenText) {
 		goto Error
 	}
-	if !io.Write((*cms_io_handler)(io), lenText, unsafe.Pointer(Text)) {
+	if !io.Write((*cms_io_handler)(io), lenText, unsafe.Pointer(&Text[0])) {
 		goto Error
 	}
 
@@ -707,10 +683,10 @@ func TypeTextDescriptionWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, Ptr uns
 
 Error:
 	if Text != nil {
-		cmsFree(self.ContextID, unsafe.Pointer(Text))
+		cmsFree(self.ContextID, unsafe.Pointer(&Text[0]))
 	}
 	if Wide != nil {
-		cmsFree(self.ContextID, unsafe.Pointer(Wide))
+		cmsFree(self.ContextID, unsafe.Pointer(&Wide[0]))
 	}
 
 	return rc
@@ -1226,10 +1202,7 @@ func TypeChromaticityFree(self *cmsTagTypeHandler, ptr unsafe.Pointer) {
 
 func TypeColorantOrderTypeRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) unsafe.Pointer {
 	// Allocate memory for ColorantOrder
-	colorantOrder := (*[cmsMAXCHANNELS]uint8)(cmsCalloc(self.ContextID, cmsMAXCHANNELS, uint32(unsafe.Sizeof(uint8(0)))))
-	if colorantOrder == nil {
-		return nil
-	}
+	var colorantOrder = make([]uint8, cmsMAXCHANNELS)
 
 	*nItems = 0
 
@@ -1237,21 +1210,15 @@ func TypeColorantOrderTypeRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems
 	if !cmsReadUInt32Number(io, &count) || count > cmsMAXCHANNELS {
 		return nil
 	}
-	ColorantOrder := (*uint8)(cmsCalloc(self.ContextID, cmsMAXCHANNELS, uint32(unsafe.Sizeof(uint8(0)))))
-	if ColorantOrder == nil {
-		return nil
-	}
-
 	// Set all elements to 0xFF as end marker
-	memset(unsafe.Pointer(ColorantOrder), 0xFF, cmsMAXCHANNELS*unsafe.Sizeof(uint8(0)))
+	Memset(colorantOrder[:], 0xFF, cmsMAXCHANNELS)
 
-	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&colorantOrder[0]), uint32(unsafe.Sizeof(uint8(0))), count) != 0 {
-		cmsFree(self.ContextID, unsafe.Pointer(colorantOrder))
+	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&colorantOrder[0]), uint32(unsafe.Sizeof(uint8(0))), count) != count {
 		return nil
 	}
 
 	*nItems = 1
-	return unsafe.Pointer(colorantOrder)
+	return unsafe.Pointer(&colorantOrder[0])
 }
 
 func TypeColorantOrderTypeWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer, nItems uint32) bool {
@@ -1294,7 +1261,7 @@ func TypeS15Fixed16Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint3
 	n := sizeOfTag / uint32(unsafe.Sizeof(uint32(0)))
 
 	// Allocate memory for the array
-	arrayDouble := (*[1 << 30]float64)(cmsCalloc(self.ContextID, n, uint32(unsafe.Sizeof(float64(0)))))
+	arrayDouble := make([]float64, n)
 	if arrayDouble == nil {
 		return nil
 	}
@@ -1302,13 +1269,12 @@ func TypeS15Fixed16Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint3
 	// Read
 	for i := uint32(0); i < n; i++ {
 		if !cmsRead15Fixed16Number(io, &arrayDouble[i]) {
-			cmsFree(self.ContextID, unsafe.Pointer(arrayDouble))
 			return nil
 		}
 	}
 
 	*nItems = n
-	return unsafe.Pointer(arrayDouble)
+	return unsafe.Pointer(&arrayDouble[0])
 }
 
 func TypeS15Fixed16Write(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer, nItems uint32) bool {
@@ -1339,7 +1305,8 @@ func TypeS15Fixed16Free(self *cmsTagTypeHandler, ptr unsafe.Pointer) {
 
 func TypeU16Fixed16Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) unsafe.Pointer {
 	n := sizeOfTag / uint32(unsafe.Sizeof(uint32(0)))
-	arrayDouble := (*[1 << 30]float64)(cmsCalloc(self.ContextID, n, uint32(unsafe.Sizeof(float64(0)))))
+	// Allocate memory for the array
+	arrayDouble := make([]float64, n)
 	if arrayDouble == nil {
 		return nil
 	}
@@ -1347,7 +1314,6 @@ func TypeU16Fixed16Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint3
 	for i := uint32(0); i < n; i++ {
 		var v uint32
 		if !cmsReadUInt32Number(io, &v) {
-			cmsFree(self.ContextID, unsafe.Pointer(arrayDouble))
 			return nil
 		}
 
@@ -1462,9 +1428,8 @@ func TypeCurveRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, si
 		}
 
 		// Convert *uint16 to []uint16
-		tableSlice := unsafe.Slice(newGamma.Table16, newGamma.nEntries)
 
-		if !cmsReadUInt16Array(io, count, &tableSlice[0]) {
+		if !cmsReadUInt16Array(io, count, newGamma.Table16) {
 			CmsFreeToneCurve(newGamma)
 			return nil
 		}
@@ -1477,12 +1442,9 @@ func TypeCurveWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointe
 	curve := (*CmsToneCurve)(ptr) // Convert the pointer to a CmsToneCurve struct
 
 	if curve.nSegments == 1 && curve.Segments != nil {
-		// Access the first segment using slicing with unsafe.Slice
-		segments := unsafe.Slice(curve.Segments, curve.nSegments)
-
-		if segments[0].Type == 1 {
+		if curve.Segments[0].Type == 1 {
 			// Single gamma
-			singleGammaFixed := cmsDoubleTo8Fixed8(segments[0].Params[0])
+			singleGammaFixed := cmsDoubleTo8Fixed8(curve.Segments[0].Params[0])
 			if !cmsWriteUInt32Number(io, 1) || !cmsWriteUInt16Number(io, singleGammaFixed) {
 				return false
 			}
@@ -1495,8 +1457,7 @@ func TypeCurveWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointe
 	}
 
 	// Convert Table16 to a slice
-	tableSlice := unsafe.Slice(curve.Table16, curve.nEntries)
-	return cmsWriteUInt16Array(io, curve.nEntries, tableSlice)
+	return cmsWriteUInt16Array(io, curve.nEntries, curve.Table16)
 }
 
 func TypeCurveDup(self *cmsTagTypeHandler, ptr unsafe.Pointer, n uint32) unsafe.Pointer {
@@ -1507,104 +1468,6 @@ func TypeCurveFree(self *cmsTagTypeHandler, ptr unsafe.Pointer) {
 	gamma := (*CmsToneCurve)(ptr)
 	CmsFreeToneCurve(gamma)
 }
-
-// ********************************************************************************
-// Type cmsSigParametricCurveType
-// ********************************************************************************
-/*func DecideCurveType(iccVersion float64, data unsafe.Pointer) cmsTagTypeSignature {
-	curve := (*CmsToneCurve)(data)
-
-	if iccVersion < 4.0 {
-		return cmsSigCurveType
-	}
-	if curve.nSegments != 1 {
-		return cmsSigCurveType // Only 1-segment curves can be saved as parametric
-	}
-	if curve.Segments[0].Type < 0 {
-		return cmsSigCurveType // Only non-inverted curves
-	}
-	if curve.Segments[0].Type > 5 {
-		return cmsSigCurveType // Only ICC parametric curves
-	}
-
-	return cmsSigParametricCurveType
-}
-
-func TypeParametricCurveRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) unsafe.Pointer {
-	paramsByType := [5]int{1, 3, 4, 5, 7}
-	var params [10]float64
-	var curveType uint16
-
-	*nItems = 0
-
-	if !cmsReadUInt16Number(io, &curveType) {
-		return nil
-	}
-	if !cmsReadUInt16Number(io, nil) { // Reserved
-		return nil
-	}
-
-	if curveType > 4 {
-		cmsSignalError(unsafe.Pointer(self.ContextID), cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unknown parametric curve type '%d'", curveType))
-		return nil
-	}
-
-	n := paramsByType[curveType]
-	for i := 0; i < n; i++ {
-		if !cmsRead15Fixed16Number(io, &params[i]) {
-			return nil
-		}
-	}
-
-	newGamma := cmsBuildParametricToneCurve(self.ContextID, int(curveType+1), params[:])
-	if newGamma == nil {
-		return nil
-	}
-
-	*nItems = 1
-	return unsafe.Pointer(newGamma)
-}
-
-func TypeParametricCurveWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer, nItems uint32) bool {
-	curve := (*CmsToneCurve)(ptr)
-	paramsByType := [6]int{0, 1, 3, 4, 5, 7}
-	typen := curve.Segments[0].Type
-
-	if curve.nSegments > 1 || typen < 1 {
-		cmsSignalError(unsafe.Pointer(self.ContextID), cmsERROR_UNKNOWN_EXTENSION, "Multisegment or Inverted parametric curves cannot be written")
-		return false
-	}
-
-	if typen > 5 {
-		cmsSignalError(unsafe.Pointer(self.ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported parametric curve")
-		return false
-	}
-
-	nParams := paramsByType[typen]
-
-	if !cmsWriteUInt16Number(io, uint16(typen-1)) {
-		return false
-	}
-	if !cmsWriteUInt16Number(io, 0) { // Reserved
-		return false
-	}
-
-	for i := 0; i < nParams; i++ {
-		if !cmsWrite15Fixed16Number(io, curve.Segments[0].Params[i]) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func TypeParametricCurveDup(self *cmsTagTypeHandler, ptr unsafe.Pointer, n uint32) unsafe.Pointer {
-	return unsafe.Pointer(cmsDupToneCurve((*CmsToneCurve)(ptr)))
-}
-
-func TypeParametricCurveFree(self *cmsTagTypeHandler, ptr unsafe.Pointer) {
-	CmsFreeToneCurve((*CmsToneCurve)(ptr))
-}*/
 
 // ********************************************************************************
 // Type cmsSigDateTimeType
@@ -1666,9 +1529,6 @@ specifications.
 func TypeMeasurementRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) unsafe.Pointer {
 	var mc cmsICCMeasurementConditions
 
-	// Zero out the structure
-	memset(unsafe.Pointer(&mc), 0, unsafe.Sizeof(mc))
-
 	// Read the data from the IO handler
 	if !cmsReadUInt32Number(io, &mc.Observer) ||
 		!cmsReadXYZNumber(io, &mc.Backing) ||
@@ -1709,8 +1569,8 @@ func TypeMeasurementFree(self *cmsTagTypeHandler, ptr unsafe.Pointer) {
 //	Max Derhak and Rohit Patil about this: basically the size of the string table should be guessed and cannot be
 //	taken from the size of tag if this tag is embedded as part of bigger structures (profileSequenceDescTag, for instance)
 func TypeMLURead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) unsafe.Pointer {
-	var count, recLen, sizeOfHeader, len, offset, largestPosition uint32
-	var block *uint16
+	var count, recLen, numOfWchar, sizeOfHeader, len, offset, largestPosition uint32
+	var block []wchar
 
 	*nItems = 0
 
@@ -1723,26 +1583,17 @@ func TypeMLURead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, size
 		return nil
 	}
 
-	mlu := (*cmsMLU)(cmsMallocZero(self.ContextID, uint32(unsafe.Sizeof(cmsMLU{}))))
+	mlu := (*cmsMLU)(cmsMLUalloc(self.ContextID, count))
 	if mlu == nil {
 		return nil
 	}
 
-	mlu.AllocatedEntries = count
 	mlu.UsedEntries = count
-	mlu.Entries = (*cmsMLUentry)(cmsCalloc(self.ContextID, count, uint32(unsafe.Sizeof(cmsMLUentry{}))))
-	if mlu.Entries == nil {
-		cmsFree(self.ContextID, unsafe.Pointer(mlu))
-		return nil
-	}
-
 	sizeOfHeader = 12*count + uint32(unsafe.Sizeof(cmsTagBase{}))
 	largestPosition = 0
 
 	for i := uint32(0); i < count; i++ {
-		entry := (*cmsMLUentry)(unsafe.Add(unsafe.Pointer(mlu.Entries), uintptr(i)*unsafe.Sizeof(cmsMLUentry{})))
-
-		if !cmsReadUInt16Number(io, &entry.Language) || !cmsReadUInt16Number(io, &entry.Country) {
+		if !cmsReadUInt16Number(io, &(mlu.Entries[i].Language)) || !cmsReadUInt16Number(io, &(mlu.Entries[i].Country)) {
 			goto Error
 		}
 
@@ -1755,8 +1606,8 @@ func TypeMLURead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, size
 		}
 
 		beginOfString := offset - sizeOfHeader - 8
-		entry.Len = (len * uint32(unsafe.Sizeof(rune(0)))) / uint32(unsafe.Sizeof(uint16(0)))
-		entry.StrW = (beginOfString * uint32(unsafe.Sizeof(rune(0)))) / uint32(unsafe.Sizeof(uint16(0)))
+		mlu.Entries[i].Len = (len * uint32(unsafe.Sizeof(wchar(0)))) / uint32(unsafe.Sizeof(uint16(0)))
+		mlu.Entries[i].StrW = (beginOfString * uint32(unsafe.Sizeof(wchar(0)))) / uint32(unsafe.Sizeof(uint16(0)))
 
 		endOfString := beginOfString + len
 		if endOfString > largestPosition {
@@ -1764,32 +1615,27 @@ func TypeMLURead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, size
 		}
 	}
 
-	sizeOfTag = (largestPosition * uint32(unsafe.Sizeof(rune(0)))) / uint32(unsafe.Sizeof(uint16(0)))
+	sizeOfTag = (largestPosition * uint32(unsafe.Sizeof(wchar(0)))) / uint32(unsafe.Sizeof(uint16(0)))
 
-	if sizeOfTag == 0 {
-		block = nil
-		mlu.MemPool = nil
-		mlu.PoolSize = 0
-		mlu.PoolUsed = 0
-	} else {
-		block = (*uint16)(cmsCalloc(self.ContextID, 1, sizeOfTag))
-		//this is a replacement for cmsReadWCharArray in C-code needs additional check
-		if block == nil || !cmsReadUInt16Array(io, sizeOfTag/uint32(unsafe.Sizeof(uint16(0))), &(*[1 << 30]uint16)(unsafe.Pointer(block))[:sizeOfTag/uint32(unsafe.Sizeof(uint16(0)))][0] /* slice */) {
-			cmsFree(self.ContextID, unsafe.Pointer(block))
-			goto Error
-		}
-		mlu.MemPool = unsafe.Pointer(block)
-		mlu.PoolSize = sizeOfTag
-		mlu.PoolUsed = sizeOfTag
+	if sizeOfTag&1 != 0 {
+		goto Error
 	}
+
+	block = make([]wchar, sizeOfTag)
+	numOfWchar = sizeOfTag / uint32(unsafe.Sizeof(uint16(0)))
+
+	//this is a replacement for cmsReadWCharArray in C-code needs additional check
+	if !cmsReadWCharArray(io, numOfWchar, block) {
+		goto Error
+	}
+	mlu.MemPool = unsafe.Pointer(&block[0])
+	mlu.PoolSize = sizeOfTag
+	mlu.PoolUsed = sizeOfTag
 
 	*nItems = 1
 	return unsafe.Pointer(mlu)
 
 Error:
-	if mlu.Entries != nil {
-		cmsFree(self.ContextID, unsafe.Pointer(mlu.Entries))
-	}
 	if mlu != nil {
 		cmsFree(self.ContextID, unsafe.Pointer(mlu))
 	}
@@ -1811,13 +1657,11 @@ func TypeMLUWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer,
 	headerSize = 12*mlu.UsedEntries + uint32(unsafe.Sizeof(cmsTagBase{}))
 
 	for i := uint32(0); i < mlu.UsedEntries; i++ {
-		entry := (*cmsMLUentry)(unsafe.Add(unsafe.Pointer(mlu.Entries), uintptr(i)*unsafe.Sizeof(cmsMLUentry{})))
+		len = mlu.Entries[i].Len * uint32(unsafe.Sizeof(uint16(0)))
+		offset = mlu.Entries[i].StrW*uint32(unsafe.Sizeof(uint16(0))) + headerSize + 8
 
-		len = entry.Len * uint32(unsafe.Sizeof(uint16(0)))
-		offset = entry.StrW*uint32(unsafe.Sizeof(uint16(0))) + headerSize + 8
-
-		if !cmsWriteUInt16Number(io, entry.Language) ||
-			!cmsWriteUInt16Number(io, entry.Country) ||
+		if !cmsWriteUInt16Number(io, mlu.Entries[i].Language) ||
+			!cmsWriteUInt16Number(io, mlu.Entries[i].Country) ||
 			!cmsWriteUInt32Number(io, len) ||
 			!cmsWriteUInt32Number(io, offset) {
 			return false
@@ -1844,7 +1688,6 @@ func TypeMLUFree(self *cmsTagTypeHandler, ptr unsafe.Pointer) {
 
 func TypeLUT8Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) unsafe.Pointer {
 	var inputChannels, outputChannels, clutPoints uint8
-	var temp *uint8
 	var nTabSize uint32
 	var matrix [9]float64
 	var newLUT *cmsPipeline
@@ -1885,7 +1728,7 @@ func TypeLUT8Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, siz
 
 	// Insert the matrix if it isn't identity
 	if inputChannels == 3 && !cmsMAT3isIdentity((*cmsMAT3)(unsafe.Pointer(&matrix))) {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_BEGIN, cmsStageAllocMatrix(self.ContextID, 3, 3, &matrix[0], nil)) {
+		if !cmsPipelineInsertStage(newLUT, cmsAT_BEGIN, cmsStageAllocMatrix(self.ContextID, 3, 3, matrix[:], nil)) {
 
 			goto Error
 		}
@@ -1901,38 +1744,46 @@ func TypeLUT8Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, siz
 	if nTabSize == ^uint32(0) {
 		goto Error
 	}
-
 	if nTabSize > 0 {
-		ptrW := (*uint16)(cmsCalloc(self.ContextID, nTabSize, uint32(unsafe.Sizeof(uint16(0)))))
-		if ptrW == nil {
+		var PtrW, T []uint16 // Equivalent to `cmsUInt16Number *PtrW, *T`
+		var Temp []uint8     // Equivalent to `cmsUInt8Number *Temp`
+
+		// Allocate slice instead of raw memory allocation
+		T = make([]uint16, nTabSize)
+		PtrW = T      // PtrW now references the same slice
+		if T == nil { // No need to check nil in Go, but keeping for safety
 			goto Error
 		}
 
-		temp = (*uint8)(cmsMalloc(self.ContextID, nTabSize))
-		if temp == nil {
+		// Allocate temporary slice for 8-bit values
+		Temp = make([]uint8, nTabSize)
+		if Temp == nil {
+			T = nil // Free memory reference
 			goto Error
 		}
 
-		if io.Read((*cms_io_handler)(io), unsafe.Pointer(temp), nTabSize, 1) != 1 {
-			cmsFree(self.ContextID, unsafe.Pointer(ptrW))
-			cmsFree(self.ContextID, unsafe.Pointer(temp))
+		// Read `nTabSize` bytes into Temp
+		if io.Read((*cms_io_handler)(io), unsafe.Pointer(&Temp[0]), nTabSize, 1) != nTabSize { // `io.Read()` should match the correct signature
+			T = nil
+			Temp = nil
 			goto Error
 		}
 
-		for i := uint32(0); i < nTabSize; i++ {
-			*(*uint16)(unsafe.Add(unsafe.Pointer(ptrW), uintptr(i)*unsafe.Sizeof(uint16(0)))) = FROM_8_TO_16(*(*uint8)(unsafe.Add(unsafe.Pointer(temp), uintptr(i))))
+		// Convert from 8-bit to 16-bit using slice indexing
+		for i := 0; i < int(nTabSize); i++ {
+			PtrW[i] = FROM_8_TO_16(Temp[i]) // Equivalent to `*PtrW++ = FROM_8_TO_16(Temp[i])`
 		}
 
-		cmsFree(self.ContextID, unsafe.Pointer(temp))
-		// Convert `ptrW` to a slice of uint16
-		tSlice := unsafe.Slice(ptrW, nTabSize)
+		// Free Temp since it's no longer needed
+		Temp = nil
 
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, cmsStageAllocCLut16bit(self.ContextID, uint32(clutPoints), uint32(inputChannels), uint32(outputChannels), &tSlice[0])) {
-			cmsFree(self.ContextID, unsafe.Pointer(ptrW))
+		// Insert stage into LUT
+		if !cmsPipelineInsertStage(newLUT, cmsAT_END, cmsStageAllocCLut16bit(self.ContextID, uint32(clutPoints), uint32(inputChannels), uint32(outputChannels), T)) {
+			T = nil
 			goto Error
 		}
 
-		cmsFree(self.ContextID, unsafe.Pointer(ptrW))
+		// No explicit free needed; slices are managed by Go GC
 	}
 
 	// Read output tables
@@ -2017,10 +1868,8 @@ func TypeLUT8Write(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer
 
 	// Write matrix if exists, else identity matrix
 	if matMPE != nil {
-		// Convert the Double pointer to a slice
-		matrix := unsafe.Slice(matMPE.Double, 9) // Assuming 9 elements in the matrix
 		for i := 0; i < 9; i++ {
-			if !cmsWrite15Fixed16Number(io, matrix[i]) {
+			if !cmsWrite15Fixed16Number(io, matMPE.Double[i]) {
 				return false
 			}
 		}
@@ -2043,11 +1892,8 @@ func TypeLUT8Write(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer
 		return false
 	}
 	if nTabSize > 0 && clut != nil {
-		// Convert clut.Tab.T to a slice
-		tValues := unsafe.Slice(clut.Tab.T, nTabSize) // Assuming `nTabSize` is the length of the array
-
 		for j = 0; j < nTabSize; j++ {
-			val = uint8(FROM_16_TO_8(tValues[j]))
+			val = uint8(FROM_16_TO_8(clut.Tab.T[j]))
 			if !cmsWriteUInt8Number(io, val) {
 				return false
 			}
@@ -2109,20 +1955,17 @@ func Read8bitTables(ContextID CmsContext, io *cmsIOHANDLER, lut *cmsPipeline, nC
 
 	// Read and populate tone curve data
 	for i := uint32(0); i < nChannels; i++ {
-		if io.Read((*cms_io_handler)(io), unsafe.Pointer(&temp[0]), 256, 1) != 0 {
+		if io.Read((*cms_io_handler)(io), unsafe.Pointer(&temp[0]), 256, 1) != 1 {
 			goto Error
 		}
-		// Assuming `nEntries` is the length of the Table16 array
-		table16Values := unsafe.Slice(tables[i].Table16, 256) // Convert the pointer to a slice
-
 		for j := 0; j < 256; j++ {
-			table16Values[j] = uint16(temp[j]) * 257 // Convert 8-bit to 16-bit
+			tables[i].Table16[j] = FROM_8_TO_16(temp[j]) // Convert 8-bit to 16-bit
 		}
 
 	}
 
 	// Insert tone curves into the pipeline
-	if !cmsPipelineInsertStage(lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, nChannels, &tables[0])) {
+	if !cmsPipelineInsertStage(lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, nChannels, tables[:])) {
 		goto Error
 	}
 
@@ -2145,23 +1988,19 @@ Error:
 func Write8bitTables(ContextID CmsContext, io *cmsIOHANDLER, n uint32, tables *cmsStageToneCurvesData) bool {
 	if tables != nil {
 		for i := uint32(0); i < n; i++ {
-			//curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(tables.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-			curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(tables.TheCurves)) // Cast to a large enough array
-			curve := curvesptr[i]
-			table16 := unsafe.Slice(curve.Table16, curve.nEntries)
 			// Handle identity curves
-			if curve.nEntries == 2 && table16[0] == 0 && table16[1] == 65535 {
+			if tables.TheCurves[i].nEntries == 2 && tables.TheCurves[i].Table16[0] == 0 && tables.TheCurves[i].Table16[1] == 65535 {
 				for j := 0; j < 256; j++ {
 					if !cmsWriteUInt8Number(io, uint8(j)) {
 						return false
 					}
 				}
-			} else if curve.nEntries != 256 {
+			} else if tables.TheCurves[i].nEntries != 256 {
 				cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "LUT8 needs 256 entries on prelinearization")
 				return false
 			} else {
 				for j := 0; j < 256; j++ {
-					val := uint8(table16[j] / 257) // Convert 16-bit to 8-bit
+					val := FROM_16_TO_8(tables.TheCurves[i].Table16[j]) // Convert 16-bit to 8-bit
 					if !cmsWriteUInt8Number(io, val) {
 						return false
 					}
@@ -2197,7 +2036,10 @@ func uipow(n, a, b uint32) uint32 {
 // Type cmsSigLut16Type
 // ********************************************************************************
 func Read16bitTables(ContextID CmsContext, io *cmsIOHANDLER, lut *cmsPipeline, nChannels, nEntries uint32) bool {
-	if nEntries == 0 || nEntries < 2 || nChannels > cmsMAXCHANNELS {
+	if nEntries <= 0 {
+		return true
+	}
+	if nEntries < 2 || nChannels > cmsMAXCHANNELS {
 		return false
 	}
 	var tables [cmsMAXCHANNELS]*CmsToneCurve
@@ -2208,15 +2050,12 @@ func Read16bitTables(ContextID CmsContext, io *cmsIOHANDLER, lut *cmsPipeline, n
 			goto Error
 		}
 
-		// Convert the `Table16` pointer to a slice before passing to `cmsReadUInt16Array`
-		table16Slice := unsafe.Slice(tables[i].Table16, nEntries)
-
-		if !cmsReadUInt16Array(io, nEntries, &table16Slice[0]) {
+		if !cmsReadUInt16Array(io, nEntries, tables[i].Table16) {
 			goto Error
 		}
 	}
 
-	if !cmsPipelineInsertStage(lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, nChannels, &tables[0])) {
+	if !cmsPipelineInsertStage(lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, nChannels, tables[:])) {
 		goto Error
 	}
 
@@ -2235,16 +2074,10 @@ Error:
 }
 func Write16bitTables(ContextID CmsContext, io *cmsIOHANDLER, tables *cmsStageToneCurvesData) bool {
 	for i := uint32(0); i < tables.NCurves; i++ {
-		//curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(tables.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(tables.TheCurves)) // Cast to a large enough array
-		curve := curvesptr[i]
-		nEntries := curve.nEntries
-
-		// Convert the Table16 pointer to a slice
-		table16Slice := unsafe.Slice(curve.Table16, nEntries)
+		nEntries := tables.TheCurves[i].nEntries
 
 		for j := uint32(0); j < nEntries; j++ {
-			val := table16Slice[j]
+			val := tables.TheCurves[i].Table16[j]
 			if !cmsWriteUInt16Number(io, val) {
 				return false
 			}
@@ -2291,7 +2124,7 @@ func TypeLUT16Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, si
 
 	// Only operates on 3 channels
 	if inputChannels == 3 && !cmsMAT3isIdentity(&mat3) {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, cmsStageAllocMatrix(self.ContextID, 3, 3, &matrix[0], nil)) {
+		if !cmsPipelineInsertStage(newLUT, cmsAT_END, cmsStageAllocMatrix(self.ContextID, 3, 3, matrix[:], nil)) {
 			cmsPipelineFree(newLUT)
 			return nil
 		}
@@ -2314,7 +2147,7 @@ func TypeLUT16Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, si
 
 	nTabSize := uipow(uint32(outputChannels), uint32(clutPoints), uint32(inputChannels))
 	if nTabSize == math.MaxUint32 || nTabSize > 0 {
-		t := (*uint16)(cmsCalloc(self.ContextID, nTabSize, uint32(unsafe.Sizeof(uint16(0)))))
+		t := make([]uint16, nTabSize)
 		if t == nil {
 			cmsPipelineFree(newLUT)
 			return nil
@@ -2396,10 +2229,8 @@ func TypeLUT16Write(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointe
 	}
 
 	if matMPE != nil {
-		// Convert the Double pointer to a slice
-		matrix := unsafe.Slice(matMPE.Double, 9) // Assuming 9 elements in the matrix
 		for i := 0; i < 9; i++ {
-			if !cmsWrite15Fixed16Number(io, matrix[i]) {
+			if !cmsWrite15Fixed16Number(io, matMPE.Double[i]) {
 				return false
 			}
 		}
@@ -2413,7 +2244,7 @@ func TypeLUT16Write(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointe
 	}
 
 	if preMPE != nil {
-		if !cmsWriteUInt16Number(io, uint16((*preMPE.TheCurves).nEntries)) {
+		if !cmsWriteUInt16Number(io, uint16(preMPE.TheCurves[0].nEntries)) {
 			return false
 		}
 	} else {
@@ -2423,7 +2254,7 @@ func TypeLUT16Write(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointe
 	}
 
 	if postMPE != nil {
-		if !cmsWriteUInt16Number(io, uint16((*postMPE.TheCurves).nEntries)) {
+		if !cmsWriteUInt16Number(io, uint16(postMPE.TheCurves[0].nEntries)) {
 			return false
 		}
 	} else {
@@ -2450,10 +2281,7 @@ func TypeLUT16Write(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointe
 	}
 	if nTabSize > 0 {
 		if clut != nil {
-			// Convert clut.Tab.T (*uint16) to a slice
-			tabSlice := unsafe.Slice(clut.Tab.T, nTabSize)
-
-			if !cmsWriteUInt16Array(io, nTabSize, tabSlice) {
+			if !cmsWriteUInt16Array(io, nTabSize, clut.Tab.T) {
 				return false
 			}
 		}
@@ -2518,7 +2346,7 @@ func TypeColorantTableRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *ui
 		}
 
 		name[32] = 0 // Null-terminate
-		if !cmsReadUInt16Array(io, 3, &pcs[0]) {
+		if !cmsReadUInt16Array(io, 3, pcs[:]) {
 			goto Error
 		}
 		nameStr := string(name[:bytes.IndexByte(name[:], 0)])
@@ -2666,7 +2494,7 @@ func TypeNamedColorRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint3
 		}
 
 		root[32] = 0 // Null-terminate
-		if !cmsReadUInt16Array(io, 3, &pcs[0]) || !cmsReadUInt16Array(io, nDeviceCoords, &colorant[0]) {
+		if !cmsReadUInt16Array(io, 3, pcs[:]) || !cmsReadUInt16Array(io, nDeviceCoords, colorant[:]) {
 			goto Error
 		}
 
@@ -3038,7 +2866,7 @@ func TypeUcrBgRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, si
 		goto Error
 	}
 
-	asciiString = (*[1 << 30]byte)(cmsMalloc(self.ContextID, uint32(signedSizeOfTag)+1))[:signedSizeOfTag+1]
+	asciiString = make([]byte,signedSizeOfTag+1)
 	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&asciiString[0]), 1, uint32(signedSizeOfTag)) != uint32(signedSizeOfTag) {
 		cmsFree(self.ContextID, unsafe.Pointer(&asciiString[0]))
 		goto Error
@@ -3046,7 +2874,6 @@ func TypeUcrBgRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, si
 	asciiString[signedSizeOfTag] = 0
 
 	cmsMLUsetASCII(n.Desc, cmsNoLanguage, cmsNoCountry, &asciiString[0])
-	cmsFree(self.ContextID, unsafe.Pointer(&asciiString[0]))
 
 	*nItems = 1
 	return unsafe.Pointer(n)
@@ -3071,18 +2898,18 @@ func TypeUcrBgWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointe
 	var textSize uint32
 
 	// First curve is Under color removal
-	if !cmsWriteUInt32Number(io, value.Ucr.nEntries) || !cmsWriteUInt16Array(io, value.Ucr.nEntries, unsafe.Slice(value.Ucr.Table16, value.Ucr.nEntries)) {
+	if !cmsWriteUInt32Number(io, value.Ucr.nEntries) || !cmsWriteUInt16Array(io, value.Ucr.nEntries, value.Ucr.Table16) {
 		return false
 	}
 
 	// Then black generation
-	if !cmsWriteUInt32Number(io, value.Bg.nEntries) || !cmsWriteUInt16Array(io, value.Bg.nEntries, unsafe.Slice(value.Bg.Table16, value.Bg.nEntries)) {
+	if !cmsWriteUInt32Number(io, value.Bg.nEntries) || !cmsWriteUInt16Array(io, value.Bg.nEntries, value.Bg.Table16) {
 		return false
 	}
 
 	// Now comes the text
 	textSize = cmsMLUgetASCII(value.Desc, cmsNoLanguage, cmsNoCountry, nil, 0)
-	text := (*[1 << 30]byte)(cmsMalloc(self.ContextID, textSize))[:textSize]
+	text := make([]byte, textSize)
 	if cmsMLUgetASCII(value.Desc, cmsNoLanguage, cmsNoCountry, &text[0], textSize) != textSize {
 		return false
 	}
@@ -3090,8 +2917,6 @@ func TypeUcrBgWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointe
 	if !io.Write((*cms_io_handler)(io), textSize, unsafe.Pointer(&text[0])) {
 		return false
 	}
-
-	cmsFree(self.ContextID, unsafe.Pointer(&text[0]))
 	return true
 }
 
@@ -3158,14 +2983,10 @@ func ReadCountAndString(self *cmsTagTypeHandler, io *cmsIOHANDLER, mlu *cmsMLU, 
 	}
 
 	// Allocate memory for the string
-	text := (*[1 << 30]byte)(cmsMalloc(self.ContextID, count+1))[:count+1]
-	if text == nil {
-		return false
-	}
+	text := make([]byte, count+1)
 
 	// Read string
 	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&text[0]), 1, count) != count {
-		cmsFree(self.ContextID, unsafe.Pointer(&text[0]))
 		return false
 	}
 
@@ -3185,7 +3006,7 @@ func ReadCountAndString(self *cmsTagTypeHandler, io *cmsIOHANDLER, mlu *cmsMLU, 
 
 func WriteCountAndString(self *cmsTagTypeHandler, io *cmsIOHANDLER, mlu *cmsMLU, section string) bool {
 	textSize := cmsMLUgetASCII(mlu, "PS", section, nil, 0)
-	text := (*[1 << 30]byte)(cmsMalloc(self.ContextID, textSize))[:textSize]
+	text := make([]byte, textSize)
 
 	if text == nil {
 		return false
@@ -3596,18 +3417,16 @@ func WriteMatrix(self *cmsTagTypeHandler, io *cmsIOHANDLER, mpe *cmsStage) bool 
 	n := mpe.InputChannels * mpe.OutputChannels
 
 	// Write the matrix values
-	matrix := unsafe.Slice(matrixData.Double, n)
 	for i := uint32(0); i < n; i++ {
-		if !cmsWrite15Fixed16Number(io, matrix[i]) {
+		if !cmsWrite15Fixed16Number(io, matrixData.Double[i]) {
 			return false
 		}
 	}
 
 	// Write the offsets
 	if matrixData.Offset != nil {
-		offsets := unsafe.Slice(matrixData.Offset, mpe.OutputChannels)
 		for i := uint32(0); i < mpe.OutputChannels; i++ {
-			if !cmsWrite15Fixed16Number(io, offsets[i]) {
+			if !cmsWrite15Fixed16Number(io, matrixData.Offset[i]) {
 				return false
 			}
 		}
@@ -3627,14 +3446,9 @@ func WriteSetOfCurves(self *cmsTagTypeHandler, io *cmsIOHANDLER, curveType cmsTa
 
 	for i := uint32(0); i < outputChannels; i++ {
 		currentType := curveType
-		//curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(curves)) // Cast to a large enough array
-		curve := curvesptr[i]
-		if curve.Segments != nil {
-			segments := unsafe.Slice(curve.Segments, curve.nSegments)
-
+		if curves[i].Segments != nil {
 			// Determine the curve type
-			if curve.nSegments == 0 || (curve.nSegments == 2 && segments[1].Type == 0) || segments[0].Type < 0 {
+			if curves[i].nSegments == 0 || (curves[i].nSegments == 2 && curves[i].Segments[1].Type == 0) || curves[i].Segments[0].Type < 0 {
 				currentType = cmsSigCurveType
 			}
 		}
@@ -3647,11 +3461,11 @@ func WriteSetOfCurves(self *cmsTagTypeHandler, io *cmsIOHANDLER, curveType cmsTa
 		// Write the curve data
 		switch currentType {
 		case cmsSigCurveType:
-			if !TypeCurveWrite(self, io, unsafe.Pointer(curve), 1) {
+			if !TypeCurveWrite(self, io, unsafe.Pointer(curves[i]), 1) {
 				return false
 			}
 		case cmsSigParametricCurveType:
-			if !TypeParametricCurveWrite(self, io, unsafe.Pointer(curve), 1) {
+			if !TypeParametricCurveWrite(self, io, unsafe.Pointer(curves[i]), 1) {
 				return false
 			}
 		default:
@@ -3691,15 +3505,13 @@ func WriteCLUT(self *cmsTagTypeHandler, io *cmsIOHANDLER, precision uint8, mpe *
 	// Write the CLUT data
 	switch precision {
 	case 1:
-		clutEntries := unsafe.Slice(clutData.Tab.T, clutData.NEntries)
-		for _, entry := range clutEntries {
+		for _, entry := range clutData.Tab.T {
 			if !cmsWriteUInt8Number(io, uint8(FROM_16_TO_8(entry))) {
 				return false
 			}
 		}
 	case 2:
-		clutEntries := unsafe.Slice(clutData.Tab.T, clutData.NEntries)
-		if !cmsWriteUInt16Array(io, clutData.NEntries, clutEntries) {
+		if !cmsWriteUInt16Array(io, clutData.NEntries, clutData.Tab.T) {
 			return false
 		}
 	default:
@@ -3733,7 +3545,7 @@ func ReadMatrix(self *cmsTagTypeHandler, io *cmsIOHANDLER, offset uint32) *cmsSt
 	}
 
 	// Allocate the matrix
-	return cmsStageAllocMatrix(self.ContextID, 3, 3, &dMat[0], &dOff[0])
+	return cmsStageAllocMatrix(self.ContextID, 3, 3, dMat[:], dOff[:])
 }
 func ReadCLUT(self *cmsTagTypeHandler, io *cmsIOHANDLER, offset, inputChannels, outputChannels uint32) *cmsStage {
 	var gridPoints8 [cmsMAXCHANNELS]uint8
@@ -3777,15 +3589,12 @@ func ReadCLUT(self *cmsTagTypeHandler, io *cmsIOHANDLER, offset, inputChannels, 
 	switch precision {
 	case 1:
 		var value uint8
-		// Convert the pointer `data.Tab.T` into a slice of size `data.NEntries`
-		tab := unsafe.Slice(data.Tab.T, data.NEntries)
-
 		for i := uint32(0); i < data.NEntries; i++ {
 			if io.Read((*cms_io_handler)(io), unsafe.Pointer(&value), 1, 1) != 1 {
 				cmsStageFree(clut)
 				return nil
 			}
-			tab[i] = uint16(value) * 257 // Convert 8-bit to 16-bit
+			data.Tab.T[i] = FROM_8_TO_16(value)
 		}
 	case 2:
 		if !cmsReadUInt16Array(io, data.NEntries, data.Tab.T) {
@@ -3837,7 +3646,7 @@ func ReadSetOfCurves(self *cmsTagTypeHandler, io *cmsIOHANDLER, offset, nCurves 
 	}
 
 	// Allocate the tone curves stage
-	stage := cmsStageAllocToneCurves(self.ContextID, nCurves, &curves[0])
+	stage := cmsStageAllocToneCurves(self.ContextID, nCurves, curves[:])
 
 	// Free the individual curves
 	for i := uint32(0); i < nCurves; i++ {
@@ -4122,7 +3931,7 @@ Error:
 func TypeMPEWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer, nItems uint32) bool {
 	var (
 		i, baseOffset, directoryPos, currentPos uint32
-		elementOffsets, elementSizes            *uint32
+		elementOffsets, elementSizes            []uint32
 		before, elementCount                    uint32
 		elementSig                              cmsStageSignature
 		typeHandler                             *cmsTagTypeHandler
@@ -4141,15 +3950,8 @@ func TypeMPEWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer,
 	elem = lut.Elements
 
 	// Allocate space for offsets and sizes
-	elementOffsets = (*uint32)(cmsCalloc(self.ContextID, elementCount, uint32(unsafe.Sizeof(uint32(0)))))
-	if elementOffsets == nil {
-		goto Error
-	}
-
-	elementSizes = (*uint32)(cmsCalloc(self.ContextID, elementCount, uint32(unsafe.Sizeof(uint32(0)))))
-	if elementSizes == nil {
-		goto Error
-	}
+	elementOffsets = make([]uint32, elementCount)
+	elementSizes = make([]uint32, elementCount)
 
 	// Write header
 	if !cmsWriteUInt16Number(io, uint16(inputChan)) || !cmsWriteUInt16Number(io, uint16(outputChan)) || !cmsWriteUInt32Number(io, elementCount) {
@@ -4174,8 +3976,7 @@ func TypeMPEWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer,
 
 	// Write each element
 	for i = 0; i < elementCount; i++ {
-		elementOffsetsPtr := (*uint32)(unsafe.Add(unsafe.Pointer(elementOffsets), uintptr(i)*unsafe.Sizeof(uint32(0))))
-		*elementOffsetsPtr = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
+		elementOffsets[i] = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
 		elementSig = elem.Type
 
 		typeHandler = GetHandler(cmsTagTypeSignature(elementSig), mpeTypePluginChunk.TagTypes, &SupportedMPEtypes[0])
@@ -4198,8 +3999,7 @@ func TypeMPEWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer,
 		if !cmsWriteAlignment(io) {
 			goto Error
 		}
-		elementSizesPtr := (*uint32)(unsafe.Add(unsafe.Pointer(elementSizes), uintptr(i)*unsafe.Sizeof(uint32(0))))
-		*elementSizesPtr = uint32(io.Tell((*cms_io_handler)(io))) - before
+		elementSizes[i] = uint32(io.Tell((*cms_io_handler)(io))) - before
 		elem = elem.Next
 	}
 
@@ -4210,9 +4010,7 @@ func TypeMPEWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer,
 	}
 
 	for i = 0; i < elementCount; i++ {
-		elementSizesPtr := (*uint32)(unsafe.Add(unsafe.Pointer(elementSizes), uintptr(i)*unsafe.Sizeof(uint32(0))))
-		elementOffsetsPtr := (*uint32)(unsafe.Add(unsafe.Pointer(elementOffsets), uintptr(i)*unsafe.Sizeof(uint32(0))))
-		if !cmsWriteUInt32Number(io, *elementOffsetsPtr) || !cmsWriteUInt32Number(io, *elementSizesPtr) {
+		if !cmsWriteUInt32Number(io, elementOffsets[i]) || !cmsWriteUInt32Number(io, elementSizes[i]) {
 			goto Error
 		}
 	}
@@ -4220,22 +4018,9 @@ func TypeMPEWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer,
 	if !io.Seek((*cms_io_handler)(io), currentPos) {
 		goto Error
 	}
-	if elementOffsets != nil {
-		cmsFree(self.ContextID, unsafe.Pointer(elementOffsets))
-	}
-	if elementSizes != nil {
-		cmsFree(self.ContextID, unsafe.Pointer(elementSizes))
-	}
-
 	return true
 
 Error:
-	if elementOffsets != nil {
-		cmsFree(self.ContextID, unsafe.Pointer(elementOffsets))
-	}
-	if elementSizes != nil {
-		cmsFree(self.ContextID, unsafe.Pointer(elementSizes))
-	}
 	return false
 }
 
@@ -4401,7 +4186,7 @@ func ReadOneWChar(io *cmsIOHANDLER, e *cmsDICelem, i uint32) (string, bool) {
 
 	// Read the string data
 	rawData := make([]uint16, nChars)
-	if !cmsReadUInt16Array(io, nChars, &rawData[0]) {
+	if !cmsReadUInt16Array(io, nChars, rawData) {
 		return "", false
 	}
 
@@ -4482,8 +4267,6 @@ func TypeDictionaryRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint3
 	)
 
 	*nItems = 0
-	memset(unsafe.Pointer(&a), 0, uintptr(unsafe.Sizeof(cmsDICarray{})))
-
 	// Get current position as base offset
 	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(cmsTagBase{}))
 
@@ -4755,10 +4538,6 @@ func TypeVcgtRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, siz
 
 		for i := 0; i < 3; i++ {
 			curves[i] = cmsBuildTabulatedToneCurve16(self.ContextID, uint32(nElems), nil)
-
-			// Convert Table16 to a slice
-			tableSlice := unsafe.Slice(curves[i].Table16, nElems)
-
 			switch nBytes {
 			case 1:
 				var v uint8
@@ -4766,10 +4545,10 @@ func TypeVcgtRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, siz
 					if !cmsReadUInt8Number(io, &v) {
 						goto Error
 					}
-					tableSlice[j] = uint16(v) * 257
+					curves[i].Table16[j] = uint16(v) * 257
 				}
 			case 2:
-				if !cmsReadUInt16Array(io, uint32(nElems), &tableSlice[0]) {
+				if !cmsReadUInt16Array(io, uint32(nElems), curves[i].Table16) {
 					goto Error
 				}
 			default:
@@ -4824,9 +4603,9 @@ func TypeVcgtWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer
 				return false // Handle cases where Segments is nil
 			}
 
-			gamma := segments.Params[0]
-			min := segments.Params[5]
-			max := math.Pow(segments.Params[1], gamma) + min
+			gamma := segments[0].Params[0]
+			min := segments[0].Params[5]
+			max := math.Pow(segments[0].Params[1], gamma) + min
 
 			if !cmsWrite15Fixed16Number(io, gamma) ||
 				!cmsWrite15Fixed16Number(io, min) ||
@@ -4859,7 +4638,7 @@ func TypeVcgtWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer
 
 func TypeVcgtDup(self *cmsTagTypeHandler, ptr unsafe.Pointer, n uint32) unsafe.Pointer {
 	oldCurves := *(*[]*CmsToneCurve)(ptr)
-	NewCurves := (*[3]*CmsToneCurve)(cmsCalloc(self.ContextID, 3, uint32(unsafe.Sizeof(uintptr(0)))))
+	NewCurves := make([]*CmsToneCurve, 3)
 	if NewCurves == nil {
 		return nil
 	}
@@ -4867,7 +4646,7 @@ func TypeVcgtDup(self *cmsTagTypeHandler, ptr unsafe.Pointer, n uint32) unsafe.P
 	NewCurves[0] = cmsDupToneCurve(oldCurves[0])
 	NewCurves[1] = cmsDupToneCurve(oldCurves[1])
 	NewCurves[2] = cmsDupToneCurve(oldCurves[2])
-	return unsafe.Pointer(NewCurves)
+	return unsafe.Pointer(&NewCurves[0])
 }
 
 func TypeVcgtFree(self *cmsTagTypeHandler, ptr unsafe.Pointer) {
@@ -4973,17 +4752,14 @@ func ReadSegmentedCurve(self *cmsTagTypeHandler, io *cmsIOHANDLER) *CmsToneCurve
 
 			count++
 			segments[i].NGridPoints = count
-			segments[i].SampledPoints = (*float32)(cmsCalloc(self.ContextID, count, uint32(unsafe.Sizeof(float32(0)))))
-
-			// Create a slice view of the allocated memory
-			sampledPointsSlice := unsafe.Slice(segments[i].SampledPoints, count)
+			segments[i].SampledPoints = make([]float32, count)
 
 			// Initialize the first point
-			sampledPointsSlice[0] = 0
+			segments[i].SampledPoints[0] = 0
 
 			// Populate the array using the slice
 			for j := uint32(1); j < count; j++ {
-				if !cmsReadFloat32Number(io, &sampledPointsSlice[j]) {
+				if !cmsReadFloat32Number(io, &segments[i].SampledPoints[j]) {
 					return nil
 				}
 			}
@@ -4996,21 +4772,9 @@ func ReadSegmentedCurve(self *cmsTagTypeHandler, io *cmsIOHANDLER) *CmsToneCurve
 	curve := cmsBuildSegmentedToneCurve(self.ContextID, uint32(nSegments), &segments[0])
 
 	// Fix implicit points
-	/*for i := uint32(0); i < uint32(nSegments); i++ {
+	for i := uint32(0); i < uint32(nSegments); i++ {
 		if curve.Segments[i].Type == 0 {
 			curve.Segments[i].SampledPoints[0] = cmsEvalToneCurveFloat(curve, curve.Segments[i].X0)
-		}
-	}*/
-
-	// Create a slice view of the curve segments
-	curveSegmentsSlice := unsafe.Slice(curve.Segments, nSegments)
-
-	// Fix implicit points
-	for i := uint32(0); i < uint32(nSegments); i++ {
-		if curveSegmentsSlice[i].Type == 0 {
-			// Create a slice view for SampledPoints
-			sampledPointsSlice := unsafe.Slice(curveSegmentsSlice[i].SampledPoints, curveSegmentsSlice[i].NGridPoints)
-			sampledPointsSlice[0] = cmsEvalToneCurveFloat(curve, curveSegmentsSlice[i].X0)
 		}
 	}
 
@@ -5037,27 +4801,22 @@ func TypeMPEcurveRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32,
 		return nil
 	}
 
-	gammaTables := (**CmsToneCurve)(cmsCalloc(self.ContextID, uint32(inputChans), uint32(unsafe.Sizeof((*CmsToneCurve)(nil)))))
-	if gammaTables == nil {
-		return nil
-	}
+	gammaTables := make([]*CmsToneCurve, inputChans)
 
 	var mpe *cmsStage
 	// Read position table and allocate the MPE curve stage
-	if ReadPositionTable(self, io, uint32(inputChans), baseOffset, unsafe.Pointer(gammaTables), ReadMPECurve) {
+	if ReadPositionTable(self, io, uint32(inputChans), baseOffset, unsafe.Pointer(&gammaTables[0]), ReadMPECurve) {
 		mpe = cmsStageAllocToneCurves(self.ContextID, uint32(inputChans), gammaTables)
 
 	}
 
 	// Free allocated resources in case of error
 	for i := uint32(0); i < uint32(inputChans); i++ {
-		//	curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(gammaTables), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(gammaTables)) // Cast to a large enough array
-		curve := curvesptr[i]
-		if curve != nil {
-			CmsFreeToneCurve(curve)
+		if gammaTables[i] != nil {
+			CmsFreeToneCurve(gammaTables[i])
 		}
 	}
+
 	if mpe != nil {
 		*nItems = 1
 	} else {
@@ -5075,30 +4834,26 @@ func WriteSegmentedCurve(io *cmsIOHANDLER, curve *CmsToneCurve) bool {
 		!cmsWriteUInt16Number(io, uint16(nSegments)) || !cmsWriteUInt16Number(io, 0) {
 		return false
 	}
-	// Create a slice view of the segments
-	segmentsSlice := unsafe.Slice(segments, nSegments)
-
 	// Write breakpoints
 	for i := uint32(0); i < nSegments-1; i++ {
-		if !cmsWriteFloat32Number(io, segmentsSlice[i].X1) {
+		if !cmsWriteFloat32Number(io, segments[i].X1) {
 			return false
 		}
 	}
 
 	// Write each segment
 	for i := uint32(0); i < nSegments; i++ {
-		actualSeg := segmentsSlice[i]
+		actualSeg := segments[i]
 		switch actualSeg.Type {
 		case 0: // Sampled curve
 			if !cmsWriteUInt32Number(io, uint32(cmsSigSampledCurveSeg)) || !cmsWriteUInt32Number(io, 0) ||
 				!cmsWriteUInt32Number(io, actualSeg.NGridPoints-1) {
 				return false
 			}
-			sampledPointsSlice := unsafe.Slice(actualSeg.SampledPoints, actualSeg.NGridPoints)
 
 			for j := uint32(1); j < actualSeg.NGridPoints; j++ {
 
-				if !cmsWriteFloat32Number(io, sampledPointsSlice[j]) {
+				if !cmsWriteFloat32Number(io, actualSeg.SampledPoints[j]) {
 					return false
 				}
 			}
@@ -5126,11 +4881,7 @@ func WriteSegmentedCurve(io *cmsIOHANDLER, curve *CmsToneCurve) bool {
 // WriteMPECurve writes a curve for MPE
 func WriteMPECurve(self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo unsafe.Pointer, n, sizeOfTag uint32) bool {
 	curves := (*cmsStageToneCurvesData)(cargo)
-	//	curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(curves.TheCurves), uintptr(n)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-	curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(curves)) // Cast to a large enough array
-	curve := curvesptr[n]
-
-	return WriteSegmentedCurve(io, curve)
+	return WriteSegmentedCurve(io, curves.TheCurves[n])
 }
 
 // Type_MPEcurve_Write writes the MPE curve type
@@ -5161,41 +4912,25 @@ func TypeMPEmatrixRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32
 	}
 
 	nElems := uint32(inputChans) * uint32(outputChans)
-	matrix := (*float64)(cmsCalloc(self.ContextID, nElems, uint32(unsafe.Sizeof(float64(0)))))
-	if matrix == nil {
-		return nil
-	}
-
-	offsets := (*float64)(cmsCalloc(self.ContextID, uint32(outputChans), uint32(unsafe.Sizeof(float64(0)))))
-	if offsets == nil {
-		cmsFree(self.ContextID, unsafe.Pointer(matrix))
-		return nil
-	}
+	matrix := make([]float64, nElems)
+	offsets := make([]float64, outputChans)
 	for i := uint32(0); i < nElems; i++ {
 		var v float32
 		if !cmsReadFloat32Number(io, &v) {
-			cmsFree(self.ContextID, unsafe.Pointer(matrix))
-			cmsFree(self.ContextID, unsafe.Pointer(offsets))
 			return nil
 		}
-		matrixPtr := (*float64)(unsafe.Add(unsafe.Pointer(matrix), uintptr(i)*unsafe.Sizeof(float64(0))))
-		*matrixPtr = float64(v)
+		matrix[i] = float64(v)
 	}
 
 	for i := uint32(0); i < uint32(outputChans); i++ {
 		var v float32
 		if !cmsReadFloat32Number(io, &v) {
-			cmsFree(self.ContextID, unsafe.Pointer(matrix))
-			cmsFree(self.ContextID, unsafe.Pointer(offsets))
 			return nil
 		}
-		offsetsPtr := (*float64)(unsafe.Add(unsafe.Pointer(offsets), uintptr(i)*unsafe.Sizeof(float64(0))))
-		*offsetsPtr = float64(v)
+		offsets[i] = float64(v)
 	}
 
 	mpe := cmsStageAllocMatrix(self.ContextID, uint32(outputChans), uint32(inputChans), matrix, offsets)
-	cmsFree(self.ContextID, unsafe.Pointer(matrix))
-	cmsFree(self.ContextID, unsafe.Pointer(offsets))
 	*nItems = 1
 	return unsafe.Pointer(mpe)
 }
@@ -5209,11 +4944,9 @@ func TypeMPEmatrixWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Po
 	}
 
 	nElems := mpe.InputChannels * mpe.OutputChannels
-	// Convert matrix.Double to a slice
-	doubleSlice := unsafe.Slice(matrix.Double, nElems)
 
 	for i := uint32(0); i < nElems; i++ {
-		if !cmsWriteFloat32Number(io, float32(doubleSlice[i])) {
+		if !cmsWriteFloat32Number(io, float32(matrix.Double[i])) {
 			return false
 		}
 	}
@@ -5224,9 +4957,7 @@ func TypeMPEmatrixWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Po
 				return false
 			}
 		} else {
-			// Convert matrix.Offset to a slice
-			offsetSlice := unsafe.Slice(matrix.Offset, mpe.OutputChannels)
-			if !cmsWriteFloat32Number(io, float32(offsetSlice[i])) {
+			if !cmsWriteFloat32Number(io, float32(matrix.Offset[i])) {
 				return false
 			}
 		}
@@ -5266,10 +4997,8 @@ func TypeMPEclutRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, 
 	}
 
 	clut := (*cmsStageCLutData)(mpe.Data)
-	clutSlice := unsafe.Slice(clut.Tab.TFloat, clut.NEntries)
-
 	for i := uint32(0); i < clut.NEntries; i++ {
-		if !cmsReadFloat32Number(io, &clutSlice[i]) {
+		if !cmsReadFloat32Number(io, &clut.Tab.TFloat[i]) {
 			cmsStageFree(mpe)
 			return nil
 		}
@@ -5299,11 +5028,8 @@ func TypeMPEclutWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Poin
 	if io.Write((*cms_io_handler)(io), 16, unsafe.Pointer(&dimensions8[0])) {
 		return false
 	}
-
-	clutSlice := unsafe.Slice(clut.Tab.TFloat, clut.NEntries)
-
 	for i := uint32(0); i < clut.NEntries; i++ {
-		if !cmsWriteFloat32Number(io, clutSlice[i]) {
+		if !cmsWriteFloat32Number(io, clut.Tab.TFloat[i]) {
 			return false
 		}
 	}

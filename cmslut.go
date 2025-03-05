@@ -34,8 +34,8 @@ func cmsStageAllocPlaceholder(
 	return ph
 }
 
-func EvaluateIdentity(In *float32, Out *float32, mpe *cmsStage) {
-	memmove(unsafe.Pointer(Out), unsafe.Pointer(In), uintptr(mpe.InputChannels*uint32(unsafe.Sizeof(float32(0)))))
+func EvaluateIdentity(In []float32, Out []float32, mpe *cmsStage) {
+	Memmove(Out, In, int(mpe.InputChannels*uint32(unsafe.Sizeof(float32(0)))))
 }
 func cmsStageAllocIdentity(ContextID CmsContext, nChannels uint32) *cmsStage {
 	return cmsStageAllocPlaceholder(ContextID,
@@ -49,29 +49,22 @@ func cmsStageAllocIdentity(ContextID CmsContext, nChannels uint32) *cmsStage {
 
 // FromFloatTo16 converts a slice of float32 values to a slice of uint16 values
 // FromFloatTo16 converts a slice of float32 values to a slice of uint16 values using unsafe pointer arithmetic.
-func FromFloatTo16(In *float32, Out *uint16, n uint32) {
+func FromFloatTo16(In []float32, Out []uint16, n uint32) {
 	for i := uint32(0); i < n; i++ {
-		// Calculate the pointer to the current element in the input slice
-		inPtr := (*float32)(unsafe.Add(unsafe.Pointer(In), uintptr(i)*unsafe.Sizeof(*In)))
-		// Calculate the pointer to the current element in the output slice
-		outPtr := (*uint16)(unsafe.Add(unsafe.Pointer(Out), uintptr(i)*unsafe.Sizeof(*Out)))
 		// Perform the conversion
-		*outPtr = cmsQuickSaturateWord(float64(*inPtr * 65535.0))
+		Out[i] = cmsQuickSaturateWord(float64(In[i] * 65535.0))
 	}
 }
 
 // From16ToFloat converts a slice of uint16 values to a slice of float32 values
 // From16ToFloat converts a slice of uint16 values to a slice of float32 values using unsafe pointer arithmetic.
-func From16ToFloat(In *uint16, Out *float32, n uint32) {
+func From16ToFloat(In []uint16, Out []float32, n uint32) {
 	for i := uint32(0); i < n; i++ {
-		// Calculate the pointer to the current element in the input slice
-		inPtr := (*uint16)(unsafe.Add(unsafe.Pointer(In), uintptr(i)*unsafe.Sizeof(*In)))
-		// Calculate the pointer to the current element in the output slice
-		outPtr := (*float32)(unsafe.Add(unsafe.Pointer(Out), uintptr(i)*unsafe.Sizeof(*Out)))
 		// Perform the conversion
-		*outPtr = float32(*inPtr) / 65535.0
+		Out[i] = float32(In[i]) / 65535.0
 	}
 }
+
 func cmsPipelineCheckAndRetrieveStages(lut *cmsPipeline, n uint32, expectedTypes []cmsStageSignature, retrievedStages ...**cmsStage) bool {
 	// Ensure the number of stages matches
 	if cmsPipelineStageCount(lut) != n {
@@ -104,17 +97,16 @@ func cmsPipelineCheckAndRetrieveStages(lut *cmsPipeline, n uint32, expectedTypes
 
 	return true
 }
-func Clipper(In *float32, Out *float32, mpe *cmsStage) {
+func Clipper(In []float32, Out []float32, mpe *cmsStage) {
 	for i := uint32(0); i < mpe.InputChannels; i++ {
 		// Access In and Out using unsafe.Pointer arithmetic
-		inVal := *(*float32)(unsafe.Add(unsafe.Pointer(In), uintptr(i)*unsafe.Sizeof(*In)))
-		outPtr := (*float32)(unsafe.Add(unsafe.Pointer(Out), uintptr(i)*unsafe.Sizeof(*Out)))
+		inVal := In[i]
 
 		// Perform clipping
 		if inVal < 0 {
-			*outPtr = 0
+			Out[i] = 0
 		} else {
-			*outPtr = inVal
+			Out[i] = inVal
 		}
 	}
 }
@@ -132,29 +124,20 @@ func cmsStageClipNegatives(ContextID CmsContext, nChannels uint32) *cmsStage {
 	)
 }
 
-func cmsStageGetPtrToCurveSet(mpe *cmsStage) **CmsToneCurve {
+func cmsStageGetPtrToCurveSet(mpe *cmsStage) []*CmsToneCurve {
 	data := (*cmsStageToneCurvesData)(mpe.Data)
 	return data.TheCurves
 }
 
-func EvaluateCurves(In *float32, Out *float32, mpe *cmsStage) {
+func EvaluateCurves(In []float32, Out []float32, mpe *cmsStage) {
 	data := (*cmsStageToneCurvesData)(mpe.Data)
 	if data == nil || data.TheCurves == nil {
 		return
 	}
 
 	for i := uint32(0); i < data.NCurves; i++ {
-		// Use unsafe.Add to access the i-th element of TheCurves
-		//curvePtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(data.TheCurves)) // Cast to a large enough array
-		curve := curvesptr[i]
-	
-		// Use unsafe.Add to access the i-th element of In and Out
-		inVal := *(*float32)(unsafe.Add(unsafe.Pointer(In), uintptr(i)*unsafe.Sizeof(*In)))
-		outPtr := (*float32)(unsafe.Add(unsafe.Pointer(Out), uintptr(i)*unsafe.Sizeof(*Out)))
+		Out[i] = cmsEvalToneCurveFloat(data.TheCurves[i], In[i])
 
-		// Evaluate the tone curve and store the result
-		*outPtr = cmsEvalToneCurveFloat(curve, inVal)
 	}
 }
 
@@ -168,16 +151,11 @@ func CurveSetElemTypeFree(mpe *cmsStage) {
 
 	if data.TheCurves != nil {
 		for i := uint32(0); i < data.NCurves; i++ {
-			//curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-			curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(data.TheCurves)) // Cast to a large enough array
-			curve := curvesptr[i]
-				if curve != nil {
-				CmsFreeToneCurve(curve)
+			if data.TheCurves[i] != nil {
+				CmsFreeToneCurve(data.TheCurves[i])
 			}
 		}
 	}
-
-	cmsFree(mpe.ContextID, unsafe.Pointer(data.TheCurves))
 	cmsFree(mpe.ContextID, unsafe.Pointer(data))
 }
 func CurveSetDup(mpe *cmsStage) unsafe.Pointer {
@@ -193,26 +171,15 @@ func CurveSetDup(mpe *cmsStage) unsafe.Pointer {
 	newElem.NCurves = data.NCurves
 
 	// Allocate memory for the array of tone curve pointers
-	newElem.TheCurves = (**CmsToneCurve)(cmsCalloc(mpe.ContextID, newElem.NCurves, uint32(unsafe.Sizeof((*CmsToneCurve)(nil)))))
-	if newElem.TheCurves == nil {
-		goto Error
-	}
+	newElem.TheCurves = make([]*CmsToneCurve, newElem.NCurves)
 
 	for i := uint32(0); i < newElem.NCurves; i++ {
-		// Access the original curve pointer
-		//curve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(data.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		curves := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(data.TheCurves)) // Cast to a large enough array
-		curve := curves[i]
-
-		// Duplicate the curve
-		duplicatedCurve := cmsDupToneCurve(curve)
-		if duplicatedCurve == nil {
+		// Duplicate each curve. It may fail.
+		newElem.TheCurves[i] = cmsDupToneCurve(data.TheCurves[i])
+		if newElem.TheCurves[i] == nil {
 			goto Error
 		}
-		// Assign the duplicated curve to the new allocated slice
-		//*(*CmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil)))) = *duplicatedCurve
-		newCurves := (*[1<<30]*CmsToneCurve)(unsafe.Pointer(newElem.TheCurves))
-        newCurves[i] = duplicatedCurve
+
 	}
 
 	return unsafe.Pointer(newElem)
@@ -220,19 +187,15 @@ func CurveSetDup(mpe *cmsStage) unsafe.Pointer {
 Error:
 	// Cleanup allocated memory in case of an error
 	for i := uint32(0); i < newElem.NCurves; i++ {
-		//newCurve := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-		curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(newElem.TheCurves)) // Cast to a large enough array
-		curve := curvesptr[i]
-		if curve != nil {
-			CmsFreeToneCurve(curve)
+		if newElem.TheCurves[i] != nil {
+			CmsFreeToneCurve(newElem.TheCurves[i])
 		}
 	}
-	cmsFree(mpe.ContextID, unsafe.Pointer(newElem.TheCurves))
 	cmsFree(mpe.ContextID, unsafe.Pointer(newElem))
 	return nil
 }
 
-func cmsStageAllocToneCurves(ContextID CmsContext, nChannels uint32, Curves **CmsToneCurve) *cmsStage {
+func cmsStageAllocToneCurves(ContextID CmsContext, nChannels uint32, Curves []*CmsToneCurve) *cmsStage {
 	// Allocate the placeholder for the stage
 	newMPE := cmsStageAllocPlaceholder(ContextID, cmsSigCurveSetElemType, nChannels, nChannels, EvaluateCurves, CurveSetDup, CurveSetElemTypeFree, nil)
 	if newMPE == nil {
@@ -252,28 +215,21 @@ func cmsStageAllocToneCurves(ContextID CmsContext, nChannels uint32, Curves **Cm
 	newElem.NCurves = nChannels
 
 	// Allocate memory for the slice of tone curve pointers
-	newElem.TheCurves = (**CmsToneCurve)(cmsCalloc(ContextID, nChannels, uint32(unsafe.Sizeof((*CmsToneCurve)(nil)))))
+	// Allocate memory for the array of tone curve pointers
+	newElem.TheCurves = make([]*CmsToneCurve, newElem.NCurves)
 
 	// Handle the input curves, either creating identity curves or duplicating existing ones
 	for i := uint32(0); i < nChannels; i++ {
-		// Calculate the pointer to the i-th element of NewElem.TheCurves
-		//curvePtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(newElem.TheCurves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-	    curvesptr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(newElem.TheCurves)) // Cast to a large enough array
-	
 		if Curves == nil {
 			// Assign a new tone curve if Curves is nil
-			curvesptr[i] = CmsBuildGamma(ContextID, 1.0)
+			newElem.TheCurves[i] = CmsBuildGamma(ContextID, 1.0)
 		} else {
-			// Calculate the pointer to the i-th element of Curves
-			//srcCurvePtr := (**CmsToneCurve)(unsafe.Add(unsafe.Pointer(Curves), uintptr(i)*unsafe.Sizeof((*CmsToneCurve)(nil))))
-            srcCurvePtr := (*[1 << 30]*CmsToneCurve)(unsafe.Pointer(Curves)) // Cast to a large enough array
-	        srcCurve := srcCurvePtr[i]
 			// Duplicate the tone curve and assign it to NewElem.TheCurves
-			curvesptr[i]  = cmsDupToneCurve(srcCurve)
+			newElem.TheCurves[i] = cmsDupToneCurve(Curves[i])
 		}
 
 		// Check if the assignment failed
-		if curvesptr[i] == nil {
+		if newElem.TheCurves[i] == nil {
 			cmsStageFree(newMPE)
 			return nil
 		}
@@ -293,28 +249,20 @@ func cmsStageAllocIdentityCurves(ContextID CmsContext, nChannels uint32) *cmsSta
 }
 
 // EvaluateMatrix performs matrix multiplication and applies an optional offset.
-func EvaluateMatrix(in *float32, out *float32, mpe *cmsStage) {
+func EvaluateMatrix(in []float32, out []float32, mpe *cmsStage) {
 	// Cast the unsafe pointer to the original struct type
 	data := (*cmsStageMatrixData)(mpe.Data)
 
 	for i := uint32(0); i < mpe.OutputChannels; i++ {
 		var tmp float64 = 0
 		for j := uint32(0); j < mpe.InputChannels; j++ {
-			// Access Double as a slice using unsafe.Pointer arithmetic
-			doublePtr := unsafe.Pointer(uintptr(unsafe.Pointer(data.Double)) + uintptr((i*mpe.InputChannels+j)*uint32(unsafe.Sizeof(float64(0)))))
-			inPtr := (*float32)(unsafe.Add(unsafe.Pointer(in), uintptr(j)*unsafe.Sizeof(*in)))
-			tmp += float64(*inPtr) * *(*float64)(doublePtr)
+			tmp += float64(in[j]) * data.Double[i*mpe.InputChannels+j]
 		}
 
 		if data.Offset != nil {
-			// Access Offset as a slice using unsafe.Pointer arithmetic
-			offsetPtr := unsafe.Pointer(uintptr(unsafe.Pointer(data.Offset)) + uintptr(i*uint32(unsafe.Sizeof(float64(0)))))
-			tmp += *(*float64)(offsetPtr)
+			tmp += data.Offset[i]
 		}
-
-		// Access out as a slice using unsafe.Pointer arithmetic
-		outPtr := (*float32)(unsafe.Add(unsafe.Pointer(out), uintptr(i)*unsafe.Sizeof(*out)))
-		*outPtr = float32(tmp)
+		out[i] = float32(tmp)
 	}
 
 }
@@ -329,14 +277,10 @@ func MatrixElemDup(mpe *cmsStage) unsafe.Pointer {
 
 	NewElem := (*cmsStageMatrixData)(cmsMallocZero(mpe.ContextID, uint32(unsafe.Sizeof(cmsStageMatrixData{}))))
 
-	sz := mpe.InputChannels * mpe.OutputChannels
-	var sizeoffl float64
-	NewElem.Double = (*float64)(cmsDupMem(mpe.ContextID, unsafe.Pointer(Data.Double), sz*uint32(unsafe.Sizeof(sizeoffl))))
-
+	sz := int(mpe.InputChannels * mpe.OutputChannels)
+	MemcpySlice(NewElem.Double, Data.Double, sz*int(unsafe.Sizeof(float64(0))))
 	if Data.Offset != nil {
-		NewElem.Offset = (*float64)(cmsDupMem(mpe.ContextID,
-			unsafe.Pointer(Data.Offset), mpe.OutputChannels*uint32(unsafe.Sizeof(sizeoffl))))
-
+		MemcpySlice(NewElem.Offset, Data.Offset, int(mpe.OutputChannels)*int(unsafe.Sizeof(float64(0))))
 	}
 
 	return unsafe.Pointer(NewElem)
@@ -352,19 +296,12 @@ func MatrixElemTypeFree(mpe *cmsStage) {
 	if Data == nil {
 		return
 	}
-	if Data.Double != nil {
-		cmsFree(mpe.ContextID, unsafe.Pointer(Data.Double))
-	}
-	if Data.Offset != nil {
-		cmsFree(mpe.ContextID, unsafe.Pointer(Data.Offset))
-	}
-
 	cmsFree(mpe.ContextID, mpe.Data)
 }
 func cmsStageAllocMatrix(
 	ContextID CmsContext,
 	Rows, Cols uint32,
-	Matrix, Offset *float64,
+	Matrix, Offset []float64,
 ) *cmsStage {
 	var i, n uint32
 	var NewElem *cmsStageMatrixData
@@ -401,27 +338,18 @@ func cmsStageAllocMatrix(
 	NewMPE.Data = unsafe.Pointer(NewElem)
 
 	// Allocate memory for the Double array
-	NewElem.Double = (*float64)(cmsCalloc(ContextID, n, uint32(unsafe.Sizeof(float64(0)))))
-	if NewElem.Double == nil {
-		goto Error
-	}
+	NewElem.Double = make([]float64, n)
 
 	// Copy the matrix elements into the Double array
 	for i = 0; i < n; i++ {
-		matrixElementPtr := (*float64)(unsafe.Add(unsafe.Pointer(NewElem.Double), uintptr(i)*unsafe.Sizeof(float64(0))))
-		*matrixElementPtr = *(*float64)(unsafe.Add(unsafe.Pointer(Matrix), uintptr(i)*unsafe.Sizeof(float64(0))))
+		NewElem.Double[i] = Matrix[i]
 	}
 
 	// If an offset is provided, allocate memory for the Offset array and copy its elements
 	if Offset != nil {
-		NewElem.Offset = (*float64)(cmsCalloc(ContextID, Rows, uint32(unsafe.Sizeof(float64(0)))))
-		if NewElem.Offset == nil {
-			goto Error
-		}
-
+		NewElem.Offset = make([]float64, Rows)
 		for i = 0; i < Rows; i++ {
-			offsetElementPtr := (*float64)(unsafe.Add(unsafe.Pointer(NewElem.Offset), uintptr(i)*unsafe.Sizeof(float64(0))))
-			*offsetElementPtr = *(*float64)(unsafe.Add(unsafe.Pointer(Offset), uintptr(i)*unsafe.Sizeof(float64(0))))
+			NewElem.Offset[i] = Offset[i]
 		}
 	}
 
@@ -455,34 +383,25 @@ Error:
 		Out[2] = float32((Lab.b + 128.0) / 255.0)
 	}
 */
-func EvaluateXYZ2Lab(In *float32, Out *float32, mpe *cmsStage) {
+func EvaluateXYZ2Lab(In []float32, Out []float32, mpe *cmsStage) {
 	const XYZadj = MAX_ENCODEABLE_XYZ
 
 	var XYZ cmsCIEXYZ
 	var Lab cmsCIELab
 
-	// Access In using unsafe.Pointer arithmetic
-	inX := *(*float32)(unsafe.Add(unsafe.Pointer(In), uintptr(0)*unsafe.Sizeof(*In)))
-	inY := *(*float32)(unsafe.Add(unsafe.Pointer(In), uintptr(1)*unsafe.Sizeof(*In)))
-	inZ := *(*float32)(unsafe.Add(unsafe.Pointer(In), uintptr(2)*unsafe.Sizeof(*In)))
-
 	// From 0..1.0 to XYZ
-	XYZ.X = float64(inX) * XYZadj
-	XYZ.Y = float64(inY) * XYZadj
-	XYZ.Z = float64(inZ) * XYZadj
+
+	XYZ.X = float64(In[0] * XYZadj)
+	XYZ.Y = float64(In[1] * XYZadj)
+	XYZ.Z = float64(In[2] * XYZadj)
 
 	// Convert XYZ to Lab
 	cmsXYZ2Lab(nil, &Lab, &XYZ)
 
-	// Access Out using unsafe.Pointer arithmetic
-	outL := (*float32)(unsafe.Add(unsafe.Pointer(Out), uintptr(0)*unsafe.Sizeof(*Out)))
-	outA := (*float32)(unsafe.Add(unsafe.Pointer(Out), uintptr(1)*unsafe.Sizeof(*Out)))
-	outB := (*float32)(unsafe.Add(unsafe.Pointer(Out), uintptr(2)*unsafe.Sizeof(*Out)))
-
 	// From V4 Lab to 0..1.0
-	*outL = float32(Lab.L / 100.0)
-	*outA = float32((Lab.a + 128.0) / 255.0)
-	*outB = float32((Lab.b + 128.0) / 255.0)
+	Out[0] = float32(Lab.L / 100.0)
+	Out[1] = float32((Lab.a + 128.0) / 255.0)
+	Out[2] = float32((Lab.b + 128.0) / 255.0)
 }
 
 func cmsStageAllocXYZ2Lab(ContextID CmsContext) *cmsStage {
@@ -553,7 +472,7 @@ func cmsSliceSpaceFloat(nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLERF
 // Type cmsSigLab2XYZElemType
 // ********************************************************************************
 
-/*func EvaluateLab2XYZ(In *float32, Out *float32, mpe *cmsStage) {
+func EvaluateLab2XYZ(In []float32, Out []float32, mpe *cmsStage) {
 	const XYZadj = MAX_ENCODEABLE_XYZ
 
 	var XYZ cmsCIEXYZ
@@ -573,36 +492,6 @@ func cmsSliceSpaceFloat(nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLERF
 	Out[1] = float32(XYZ.Y / XYZadj)
 	Out[2] = float32(XYZ.Z / XYZadj)
 
-}*/
-
-func EvaluateLab2XYZ(In *float32, Out *float32, mpe *cmsStage) {
-	const XYZadj = MAX_ENCODEABLE_XYZ
-
-	var XYZ cmsCIEXYZ
-	var Lab cmsCIELab
-
-	// Access In using unsafe.Pointer arithmetic
-	inL := *(*float32)(unsafe.Add(unsafe.Pointer(In), uintptr(0)*unsafe.Sizeof(*In)))
-	inA := *(*float32)(unsafe.Add(unsafe.Pointer(In), uintptr(1)*unsafe.Sizeof(*In)))
-	inB := *(*float32)(unsafe.Add(unsafe.Pointer(In), uintptr(2)*unsafe.Sizeof(*In)))
-
-	// V4 rules
-	Lab.L = float64(inL * 100.0)
-	Lab.a = float64(inA*255.0 - 128.0)
-	Lab.b = float64(inB*255.0 - 128.0)
-
-	// Convert Lab to XYZ
-	cmsLab2XYZ(nil, &XYZ, &Lab)
-
-	// Access Out using unsafe.Pointer arithmetic
-	outX := (*float32)(unsafe.Add(unsafe.Pointer(Out), uintptr(0)*unsafe.Sizeof(*Out)))
-	outY := (*float32)(unsafe.Add(unsafe.Pointer(Out), uintptr(1)*unsafe.Sizeof(*Out)))
-	outZ := (*float32)(unsafe.Add(unsafe.Pointer(Out), uintptr(2)*unsafe.Sizeof(*Out)))
-
-	// From XYZ, range 0..19997 to 0..1.0
-	*outX = float32(XYZ.X / XYZadj)
-	*outY = float32(XYZ.Y / XYZadj)
-	*outZ = float32(XYZ.Z / XYZadj)
 }
 
 // No dup or free routines needed, as the structure has no pointers in it.
@@ -634,23 +523,20 @@ func cmsStageAllocLabV2ToV4curves(ContextID CmsContext) *cmsStage {
 			cmsFreeToneCurveTriple(LabTable)
 			return nil
 		}
-		// Convert Table16 pointer to a slice of uint16
-		table16 := unsafe.Slice(LabTable[j].Table16, 258)
-
 		// Populate tone curve entries
 		// We need to map * (0xffff / 0xff00), that's same as (257 / 256)
 		// So we can use 258-entry tables to do the trick:
 		// (i / 257) * (255 * 257) * (257 / 256)
 		for i = 0; i < 257; i++ {
-			table16[i] = uint16((i*0xffff + 0x80) >> 8)
+			LabTable[j].Table16[i] = uint16((i*0xffff + 0x80) >> 8)
 		}
 
 		// Set the last entry to 0xffff
-		table16[257] = 0xffff
+		LabTable[j].Table16[257] = 0xffff
 	}
 
 	// Allocate the tone curve stage
-	mpe = cmsStageAllocToneCurves(ContextID, 3, &LabTable[0])
+	mpe = cmsStageAllocToneCurves(ContextID, 3, LabTable[:])
 	cmsFreeToneCurveTriple(LabTable)
 
 	// Check if allocation was successful
@@ -671,7 +557,7 @@ func cmsStageAllocLabV2ToV4(ContextID CmsContext) *cmsStage {
 		0, 0, 65535.0 / 65280.0,
 	}
 
-	mpe := cmsStageAllocMatrix(ContextID, 3, 3, &v2ToV4[0], nil)
+	mpe := cmsStageAllocMatrix(ContextID, 3, 3, v2ToV4, nil)
 	if mpe == nil {
 		return nil
 	}
@@ -687,7 +573,7 @@ func cmsStageAllocLabV4ToV2(ContextID CmsContext) *cmsStage {
 		0, 0, 65280.0 / 65535.0,
 	}
 
-	mpe := cmsStageAllocMatrix(ContextID, 3, 3, &v4ToV2[0], nil)
+	mpe := cmsStageAllocMatrix(ContextID, 3, 3, v4ToV2, nil)
 	if mpe == nil {
 		return nil
 	}
@@ -715,7 +601,7 @@ func cmsStageNormalizeFromLabFloat(ContextID CmsContext) *cmsStage {
 		128.0 / 255.0,
 	}
 
-	mpe := cmsStageAllocMatrix(ContextID, 3, 3, &a1[0], &o1[0])
+	mpe := cmsStageAllocMatrix(ContextID, 3, 3, a1, o1)
 	if mpe == nil {
 		return nil
 	}
@@ -731,7 +617,7 @@ func cmsStageNormalizeFromXyzFloat(ContextID CmsContext) *cmsStage {
 		0, 0, normFactorXYZToFloat,
 	}
 
-	mpe := cmsStageAllocMatrix(ContextID, 3, 3, &a1[0], nil)
+	mpe := cmsStageAllocMatrix(ContextID, 3, 3, a1, nil)
 	if mpe == nil {
 		return nil
 	}
@@ -753,7 +639,7 @@ func cmsStageNormalizeToLabFloat(ContextID CmsContext) *cmsStage {
 		-128.0,
 	}
 
-	mpe := cmsStageAllocMatrix(ContextID, 3, 3, &a1[0], &o1[0])
+	mpe := cmsStageAllocMatrix(ContextID, 3, 3, a1, o1)
 	if mpe == nil {
 		return nil
 	}
@@ -769,7 +655,7 @@ func cmsStageNormalizeToXyzFloat(ContextID CmsContext) *cmsStage {
 		0, 0, normFactorFloatToXYZ,
 	}
 
-	mpe := cmsStageAllocMatrix(ContextID, 3, 3, &a1[0], nil)
+	mpe := cmsStageAllocMatrix(ContextID, 3, 3, a1, nil)
 	if mpe == nil {
 		return nil
 	}
@@ -782,10 +668,10 @@ func cmsStageAllocLabPrelin(ContextID CmsContext) *cmsStage {
 	var LabTable [3]*CmsToneCurve
 
 	LabTable[0] = CmsBuildGamma(ContextID, 1.0)
-	LabTable[1] = cmsBuildParametricToneCurve(ContextID, 108, &params[0])
-	LabTable[2] = cmsBuildParametricToneCurve(ContextID, 108, &params[0])
+	LabTable[1] = cmsBuildParametricToneCurve(ContextID, 108, params)
+	LabTable[2] = cmsBuildParametricToneCurve(ContextID, 108, params)
 
-	return cmsStageAllocToneCurves(ContextID, 3, &LabTable[0])
+	return cmsStageAllocToneCurves(ContextID, 3, LabTable[:])
 }
 func cmsStageFree(mpe *cmsStage) {
 	if mpe.FreePtr != nil {
@@ -878,43 +764,43 @@ func BlessLUT(lut *cmsPipeline) bool {
 }
 
 // _LUTeval16 evaluates the LUT on a 16-bit basis
-func LUTeval16(In *uint16, Out *uint16, D unsafe.Pointer) {
+func LUTeval16(In []uint16, Out []uint16, D unsafe.Pointer) {
 	lut := (*cmsPipeline)(D)
 	var Storage [2][MAX_STAGE_CHANNELS]float32
 	Phase := 0
 
 	// Convert input from 16-bit to float
-	From16ToFloat(In, &Storage[Phase][0], lut.InputChannels)
+	From16ToFloat(In, Storage[Phase][:], lut.InputChannels)
 
 	// Process each stage in the pipeline
 	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
 		NextPhase := Phase ^ 1
-		mpe.EvalPtr(&Storage[Phase][0], &Storage[NextPhase][0], mpe)
+		mpe.EvalPtr(Storage[Phase][:], Storage[NextPhase][:], mpe)
 		Phase = NextPhase
 	}
 
 	// Convert output from float to 16-bit
-	FromFloatTo16(&Storage[Phase][0], Out, lut.OutputChannels)
+	FromFloatTo16(Storage[Phase][:], Out, lut.OutputChannels)
 }
 
 // _LUTevalFloat evaluates the LUT on a float32 basis
-func LUTevalFloat(In *float32, Out *float32, D unsafe.Pointer) {
+func LUTevalFloat(In []float32, Out []float32, D unsafe.Pointer) {
 	lut := (*cmsPipeline)(D)
 	var Storage [2][MAX_STAGE_CHANNELS]float32
 	Phase := 0
 
 	// Copy input to the first storage buffer
-	memmove(unsafe.Pointer(&Storage[Phase][0]), unsafe.Pointer(In), uintptr(lut.InputChannels)*unsafe.Sizeof(float32(0)))
+	MemmoveSlice(Storage[Phase][:], In, int(lut.InputChannels)*int(unsafe.Sizeof(float32(0))))
 
 	// Process each stage in the pipeline
 	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
 		NextPhase := Phase ^ 1
-		mpe.EvalPtr(&Storage[Phase][0], &Storage[NextPhase][0], mpe)
+		mpe.EvalPtr(Storage[Phase][:], Storage[NextPhase][:], mpe)
 		Phase = NextPhase
 	}
 
 	// Copy the result to the output
-	memmove(unsafe.Pointer(Out), unsafe.Pointer(&Storage[Phase][0]), uintptr(lut.OutputChannels)*unsafe.Sizeof(float32(0)))
+	MemmoveSlice(Out, Storage[Phase][:], int(lut.OutputChannels)*int(unsafe.Sizeof(float32(0))))
 }
 
 // cmsPipelineAlloc allocates and initializes a new LUT pipeline
@@ -987,13 +873,13 @@ func cmsPipelineEval16(In []uint16, Out []uint16, lut *cmsPipeline) {
 	if lut == nil {
 		panic("lut is nil")
 	}
-	lut.Eval16Fn(&In[0], &Out[0], lut.Data)
+	lut.Eval16Fn(In, Out, lut.Data)
 }
 func cmsPipelineEvalFloat(In []float32, Out []float32, lut *cmsPipeline) {
 	if lut == nil {
 		panic("lut is nil")
 	}
-	lut.EvalFloatFn(&In[0], &Out[0], unsafe.Pointer(lut))
+	lut.EvalFloatFn(In, Out, unsafe.Pointer(lut))
 }
 func cmsPipelineDup(lut *cmsPipeline) *cmsPipeline {
 	if lut == nil {
@@ -1067,7 +953,7 @@ func cmsPipelineInsertStage(lut *cmsPipeline, loc cmsStageLoc, mpe *cmsStage) bo
 		return false
 	}
 
-	return BlessLUT(lut) 
+	return BlessLUT(lut)
 }
 func cmsPipelineUnlinkStage(lut *cmsPipeline, loc cmsStageLoc, mpe **cmsStage) {
 	if lut.Elements == nil {
@@ -1319,13 +1205,13 @@ func cmsPipelineEvalReverseFloat(Target, Result, Hint []float32, lut *cmsPipelin
 }
 
 // EvaluateCLUTfloat evaluates a CLUT in true floating point.
-func EvaluateCLUTfloat(In *float32, Out *float32, mpe *cmsStage) {
+func EvaluateCLUTfloat(In []float32, Out []float32, mpe *cmsStage) {
 	data := (*cmsStageCLutData)(mpe.Data)
 	data.Params.Interpolation.LerpFloat(In, Out, data.Params)
 }
 
 // EvaluateCLUTfloatIn16 converts to 16 bits, evaluates, and back to floating point.
-func EvaluateCLUTfloatIn16(In *float32, Out *float32, mpe *cmsStage) {
+func EvaluateCLUTfloatIn16(In []float32, Out []float32, mpe *cmsStage) {
 	var In16 [MAX_STAGE_CHANNELS]uint16
 	var Out16 [MAX_STAGE_CHANNELS]uint16
 
@@ -1335,9 +1221,9 @@ func EvaluateCLUTfloatIn16(In *float32, Out *float32, mpe *cmsStage) {
 		panic("Number of channels exceeds MAX_STAGE_CHANNELS")
 	}
 
-	FromFloatTo16(In, &In16[0], mpe.InputChannels)
-	data.Params.Interpolation.Lerp16(&In16[0], &Out16[0], data.Params)
-	From16ToFloat(&Out16[0], Out, mpe.OutputChannels)
+	FromFloatTo16(In, In16[:], mpe.InputChannels)
+	data.Params.Interpolation.Lerp16(In16[:], Out16[:], data.Params)
+	From16ToFloat(Out16[:], Out, mpe.OutputChannels)
 }
 
 // CubeSize calculates the total number of nodes in a hypercube.
@@ -1378,12 +1264,12 @@ func CLUTElemDup(mpe *cmsStage) unsafe.Pointer {
 
 	if data.Tab.T != nil {
 		if data.HasFloatValues {
-			newElem.Tab.TFloat = (*float32)(cmsDupMem(mpe.ContextID, unsafe.Pointer(data.Tab.TFloat), data.NEntries*uint32(unsafe.Sizeof(float32(0)))))
+			newElem.Tab.TFloat = ([]float32)(cmsDupMemSlice(data.Tab.TFloat))
 			if newElem.Tab.TFloat == nil {
 				goto Error
 			}
 		} else {
-			newElem.Tab.T = (*uint16)(cmsDupMem(mpe.ContextID, unsafe.Pointer(data.Tab.T), data.NEntries*uint32(unsafe.Sizeof(uint16(0)))))
+			newElem.Tab.T = ([]uint16)(cmsDupMemSlice(data.Tab.T))
 			if newElem.Tab.T == nil {
 				goto Error
 			}
@@ -1392,10 +1278,10 @@ func CLUTElemDup(mpe *cmsStage) unsafe.Pointer {
 
 	newElem.Params = cmsComputeInterpParamsEx(
 		mpe.ContextID,
-		&data.Params.nSamples[0],
+		data.Params.nSamples[:],
 		data.Params.nInputs,
 		data.Params.nOutputs,
-		unsafe.Pointer(newElem.Tab.T),
+		newElem.Tab.T,
 		data.Params.dwFlags,
 	)
 
@@ -1404,9 +1290,6 @@ func CLUTElemDup(mpe *cmsStage) unsafe.Pointer {
 	}
 
 Error:
-	if newElem.Tab.T != nil {
-		cmsFree(mpe.ContextID, unsafe.Pointer(newElem.Tab.T))
-	}
 	cmsFree(mpe.ContextID, unsafe.Pointer(newElem))
 	return nil
 }
@@ -1418,11 +1301,6 @@ func CLutElemTypeFree(mpe *cmsStage) {
 	// Already empty
 	if data == nil {
 		return
-	}
-
-	// Free the table
-	if data.Tab.T != nil {
-		cmsFree(mpe.ContextID, unsafe.Pointer(data.Tab.T))
 	}
 
 	// Free interpolation parameters
@@ -1438,7 +1316,7 @@ func cmsStageAllocCLut16bitGranular(
 	ContextID CmsContext,
 	clutPoints []uint32,
 	inputChan, outputChan uint32,
-	Table *uint16,
+	Table []uint16,
 ) *cmsStage {
 	if clutPoints == nil {
 		return nil
@@ -1469,19 +1347,15 @@ func cmsStageAllocCLut16bitGranular(
 		return nil
 	}
 
-	NewElem.Tab.T = (*uint16)(cmsCalloc(ContextID, NewElem.NEntries, uint32(unsafe.Sizeof(uint16(0)))))
+	NewElem.Tab.T = make([]uint16, NewElem.NEntries)
 
 	if Table != nil {
 		for i := 0; i < int(NewElem.NEntries); i++ {
-			// Calculate the address of the ith element in the allocated memory
-			ptrT := (*uint16)(unsafe.Add(unsafe.Pointer(NewElem.Tab.T), uintptr(i)*unsafe.Sizeof(uint16(0))))
-			ptrTable := (*uint16)(unsafe.Add(unsafe.Pointer(Table), uintptr(i)*unsafe.Sizeof(uint16(0))))
-			// Copy the value from Table to the allocated memory
-			*ptrT = *ptrTable
+			NewElem.Tab.T[i] = Table[i]
 		}
 	}
 
-	NewElem.Params = cmsComputeInterpParamsEx(ContextID, &clutPoints[0], inputChan, outputChan, unsafe.Pointer(NewElem.Tab.T), CMS_LERP_FLAGS_16BITS)
+	NewElem.Params = cmsComputeInterpParamsEx(ContextID, clutPoints, inputChan, outputChan, NewElem.Tab.T, CMS_LERP_FLAGS_16BITS)
 	if NewElem.Params == nil {
 		cmsStageFree(NewMPE)
 		return nil
@@ -1494,7 +1368,7 @@ func cmsStageAllocCLut16bitGranular(
 func cmsStageAllocCLut16bit(
 	ContextID CmsContext,
 	nGridPoints, inputChan, outputChan uint32,
-	Table *uint16,
+	Table []uint16,
 ) *cmsStage {
 	var Dimensions [MAX_INPUT_DIMENSIONS]uint32
 	for i := range Dimensions {
@@ -1547,18 +1421,15 @@ func cmsStageAllocCLutFloatGranular(
 		cmsStageFree(NewMPE)
 		return nil
 	}
-	NewElem.Tab.TFloat = (*float32)(cmsCalloc(ContextID, NewElem.NEntries, uint32(unsafe.Sizeof(float32(0)))))
+	NewElem.Tab.TFloat = make([]float32, NewElem.NEntries)
 
 	if Table != nil {
 		for i := 0; i < int(NewElem.NEntries); i++ {
-			// Calculate the address of the ith element in the allocated memory
-			ptr := (*float32)(unsafe.Add(unsafe.Pointer(NewElem.Tab.TFloat), uintptr(i)*unsafe.Sizeof(float32(0))))
-			// Copy the value from Table to the allocated memory
-			*ptr = Table[i]
+			NewElem.Tab.TFloat[i] = Table[i]
 		}
 	}
 
-	NewElem.Params = cmsComputeInterpParamsEx(ContextID, &clutPoints[0], inputChan, outputChan, unsafe.Pointer(NewElem.Tab.TFloat), CMS_LERP_FLAGS_FLOAT)
+	NewElem.Params = cmsComputeInterpParamsEx(ContextID, clutPoints, inputChan, outputChan, NewElem.Tab.TFloat, CMS_LERP_FLAGS_FLOAT)
 	if NewElem.Params == nil {
 		cmsStageFree(NewMPE)
 		return nil
@@ -1644,11 +1515,8 @@ func cmsStageSampleCLut16bit(
 		}
 
 		if clut.Tab.T != nil {
-			basePtr := unsafe.Pointer(clut.Tab.T) // Get the base pointer
 			for t := 0; t < int(nOutputs); t++ {
-				// Calculate the address for the element at index + t
-				elementPtr := (*uint16)(unsafe.Add(basePtr, uintptr(index+t)*unsafe.Sizeof(uint16(0))))
-				Out[t] = *elementPtr // Dereference the pointer to get the value
+				Out[t] = clut.Tab.T[index+t]
 			}
 		}
 
@@ -1658,11 +1526,8 @@ func cmsStageSampleCLut16bit(
 
 		if dwFlags&SAMPLER_INSPECT == 0 {
 			if clut.Tab.T != nil {
-				basePtr := unsafe.Pointer(clut.Tab.T) // Get the base pointer
 				for t := 0; t < int(nOutputs); t++ {
-					// Calculate the address for the element at index + t
-					elementPtr := (*uint16)(unsafe.Add(basePtr, uintptr(index+t)*unsafe.Sizeof(uint16(0))))
-					Out[t] = *elementPtr // Dereference the pointer to get the value
+					clut.Tab.T[index+t] = Out[t]
 				}
 			}
 
@@ -1717,11 +1582,8 @@ func cmsStageSampleCLutFloat(
 		}
 
 		if clut.Tab.TFloat != nil {
-			basePtr := unsafe.Pointer(clut.Tab.TFloat) // Get the base pointer
 			for t := 0; t < int(nOutputs); t++ {
-				// Calculate the address for the element at index + t
-				elementPtr := (*float32)(unsafe.Add(basePtr, uintptr(index+t)*unsafe.Sizeof(float32(0))))
-				Out[t] = *elementPtr // Dereference the pointer to get the value
+                Out[t] = clut.Tab.TFloat[index + t];
 			}
 		}
 
@@ -1731,11 +1593,8 @@ func cmsStageSampleCLutFloat(
 
 		if dwFlags&SAMPLER_INSPECT == 0 {
 			if clut.Tab.TFloat != nil {
-				basePtr := unsafe.Pointer(clut.Tab.TFloat) // Get the base pointer
 				for t := 0; t < int(nOutputs); t++ {
-					// Calculate the address for the element at index + t
-					elementPtr := (*float32)(unsafe.Add(basePtr, uintptr(index+t)*unsafe.Sizeof(float32(0))))
-					Out[t] = *elementPtr // Dereference the pointer to get the value
+					clut.Tab.TFloat[index + t] = Out[t];
 				}
 			}
 		}

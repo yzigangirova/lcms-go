@@ -55,11 +55,11 @@ const MAX_INPUT_DIMENSIONS = 15
 
 // _cmsInterpFn16 is a function type for 16-bit interpolation functions.
 // Performs precision-limited linear interpolation (e.g., tetrahedral or trilinear).
-type cmsInterpFn16 func(input *uint16, output *uint16, params *cmsInterpParams)
+type cmsInterpFn16 func(input []uint16, output []uint16, params *cmsInterpParams)
 
 // _cmsInterpFnFloat is a function type for floating-point interpolation functions.
 // Performs full-precision interpolation (e.g., tetrahedral or trilinear).
-type cmsInterpFnFloat func(input *float32, output *float32, params *cmsInterpParams)
+type cmsInterpFnFloat func(input []float32, output []float32, params *cmsInterpParams)
 
 // cmsInterpFunction holds either a 16-bit or floating-point interpolation function.
 type cmsInterpFunction struct {
@@ -76,7 +76,7 @@ type cmsInterpParams struct {
 	nSamples      [MAX_INPUT_DIMENSIONS]uint32 // Valid samples for each dimension
 	Domain        [MAX_INPUT_DIMENSIONS]uint32 // Domain = nSamples - 1
 	opta          [MAX_INPUT_DIMENSIONS]uint32 // Optimization values for 3D CLUT
-	Table         unsafe.Pointer               // Pointer to the actual interpolation table
+	Table         []uint16                     // Pointer to the actual interpolation table
 	Interpolation cmsInterpFunction            // Interpolation functions
 }
 
@@ -236,21 +236,21 @@ const CMS_PACK_FLAGS_FLOAT = 0x0001
 
 // StageToneCurvesData represents data for tone curves.
 type cmsStageToneCurvesData struct {
-	NCurves   uint32         // Number of curves
-	TheCurves **CmsToneCurve // Slice of pointers to ToneCurve
+	NCurves   uint32          // Number of curves
+	TheCurves []*CmsToneCurve // Slice of pointers to ToneCurve
 }
 
 // StageMatrixData represents data for a matrix transformation.
 type cmsStageMatrixData struct {
-	Double *float64 // Floating-point matrix data
-	Offset *float64 // Optional offset data
+	Double []float64 // Floating-point matrix data
+	Offset []float64 // Optional offset data
 }
 
 // StageCLutData represents data for a color lookup table (CLUT).
 type cmsStageCLutData struct {
 	Tab struct {
-		T      *uint16  // 16-bit table
-		TFloat *float32 // Float table
+		T      []uint16  // 16-bit table
+		TFloat []float32 // Float table
 	} // Union-like structure for CLUT representation
 	Params         *cmsInterpParams // Interpolation parameters
 	NEntries       uint32           // Number of entries in the table
@@ -275,15 +275,15 @@ type cmsOPToptimizeFn func(
 
 // _cmsPipelineEval16Fn is a function type for evaluating the pipeline in 16-bit precision.
 type cmsPipelineEval16Fn func(
-	In *uint16, // Input array
-	Out *uint16, // Output array
+	In []uint16, // Input array
+	Out []uint16, // Output array
 	Data unsafe.Pointer, // Arbitrary data
 )
 
 // _cmsPipelineEvalFloatFn is a function type for evaluating the pipeline in floating-point precision.
 type cmsPipelineEvalFloatFn func(
-	In *float32, // Input array
-	Out *float32, // Output array
+	In []float32, // Input array
+	Out []float32, // Output array
 	Data unsafe.Pointer, // Arbitrary data
 )
 

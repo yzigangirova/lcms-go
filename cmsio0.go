@@ -1358,7 +1358,6 @@ func MemoryRead(iohandler *cms_io_handler, buffer unsafe.Pointer, size, count ui
 
 	src := unsafe.Add(unsafe.Pointer(resData.Block), uintptr(resData.Pointer))
 	dest := unsafe.Slice((*byte)(buffer), length)
-
 	copy(dest, unsafe.Slice((*byte)(src), length))
 	resData.Pointer += length
 

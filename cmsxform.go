@@ -84,7 +84,7 @@ func cmsSetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP [cmsMAXCHANNELS]uint1
 		panic("ContextAlarmCodes is nil")
 	}
 
-	memcpy(unsafe.Pointer(&ContextAlarmCodes.AlarmCodes), unsafe.Pointer(&AlarmCodesP[0]), unsafe.Sizeof(ContextAlarmCodes.AlarmCodes))
+	Memcpy(ContextAlarmCodes.AlarmCodes[:], AlarmCodesP[:], 16)
 }
 
 // cmsGetAlarmCodesTHR gets the alarm codes for a specific context.
@@ -97,7 +97,7 @@ func cmsGetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP [cmsMAXCHANNELS]uint1
 		panic("ContextAlarmCodes is nil")
 	}
 
-	memcpy(unsafe.Pointer(&AlarmCodesP[0]), unsafe.Pointer(&ContextAlarmCodes.AlarmCodes), unsafe.Sizeof(ContextAlarmCodes.AlarmCodes))
+	Memcpy(AlarmCodesP[:], ContextAlarmCodes.AlarmCodes[:], 16)
 }
 
 // cmsSetAlarmCodes sets the global alarm codes.
@@ -256,6 +256,7 @@ func CmsDoTransformLineStride(
 
 // Float xform converts floats. Since there are no performance issues, one routine does all job, including gamut check.
 // Note that because extended range, we can use a -1.0 value for out of gamut in this case.
+
 func FloatXFORM(
 	p *cmsTRANSFORM,
 	in unsafe.Pointer,
@@ -270,38 +271,46 @@ func FloatXFORM(
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
 
 	strideIn, strideOut = 0, 0
+
+	//  Convert input and output buffers to slices once
+	inSlice := unsafe.Slice((*uint8)(in), PixelsPerLine*LineCount*Stride.BytesPerPlaneIn)
+	outSlice := unsafe.Slice((*uint8)(out), PixelsPerLine*LineCount*Stride.BytesPerPlaneOut)
+
 	for i := uint32(0); i < LineCount; i++ {
-		// Create slices for input and output
-		accum := (*[1 << 30]uint8)(unsafe.Add(in, uintptr(strideIn)))[:Stride.BytesPerPlaneIn*PixelsPerLine]
-		output := (*[1 << 30]uint8)(unsafe.Add(out, uintptr(strideOut)))[:Stride.BytesPerPlaneOut*PixelsPerLine]
+		//  Use slices with offsets instead of unsafe
+		accum := inSlice[strideIn:]
+		output := outSlice[strideOut:]
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
-			// Use FromInputFloat to process input
+			//  Process input correctly using slice indexing
 			accum = p.FromInputFloat(p, fIn[:], accum, Stride.BytesPerPlaneIn)
 
-			outOfGamutSlice := (*[1]float32)(unsafe.Pointer(&OutOfGamut))[:]
+			//  Replace unsafe pointer arithmetic for `OutOfGamut`
+			outOfGamutSlice := []float32{OutOfGamut}
+
 			if p.GamutCheck != nil {
-				// Evaluate the gamut check
+				//  Use slice indexing instead of pointer casting
 				cmsPipelineEvalFloat(fIn[:], outOfGamutSlice, p.GamutCheck)
 
-				if OutOfGamut > 0.0 {
-					// Mark all output channels as out of gamut
-					for c := 0; c < cmsMAXCHANNELS; c++ {
+				if outOfGamutSlice[0] > 0.0 {
+					//  Mark all output channels as out of gamut efficiently
+					for c := range fOut {
 						fOut[c] = -1.0
 					}
 				} else {
-					// Evaluate the pipeline normally
+					//  Evaluate the pipeline normally
 					cmsPipelineEvalFloat(fIn[:], fOut[:], p.Lut)
 				}
 			} else {
-				// No gamut check; evaluate pipeline directly
+				//  No gamut check; evaluate pipeline directly
 				cmsPipelineEvalFloat(fIn[:], fOut[:], p.Lut)
 			}
 
-			// Use ToOutputFloat to process output
+			//  Process output correctly
 			output = p.ToOutputFloat(p, fOut[:], output, Stride.BytesPerPlaneOut)
 		}
 
+		//  Update strides correctly
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
@@ -315,26 +324,37 @@ func NullFloatXFORM(
 	Stride *cmsStride,
 ) {
 	var fIn [cmsMAXCHANNELS]float32
-	var accum, output []uint8
 	var strideIn, strideOut uint32
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
 
 	strideIn, strideOut = 0, 0
+
+	//  Compute correct slice sizes
+	inSize := int(PixelsPerLine * LineCount * Stride.BytesPerPlaneIn)
+	outSize := int(PixelsPerLine * LineCount * Stride.BytesPerPlaneOut)
+
+	//  Convert input and output buffers to slices once
+	inSlice := unsafe.Slice((*uint8)(in), inSize)
+	outSlice := unsafe.Slice((*uint8)(out), outSize)
+
 	for i := uint32(0); i < LineCount; i++ {
-		// Create slices for accum and output
-		accum = (*[1 << 30]uint8)(unsafe.Add(in, uintptr(strideIn)))[:Stride.BytesPerPlaneIn*PixelsPerLine]
-		output = (*[1 << 30]uint8)(unsafe.Add(out, uintptr(strideOut)))[:Stride.BytesPerPlaneOut*PixelsPerLine]
+		//  Use slices with offsets instead of unsafe
+		accum := inSlice[strideIn:]
+		output := outSlice[strideOut:]
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
+			//  Process input correctly using slice indexing
 			accum = p.FromInputFloat(p, fIn[:], accum, Stride.BytesPerPlaneIn)
 			output = p.ToOutputFloat(p, fIn[:], output, Stride.BytesPerPlaneOut)
 		}
 
+		//  Update strides correctly
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
 }
+
 func NullXFORM(
 	p *cmsTRANSFORM,
 	in unsafe.Pointer,
@@ -348,20 +368,32 @@ func NullXFORM(
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
 
 	strideIn, strideOut = 0, 0
+
+	//  Compute correct slice sizes
+	inSize := int(PixelsPerLine * LineCount * Stride.BytesPerPlaneIn)
+	outSize := int(PixelsPerLine * LineCount * Stride.BytesPerPlaneOut)
+
+	//  Convert input and output buffers to slices once
+	inSlice := unsafe.Slice((*uint8)(in), inSize)
+	outSlice := unsafe.Slice((*uint8)(out), outSize)
+
 	for i := uint32(0); i < LineCount; i++ {
-		// Create slices for input and output
-		accum := (*[1 << 30]uint8)(unsafe.Add(in, uintptr(strideIn)))[:Stride.BytesPerPlaneIn*PixelsPerLine]
-		output := (*[1 << 30]uint8)(unsafe.Add(out, uintptr(strideOut)))[:Stride.BytesPerPlaneOut*PixelsPerLine]
+		//  Use slices with offsets instead of unsafe
+		accum := inSlice[strideIn:]
+		output := outSlice[strideOut:]
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
+			//  Process input correctly using slice indexing
 			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
 			output = p.ToOutput(p, wIn[:], output, Stride.BytesPerPlaneOut)
 		}
 
+		//  Update strides correctly
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
 }
+
 func PrecalculatedXFORM(
 	p *cmsTRANSFORM,
 	in unsafe.Pointer,
@@ -375,18 +407,28 @@ func PrecalculatedXFORM(
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
 
 	strideIn, strideOut = 0, 0
+
+	// Convert input and output to slices
+	inSlice := unsafe.Slice((*uint8)(in), PixelsPerLine*LineCount*Stride.BytesPerPlaneIn)
+	outSlice := unsafe.Slice((*uint8)(out), PixelsPerLine*LineCount*Stride.BytesPerPlaneOut)
+
 	for i := uint32(0); i < LineCount; i++ {
-		// Create slices for input and output buffers
-		accum := (*[1 << 30]uint8)(unsafe.Add(in, uintptr(strideIn)))[:Stride.BytesPerPlaneIn*PixelsPerLine]
-		output := (*[1 << 30]uint8)(unsafe.Add(out, uintptr(strideOut)))[:Stride.BytesPerPlaneOut*PixelsPerLine]
+		// Accumulator slices for this line
+		accum := inSlice[strideIn:]
+		output := outSlice[strideOut:]
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
-			// Use slice indexing for accum and output
+			// Process input
 			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
-			p.Lut.Eval16Fn(&wIn[0], &wOut[0], p.Lut.Data)
+
+			// Evaluate LUT
+			p.Lut.Eval16Fn(wIn[:], wOut[:], p.Lut.Data)
+
+			// Process output
 			output = p.ToOutput(p, wOut[:], output, Stride.BytesPerPlaneOut)
 		}
 
+		// Update strides
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
@@ -398,7 +440,7 @@ func TransformOnePixelWithGamutCheck(p *cmsTRANSFORM, wIn, wOut []uint16) {
 
 	woutOfGamutSlice := (*[1]uint16)(unsafe.Pointer(&wOutOfGamut))[:]
 	// Evaluate the gamut check function
-	p.GamutCheck.Eval16Fn(&wIn[0], &woutOfGamutSlice[0], p.GamutCheck.Data)
+	p.GamutCheck.Eval16Fn(wIn, woutOfGamutSlice, p.GamutCheck.Data)
 
 	if wOutOfGamut >= 1 {
 		// If out of gamut, use alarm codes
@@ -408,9 +450,10 @@ func TransformOnePixelWithGamutCheck(p *cmsTRANSFORM, wIn, wOut []uint16) {
 		}
 	} else {
 		// Otherwise, evaluate the LUT
-		p.Lut.Eval16Fn(&wIn[0], &wOut[0], p.Lut.Data)
+		p.Lut.Eval16Fn(wIn, wOut, p.Lut.Data)
 	}
 }
+
 func PrecalculatedXFORMGamutCheck(
 	p *cmsTRANSFORM,
 	in, out unsafe.Pointer,
@@ -424,18 +467,23 @@ func PrecalculatedXFORMGamutCheck(
 
 	strideIn, strideOut = 0, 0
 
+	// Convert input and output buffers to slices ONCE before looping
+	inSlice := unsafe.Slice((*uint8)(in), PixelsPerLine*LineCount*Stride.BytesPerPlaneIn)
+	outSlice := unsafe.Slice((*uint8)(out), PixelsPerLine*LineCount*Stride.BytesPerPlaneOut)
+
 	for i := uint32(0); i < LineCount; i++ {
-		// Create slices for input and output buffers
-		accum := (*[1 << 30]uint8)(unsafe.Add(in, uintptr(strideIn)))[:Stride.BytesPerPlaneIn*PixelsPerLine]
-		output := (*[1 << 30]uint8)(unsafe.Add(out, uintptr(strideOut)))[:Stride.BytesPerPlaneOut*PixelsPerLine]
+		// Use slices with offsets instead of large allocation
+		accum := inSlice[strideIn:]
+		output := outSlice[strideOut:]
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
-			// Use slice indexing for accum and output
+			// Correctly advance accum and output slices
 			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
 			TransformOnePixelWithGamutCheck(p, wIn[:], wOut[:])
 			output = p.ToOutput(p, wOut[:], output, Stride.BytesPerPlaneOut)
 		}
 
+		// Update strides correctly
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
@@ -458,31 +506,38 @@ func CachedXFORM(
 
 	strideIn, strideOut = 0, 0
 
-	for i := uint32(0); i < LineCount; i++ {
-		accumPtr := (*uint8)(unsafe.Add(in, uintptr(strideIn)))
-		outputPtr := (*uint8)(unsafe.Add(out, uintptr(strideOut)))
-		accum := unsafe.Slice(accumPtr, 4)
-		output := unsafe.Slice(outputPtr, 3)
-		for j := uint32(0); j < PixelsPerLine; j++ {
-			accumPtr = &(p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn))[0]
+	// Convert input and output buffers to slices once before looping
+	inSlice := unsafe.Slice((*uint8)(in), PixelsPerLine*LineCount*Stride.BytesPerPlaneIn)
+	outSlice := unsafe.Slice((*uint8)(out), PixelsPerLine*LineCount*Stride.BytesPerPlaneOut)
 
+	for i := uint32(0); i < LineCount; i++ {
+		// Use slices with offsets instead of pointer arithmetic
+		accum := inSlice[strideIn:]
+		output := outSlice[strideOut:]
+
+		for j := uint32(0); j < PixelsPerLine; j++ {
+			// Correctly advance accum and output using slices
+			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
+
+			// Use cache to avoid redundant calculations
 			if reflect.DeepEqual(wIn, cache.CacheIn) {
 				copy(wOut[:], cache.CacheOut[:])
 			} else {
-				p.Lut.Eval16Fn(&wIn[0], &wOut[0], p.Lut.Data)
+				p.Lut.Eval16Fn(wIn[:], wOut[:], p.Lut.Data)
 				copy(cache.CacheIn[:], wIn[:])
 				copy(cache.CacheOut[:], wOut[:])
 			}
 
-			outputPtr = &(p.ToOutput(p, wOut[:], output, Stride.BytesPerPlaneOut))[0]
-			accum = unsafe.Slice(accumPtr, 4)
-			output = unsafe.Slice(outputPtr, 3)
+			// Advance output using slice indexing
+			output = p.ToOutput(p, wOut[:], output, Stride.BytesPerPlaneOut)
 		}
 
+		// Update strides correctly
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
 }
+
 func CachedXFORMGamutCheck(
 	p *cmsTRANSFORM,
 	in, out unsafe.Pointer,
@@ -500,13 +555,20 @@ func CachedXFORMGamutCheck(
 
 	strideIn, strideOut = 0, 0
 
+	//  Convert input and output buffers to slices once
+	inSlice := unsafe.Slice((*uint8)(in), PixelsPerLine*LineCount*Stride.BytesPerPlaneIn)
+	outSlice := unsafe.Slice((*uint8)(out), PixelsPerLine*LineCount*Stride.BytesPerPlaneOut)
+
 	for i := uint32(0); i < LineCount; i++ {
-		accum := (*[1 << 30]uint8)(unsafe.Add(in, uintptr(strideIn)))[:Stride.BytesPerPlaneIn*PixelsPerLine]
-		output := (*[1 << 30]uint8)(unsafe.Add(out, uintptr(strideOut)))[:Stride.BytesPerPlaneOut*PixelsPerLine]
+		//  Use slices with offsets instead of unsafe
+		accum := inSlice[strideIn:]
+		output := outSlice[strideOut:]
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
+			//  Correctly advance accum using slices
 			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
 
+			//  Use cache for performance optimization
 			if reflect.DeepEqual(wIn, cache.CacheIn) {
 				copy(wOut[:], cache.CacheOut[:])
 			} else {
@@ -515,9 +577,11 @@ func CachedXFORMGamutCheck(
 				copy(cache.CacheOut[:], wOut[:])
 			}
 
+			//  Correctly advance output using slices
 			output = p.ToOutput(p, wOut[:], output, Stride.BytesPerPlaneOut)
 		}
 
+		//  Update strides correctly
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
@@ -1107,12 +1171,10 @@ func cmsCreateExtendedTransform(
 	// If this is a cached transform, init first value, which is zero (16 bits only)
 	if dwFlags&cmsFLAGS_NOCACHE == 0 {
 
-		memset(unsafe.Pointer(&xform.Cache.CacheIn[0]), 0, unsafe.Sizeof(xform.Cache.CacheIn))
-
 		if xform.GamutCheck != nil {
 			TransformOnePixelWithGamutCheck(xform, xform.Cache.CacheIn[:], xform.Cache.CacheOut[:])
 		} else {
-			xform.Lut.Eval16Fn(&xform.Cache.CacheIn[0], &xform.Cache.CacheOut[0], xform.Lut.Data)
+			xform.Lut.Eval16Fn(xform.Cache.CacheIn[:], xform.Cache.CacheOut[:], xform.Lut.Data)
 		}
 
 	}

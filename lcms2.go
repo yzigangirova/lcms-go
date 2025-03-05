@@ -802,7 +802,7 @@ type CmsCIExyYTRIPLE struct {
 type cmsSEQ struct {
 	n         uint32
 	ContextID CmsContext
-	seq       *cmsPSEQDESC
+	seq       []cmsPSEQDESC
 }
 
 type cmsPSEQDESC struct {
@@ -981,7 +981,7 @@ type cmsCurveSegment struct {
 	Type          int32
 	Params        [10]float64
 	NGridPoints   uint32
-	SampledPoints *float32
+	SampledPoints []float32
 }
 
 type cmsSAMPLER16 func(In []uint16, Out []uint16, Cargo unsafe.Pointer) int32
