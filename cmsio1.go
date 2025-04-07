@@ -1,6 +1,7 @@
 package golcms
 
 import (
+	"fmt"
 	"unsafe"
 )
 
@@ -322,7 +323,7 @@ func BuildGrayInputMatrixPipeline(hProfile CmsHPROFILE) *cmsPipeline {
 		CmsFreeToneCurve(EmptyTab)
 	} else {
 		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 1, []*CmsToneCurve{GrayTRC})) ||
-			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 1, GrayInputMatrix[:], nil)) {
+			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 1, GrayInputMatrix, nil)) {
 			goto Error
 		}
 	}
@@ -333,9 +334,9 @@ Error:
 	cmsPipelineFree(Lut)
 	return nil
 }
-
-// BuildRGBInputMatrixShaper translates the second function
 func BuildRGBInputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
+	fmt.Println("START BuildRGBInputMatrixShaper")
+
 	ContextID := cmsGetProfileContextID(hProfile)
 	var Mat cmsMAT3
 
@@ -350,21 +351,86 @@ func BuildRGBInputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
 		}
 	}
 
+	// Debug: Print adjusted matrix
+	fmt.Println("Adjusted Matrix:")
+	for i := 0; i < 3; i++ {
+		fmt.Printf("Row %d: %f %f %f\n", i, Mat.V[i].N[0], Mat.V[i].N[1], Mat.V[i].N[2])
+	}
+
+	// Load tone curves
 	Shapes := [3]*CmsToneCurve{
 		(*CmsToneCurve)(cmsReadTag(hProfile, cmsSigRedTRCTag)),
 		(*CmsToneCurve)(cmsReadTag(hProfile, cmsSigGreenTRCTag)),
 		(*CmsToneCurve)(cmsReadTag(hProfile, cmsSigBlueTRCTag)),
 	}
 
+	// Deep Debug: Print tone curve contents
+	/*	for i, shape := range Shapes {
+		if shape == nil {
+			fmt.Printf("ToneCurve[%d]: nil\n", i)
+			continue
+		}
+		fmt.Printf("ToneCurve[%d]:\n", i)
+		fmt.Printf("  nSegments: %d\n", shape.nSegments)
+		fmt.Printf("  nEntries:  %d\n", shape.nEntries)
+
+		if len(shape.Table16) > 0 {
+			fmt.Printf("  Table16 (len=%d): [", len(shape.Table16))
+			limit := len(shape.Table16)
+			if limit > 10 {
+				limit = 10
+			}
+			for j := 0; j < limit; j++ {
+				fmt.Printf("%d ", shape.Table16[j])
+			}
+			if len(shape.Table16) > 10 {
+				fmt.Print("... ")
+			}
+			fmt.Println("]")
+		}
+
+		if len(shape.Segments) > 0 {
+			fmt.Printf("  Segments (len=%d):\n", len(shape.Segments))
+			for j, seg := range shape.Segments {
+				fmt.Printf("    Segment[%d]: X0=%.6f X1=%.6f Type=%d NGridPoints=%d\n",
+					j, seg.X0, seg.X1, seg.Type, seg.NGridPoints)
+				if seg.NGridPoints > 0 && len(seg.SampledPoints) > 0 {
+					limit := len(seg.SampledPoints)
+					if limit > 10 {
+						limit = 10
+					}
+					fmt.Printf("      SampledPoints (len=%d): [", len(seg.SampledPoints))
+					for k := 0; k < limit; k++ {
+						fmt.Printf("%.6f ", seg.SampledPoints[k])
+					}
+					if len(seg.SampledPoints) > 10 {
+						fmt.Print("... ")
+					}
+					fmt.Println("]")
+				}
+			}
+		}
+
+		if shape.InterpParams != nil {
+			p := shape.InterpParams
+			fmt.Printf("  InterpParams:\n")
+			fmt.Printf("    nInputs: %d, nOutputs: %d, dwFlags: %d\n", p.nInputs, p.nOutputs, p.dwFlags)
+			fmt.Printf("    nSamples: %v\n", p.nSamples[:])
+			fmt.Printf("    Domain:   %v\n", p.Domain[:])
+		} else {
+			fmt.Println("  InterpParams: nil")
+		}
+	}*/
+
 	if Shapes[0] == nil || Shapes[1] == nil || Shapes[2] == nil {
 		return nil
 	}
 
+	// Build pipeline
 	Lut := cmsPipelineAlloc(ContextID, 3, 3)
 	if Lut != nil {
-
 		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 3, Shapes[:])) ||
-			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 3, Mat.V[0].N[:], nil)) {
+			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 3, MatToSlice(Mat), nil)) {
 			goto Error
 		}
 
@@ -373,13 +439,16 @@ func BuildRGBInputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
 				goto Error
 			}
 		}
-		return Lut
 	}
+	fmt.Println("END BuildRGBInputMatrixShaper")
+	return Lut
 
 Error:
 	cmsPipelineFree(Lut)
 	return nil
 }
+
+
 
 // cmsReadFloatInputTag translates the first function
 func cmsReadFloatInputTag(hProfile CmsHPROFILE, tagFloat cmsTagSignature) *cmsPipeline {
@@ -488,7 +557,6 @@ func cmsReadInputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 	if CmsGetColorSpace(hProfile) == cmsSigGrayData {
 		return BuildGrayInputMatrixPipeline(hProfile)
 	}
-
 	return BuildRGBInputMatrixShaper(hProfile)
 }
 
@@ -543,6 +611,7 @@ func BuildGrayOutputPipeline(hProfile CmsHPROFILE) *cmsPipeline {
 
 // BuildRGBOutputMatrixShaper translates the given function
 func BuildRGBOutputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
+	fmt.Println("BuildRGBOutputMatrixShaper")
 	ContextID := cmsGetProfileContextID(hProfile)
 	var Mat, Inv cmsMAT3
 	var Shapes, InvShapes [3]*CmsToneCurve
@@ -587,7 +656,7 @@ func BuildRGBOutputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
 			}
 		}
 
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 3, Inv.V[0].N[:], nil)) ||
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 3, MatToSlice(Inv), nil)) ||
 			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 3, InvShapes[:])) {
 			goto Error
 		}
@@ -603,6 +672,7 @@ Error:
 }
 
 func ChangeInterpolationToTrilinear(Lut *cmsPipeline) {
+	//	fmt.Println("ChangeInterpolationToTrilinear")
 	for Stage := cmsPipelineGetPtrToFirstStage(Lut); Stage != nil; Stage = cmsStageNext(Stage) {
 		if cmsStageType(Stage) == cmsSigCLutElemType {
 			CLUT := (*cmsStageCLutData)(Stage.Data)
@@ -653,6 +723,7 @@ Error:
 }
 
 func cmsReadOutputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
+	//	fmt.Println("cmsReadOutputLUT")
 	ContextID := cmsGetProfileContextID(hProfile)
 
 	if Intent <= INTENT_ABSOLUTE_COLORIMETRIC {
@@ -803,7 +874,7 @@ func cmsReadProfileSequence(hProfile CmsHPROFILE) *cmsSEQ {
 	// Ok, proceed to the mixing
 	if NewSeq != nil {
 		for i := uint32(0); i < ProfileSeq.n; i++ {
-			memmove(unsafe.Pointer(&NewSeq.seq[i].ProfileID), unsafe.Pointer(&ProfileId.seq[i].ProfileID), unsafe.Sizeof(cmsProfileID{}))
+			copy(NewSeq.seq[i].ProfileID[:], ProfileId.seq[i].ProfileID[:])
 			NewSeq.seq[i].Description = cmsMLUdup(ProfileId.seq[i].Description)
 		}
 	}
@@ -853,7 +924,7 @@ func cmsCompileProfileSequence(ContextID CmsContext, nProfiles uint32, hProfiles
 		// Extract header attributes
 		cmsGetHeaderAttributes(h, &ps.attributes)
 		//	cmsGetHeaderProfileID(h, &ps.ProfileID.ID8[0])
-		cmsGetHeaderProfileID(h, &ps.ProfileID[0]) //instead of union in C
+		cmsGetHeaderProfileID(h, ps.ProfileID[:]) //instead of union in C
 		ps.deviceMfg = cmsSignature(cmsGetHeaderManufacturer(h))
 		ps.deviceModel = cmsSignature(cmsGetHeaderModel(h))
 

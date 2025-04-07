@@ -216,31 +216,30 @@ func cmsSetHeaderModel(hProfile CmsHPROFILE, Model uint32) {
 // cmsGetHeaderAttributes retrieves the attributes from the profile
 func cmsGetHeaderAttributes(hProfile CmsHPROFILE, Flags *uint64) {
 	icc := (*cmsICCPROFILE)(hProfile)
-	memmove(unsafe.Pointer(Flags), unsafe.Pointer(&icc.Attributes), unsafe.Sizeof(icc.Attributes))
+	*Flags = icc.Attributes
 }
 
 // cmsSetHeaderAttributes sets the attributes in the profile
 func cmsSetHeaderAttributes(hProfile CmsHPROFILE, Flags uint64) {
 	icc := (*cmsICCPROFILE)(hProfile)
-	memmove(unsafe.Pointer(&icc.Attributes), unsafe.Pointer(&Flags), unsafe.Sizeof(icc.Attributes))
+	icc.Attributes = Flags
 }
 
 // cmsGetHeaderProfileID retrieves the profile ID from the profile
-func cmsGetHeaderProfileID(hProfile CmsHPROFILE, ProfileID *byte) {
+func cmsGetHeaderProfileID(hProfile CmsHPROFILE, ProfileID []byte) {
 	icc := (*cmsICCPROFILE)(hProfile)
-	memmove(unsafe.Pointer(ProfileID), unsafe.Pointer(&icc.ProfileID), unsafe.Sizeof(icc.ProfileID))
+	copy(ProfileID, icc.ProfileID[:])
 }
 
 // cmsSetHeaderProfileID sets the profile ID in the profile
-func cmsSetHeaderProfileID(hProfile CmsHPROFILE, ProfileID *byte) {
+func cmsSetHeaderProfileID(hProfile CmsHPROFILE, ProfileID []byte) {
 	icc := (*cmsICCPROFILE)(hProfile)
-	memmove(unsafe.Pointer(&icc.ProfileID), unsafe.Pointer(ProfileID), unsafe.Sizeof(icc.ProfileID))
+	copy(ProfileID, icc.ProfileID[:])
 }
 
 // cmsGetHeaderCreationDateTime retrieves the creation date and time from the profile
 func cmsGetHeaderCreationDateTime(hProfile CmsHPROFILE) time.Time {
 	icc := (*cmsICCPROFILE)(hProfile)
-	//memmove(unsafe.Pointer(t), unsafe.Pointer(&icc.Created), unsafe.Sizeof(icc.Created))
 	return icc.Created
 }
 
@@ -326,9 +325,7 @@ func cmsGetProfileVersion(hProfile CmsHPROFILE) float64 {
 }
 func cmsOpenProfileFromFileTHR(ContextID CmsContext, lpFileName string, sAccess string) CmsHPROFILE {
 	var NewIcc *cmsICCPROFILE
-	fmt.Println("aaa")
 	hEmpty := cmsCreateProfilePlaceholder(ContextID)
-	fmt.Println("bbb")
 
 	if hEmpty == nil {
 		return nil
@@ -337,7 +334,6 @@ func cmsOpenProfileFromFileTHR(ContextID CmsContext, lpFileName string, sAccess 
 	NewIcc = (*cmsICCPROFILE)(hEmpty)
 
 	NewIcc.IOhandler = cmsOpenIOhandlerFromFile(ContextID, lpFileName, sAccess)
-	fmt.Println("ccc")
 	if NewIcc.IOhandler == nil {
 		goto Error
 	}
@@ -352,7 +348,6 @@ func cmsOpenProfileFromFileTHR(ContextID CmsContext, lpFileName string, sAccess 
 	if !cmsReadHeader(NewIcc) {
 		goto Error
 	}
-	fmt.Println("ddd")
 
 	return hEmpty
 
@@ -407,8 +402,7 @@ func cmsSaveProfileToIOhandler(hProfile CmsHPROFILE, io *cmsIOHANDLER) uint32 {
 	if !cmsLockMutex(ContextID, unsafe.Pointer(Icc.UsrMutex)) {
 		return 0
 	}
-	memmove(unsafe.Pointer(&Keep), unsafe.Pointer(Icc), unsafe.Sizeof(cmsICCPROFILE{}))
-
+	Keep = *Icc
 	ContextID = cmsGetProfileContextID(hProfile)
 	Icc.IOhandler = cmsOpenIOhandlerFromNULL(ContextID)
 	PrevIO = Icc.IOhandler
@@ -438,8 +432,7 @@ func cmsSaveProfileToIOhandler(hProfile CmsHPROFILE, io *cmsIOHANDLER) uint32 {
 			goto Error
 		}
 	}
-
-	memmove(unsafe.Pointer(&Keep), unsafe.Pointer(Icc), unsafe.Sizeof(cmsICCPROFILE{}))
+	*Icc = Keep
 	if !cmsCloseIOhandler(PrevIO) {
 		UsedSpace = 0
 	}
@@ -570,7 +563,7 @@ func cmsReadTag(hProfile CmsHPROFILE, sig cmsTagSignature) unsafe.Pointer {
 	var BaseType cmsTagTypeSignature
 	var Offset, TagSize, ElemCount uint32
 	var n int
-
+	fmt.Println("start cmsReadTag")
 	// Lock the mutex
 	if !cmsLockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex)) {
 		return nil
@@ -665,7 +658,6 @@ func cmsReadTag(hProfile CmsHPROFILE, sig cmsTagSignature) unsafe.Pointer {
 	Icc.TagTypeHandlers[n] = TypeHandler
 	LocalTypeHandler.ContextID = Icc.ContextID
 	LocalTypeHandler.ICCVersion = Icc.Version
-
 	// Read the tag
 	Icc.TagPtrs[n] = LocalTypeHandler.ReadFn(&LocalTypeHandler, io, &ElemCount, TagSize)
 	// The tag type is supported, but something wrong happened and we cannot read the tag.
@@ -690,6 +682,7 @@ func cmsReadTag(hProfile CmsHPROFILE, sig cmsTagSignature) unsafe.Pointer {
 
 	// Unlock and return
 	cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
+	fmt.Println("end cmsReadTag")
 	return Icc.TagPtrs[n]
 
 Error:
@@ -750,6 +743,7 @@ func cmsGetTagTrueType(hProfile CmsHPROFILE, sig cmsTagSignature) cmsTagTypeSign
 
 // cmsWriteTag translates the given function
 func cmsWriteTag(hProfile CmsHPROFILE, sig cmsTagSignature, data unsafe.Pointer) bool {
+	//	fmt.Println("WriteTag")
 	Icc := (*cmsICCPROFILE)(unsafe.Pointer(hProfile))
 	var TypeHandler *cmsTagTypeHandler
 	var LocalTypeHandler cmsTagTypeHandler
@@ -1051,19 +1045,16 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 	var Header cmsICCHeader
 	var HeaderSize, TagCount uint32
 	io := Icc.IOhandler
-	fmt.Println("111aa unsafe.Sizeof(cmsICCHeader{}) ", unsafe.Sizeof(cmsICCHeader{}))
 	// Read the header
 	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&Header), uint32(unsafe.Sizeof(cmsICCHeader{})), 1) != 1 {
 		return false
 	}
-	fmt.Println("111bb")
 
 	// Validate file as an ICC profile
 	if cmsAdjustEndianess32(uint32(Header.Magic)) != cmsMagicNumber {
 		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_BAD_SIGNATURE, "not an ICC profile, invalid signature")
 		return false
 	}
-	fmt.Println("111cc")
 
 	// Adjust endianness of the used parameters
 	Icc.DeviceClass = cmsProfileClassSignature(cmsAdjustEndianess32(uint32(Header.DeviceClass)))
@@ -1081,13 +1072,11 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported profile version")
 		return false
 	}
-	fmt.Println("111dd")
 
 	if !validDeviceClass(Icc.DeviceClass) {
 		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported device class")
 		return false
 	}
-	fmt.Println("111ee")
 
 	// Get size as reported in header
 	HeaderSize = cmsAdjustEndianess32(Header.Size)
@@ -1099,19 +1088,16 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 	Icc.Created = cmsDecodeDateTimeNumber(&Header.Date)
 
 	// The profile ID are 32 raw bytes
-	//memmove(unsafe.Pointer(&Icc.ProfileID.ID32[0]), unsafe.Pointer(&Header.ProfileID.ID32[0]), 16)
-	memmove(unsafe.Pointer(&Icc.ProfileID[0]), unsafe.Pointer(&Header.ProfileID[0]), 16)
+	copy(Icc.ProfileID[:], Header.ProfileID[:])
 
 	// Read tag directory
 	if !cmsReadUInt32Number(io, &TagCount) {
 		return false
 	}
-	fmt.Println("111ii")
 	if TagCount > MAX_TABLE_TAG {
 		cmsSignalError(unsafe.Pointer(Icc.ContextID), cmsERROR_RANGE, "Too many tags")
 		return false
 	}
-	fmt.Println("111kk")
 
 	// Initialize tag directory
 	Icc.TagCount = 0
@@ -1186,7 +1172,7 @@ func cmsWriteHeader(Icc *cmsICCPROFILE, UsedSpace uint32) bool {
 	Header.Creator = cmsSignature(cmsAdjustEndianess32(lcmsSignature))
 
 	// Set profile ID. Endianness is always big endian
-	memmove(unsafe.Pointer(&Header.ProfileID), unsafe.Pointer(&Icc.ProfileID), 16)
+	copy(Header.ProfileID[:], Icc.ProfileID[:])
 
 	// Write header
 	if !Icc.IOhandler.Write((*cms_io_handler)(Icc.IOhandler), uint32(unsafe.Sizeof(Header)), unsafe.Pointer(&Header)) {

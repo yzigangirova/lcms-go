@@ -129,7 +129,7 @@ func f_1(t float64) float64 {
 // Standard XYZ to Lab. it can handle negative XZY numbers in some cases
 func cmsXYZ2Lab(whitePoint *cmsCIEXYZ, lab *cmsCIELab, xyz *cmsCIEXYZ) {
 	if whitePoint == nil {
-		whitePoint = &cmsCIEXYZ{X: 0.95047, Y: 1.00000, Z: 1.08883} // D50 white point
+		whitePoint = cmsD50_XYZ()
 	}
 
 	fx := f(xyz.X / whitePoint.X)
@@ -144,7 +144,7 @@ func cmsXYZ2Lab(whitePoint *cmsCIEXYZ, lab *cmsCIELab, xyz *cmsCIEXYZ) {
 // Lab to XYZ conversion
 func cmsLab2XYZ(whitePoint *cmsCIEXYZ, xyz *cmsCIEXYZ, lab *cmsCIELab) {
 	if whitePoint == nil {
-		whitePoint = &cmsCIEXYZ{X: 0.95047, Y: 1.00000, Z: 1.08883} // D50 white point
+		whitePoint = cmsD50_XYZ()
 	}
 
 	y := (lab.L + 16.0) / 116.0

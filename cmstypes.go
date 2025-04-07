@@ -274,7 +274,6 @@ func DecideLUTtypeB2A(ICCVersion float64, Data unsafe.Pointer) cmsTagTypeSignatu
 	}
 }
 
-
 // DecideCurveType decides which curve type to use when writing.
 func DecideCurveType(ICCVersion float64, Data unsafe.Pointer) cmsTagTypeSignature {
 	Curve := (*CmsToneCurve)(Data)
@@ -321,7 +320,7 @@ func TypeParametricCurveRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *
 		}
 	}
 
-	newGamma = cmsBuildParametricToneCurve(self.ContextID, int(curveType+1), &params[0])
+	newGamma = cmsBuildParametricToneCurve(self.ContextID, int(curveType+1), params[:])
 	*nItems = 1
 	return unsafe.Pointer(newGamma)
 }
@@ -389,7 +388,7 @@ func TypeTextRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, siz
 	}
 
 	// Allocate memory for the text, with space for null terminator
-	text = make([]byte,sizeOfTag+1)
+	text = make([]byte, sizeOfTag+1)
 	if text == nil {
 		goto Error
 	}
@@ -430,7 +429,7 @@ func TypeTextWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.Pointer
 	}
 
 	// Allocate memory for the text
-	text = make([]byte,size)
+	text = make([]byte, size)
 	if text == nil {
 		return false
 	}
@@ -480,57 +479,56 @@ func TypeTextDescriptionRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *
 		unicodeCode     uint32
 		unicodeCount    uint32
 		scriptCodeCode  uint16
-		dummy           uint16
 		scriptCodeCount uint8
 		i               uint32
 	)
 
 	*nItems = 0
 
-	// ✅ Check if size of tag is at least one DWORD
+	//  Check if size of tag is at least one DWORD
 	if sizeOfTag < 4 {
 		return nil
 	}
 
-	// ✅ Read ASCII count
+	//  Read ASCII count
 	if !cmsReadUInt32Number(io, &asciiCount) {
 		return nil
 	}
 	sizeOfTag -= 4
 
-	// ✅ Check if tag size is sufficient
+	//  Check if tag size is sufficient
 	if sizeOfTag < asciiCount {
 		return nil
 	}
 
-	// ✅ Allocate the MLU
+	//  Allocate the MLU
 	mlu = cmsMLUalloc(self.ContextID, 1)
 	if mlu == nil {
 		return nil
 	}
 
-	// ✅ Allocate memory for the text slice
-	text = make([]byte, asciiCount+1) // ✅ +1 to null-terminate
+	//  Allocate memory for the text slice
+	text = make([]byte, asciiCount+1) //  +1 to null-terminate
 	if len(text) == 0 {
 		goto Error
 	}
 
-	// ✅ Read ASCII text into slice
+	//  Read ASCII text into slice
 	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&text[0]), 1, asciiCount) != asciiCount {
 		goto Error
 	}
 	sizeOfTag -= asciiCount
 
-	// ✅ Ensure null-terminated string (Go slices are already zero-initialized)
+	//  Ensure null-terminated string (Go slices are already zero-initialized)
 	text[asciiCount] = 0
 
-	// ✅ Set the MLU entry using the byte slice
-	if !cmsMLUsetASCII(mlu, cmsNoLanguage, cmsNoCountry, text) {
+	//  Set the MLU entry using the byte slice
+	if !cmsMLUsetASCII(mlu, cmsNoLanguage, cmsNoCountry, &text[0]) {
 		goto Error
 	}
 	text = nil // Text no longer needed
 
-	// ✅ Skip Unicode code
+	//  Skip Unicode code
 	if sizeOfTag < 8 {
 		goto Done
 	}
@@ -543,7 +541,7 @@ func TypeTextDescriptionRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *
 		goto Done
 	}
 
-	// ✅ Read and skip Unicode characters
+	//  Read and skip Unicode characters
 	for i = 0; i < unicodeCount; i++ {
 		var tmp [2]byte
 		if io.Read((*cms_io_handler)(io), unsafe.Pointer(&tmp[0]), 2, 1) != 1 {
@@ -552,14 +550,14 @@ func TypeTextDescriptionRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *
 	}
 	sizeOfTag -= unicodeCount * 2
 
-	// ✅ Skip ScriptCode code if present
+	//  Skip ScriptCode code if present
 	if sizeOfTag >= uint32(unsafe.Sizeof(uint16(0)))+uint32(unsafe.Sizeof(uint8(0)))+67 {
 		if !cmsReadUInt16Number(io, &scriptCodeCode) || !cmsReadUInt8Number(io, &scriptCodeCount) {
 			goto Done
 		}
 
 		var skipBuffer [67]byte
-		if io.Read((*cms_io_handler)(io), unsafe.Pointer(&skipBuffer[0]), 1, 67) != 67 {
+		if io.Read((*cms_io_handler)(io), unsafe.Pointer(&skipBuffer[0]), 1, 67) != 1 {
 			goto Error
 		}
 	}
@@ -1211,7 +1209,7 @@ func TypeColorantOrderTypeRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems
 		return nil
 	}
 	// Set all elements to 0xFF as end marker
-	Memset(colorantOrder[:], 0xFF, cmsMAXCHANNELS)
+	MemsetSlice(colorantOrder[:], 0xFF, cmsMAXCHANNELS)
 
 	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&colorantOrder[0]), uint32(unsafe.Sizeof(uint8(0))), count) != count {
 		return nil
@@ -1401,7 +1399,7 @@ func TypeCurveRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, si
 	switch count {
 	case 0: // Linear
 		singleGamma := 1.0
-		newGamma := cmsBuildParametricToneCurve(self.ContextID, 1, &singleGamma)
+		newGamma := cmsBuildParametricToneCurve(self.ContextID, 1, []float64{singleGamma})
 		if newGamma == nil {
 			return nil
 		}
@@ -1415,7 +1413,7 @@ func TypeCurveRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, si
 		}
 		singleGamma := cms8Fixed8ToDouble(singleGammaFixed)
 		*nItems = 1
-		return unsafe.Pointer(cmsBuildParametricToneCurve(self.ContextID, 1, &singleGamma))
+		return unsafe.Pointer(cmsBuildParametricToneCurve(self.ContextID, 1, []float64{singleGamma}))
 
 	default: // Curve
 		if count > 0x7FFF {
@@ -1691,7 +1689,7 @@ func TypeLUT8Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, siz
 	var nTabSize uint32
 	var matrix [9]float64
 	var newLUT *cmsPipeline
-
+	var mat cmsMAT3
 	*nItems = 0
 
 	// Read header
@@ -1727,7 +1725,8 @@ func TypeLUT8Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, siz
 	}
 
 	// Insert the matrix if it isn't identity
-	if inputChannels == 3 && !cmsMAT3isIdentity((*cmsMAT3)(unsafe.Pointer(&matrix))) {
+	mat = SliceToMat(matrix[:])
+	if inputChannels == 3 && !cmsMAT3isIdentity(&mat) {
 		if !cmsPipelineInsertStage(newLUT, cmsAT_BEGIN, cmsStageAllocMatrix(self.ContextID, 3, 3, matrix[:], nil)) {
 
 			goto Error
@@ -1749,6 +1748,7 @@ func TypeLUT8Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, siz
 		var Temp []uint8     // Equivalent to `cmsUInt8Number *Temp`
 
 		// Allocate slice instead of raw memory allocation
+		fmt.Println("555 make([]uint16", nTabSize)
 		T = make([]uint16, nTabSize)
 		PtrW = T      // PtrW now references the same slice
 		if T == nil { // No need to check nil in Go, but keeping for safety
@@ -1763,7 +1763,7 @@ func TypeLUT8Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, siz
 		}
 
 		// Read `nTabSize` bytes into Temp
-		if io.Read((*cms_io_handler)(io), unsafe.Pointer(&Temp[0]), nTabSize, 1) != nTabSize { // `io.Read()` should match the correct signature
+		if io.Read((*cms_io_handler)(io), unsafe.Pointer(&Temp[0]), nTabSize, 1) != 1 { // `io.Read()` should match the correct signature
 			T = nil
 			Temp = nil
 			goto Error
@@ -2090,7 +2090,6 @@ func TypeLUT16Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, si
 	var inputChannels, outputChannels, clutPoints uint8
 	var inputEntries, outputEntries uint16
 	var matrix [9]float64
-
 	*nItems = 0
 
 	if !cmsReadUInt8Number(io, &inputChannels) || !cmsReadUInt8Number(io, &outputChannels) || !cmsReadUInt8Number(io, &clutPoints) || !cmsReadUInt8Number(io, nil) {
@@ -2148,10 +2147,7 @@ func TypeLUT16Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, si
 	nTabSize := uipow(uint32(outputChannels), uint32(clutPoints), uint32(inputChannels))
 	if nTabSize == math.MaxUint32 || nTabSize > 0 {
 		t := make([]uint16, nTabSize)
-		if t == nil {
-			cmsPipelineFree(newLUT)
-			return nil
-		}
+		fmt.Println("666 make([]uint16", nTabSize, &t[0])
 		if !cmsReadUInt16Array(io, nTabSize, t) {
 			cmsPipelineFree(newLUT)
 			return nil
@@ -2168,6 +2164,7 @@ func TypeLUT16Read(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, si
 	}
 
 	*nItems = 1
+
 	return unsafe.Pointer(newLUT)
 }
 
@@ -2376,7 +2373,7 @@ func TypeColorantTableWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsaf
 		var root [cmsMAX_PATH]byte
 		var pcs [3]uint16
 
-		if !cmsNamedColorInfo(namedColorList, i, &root[0], nil, nil, &pcs[0], nil) {
+		if !cmsNamedColorInfo(namedColorList, i, root[:], nil, nil, pcs[:], nil) {
 			return false
 		}
 
@@ -2538,7 +2535,7 @@ func TypeNamedColorWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr unsafe.P
 		var pcs [3]uint16
 		var colorant [cmsMAXCHANNELS]uint16
 
-		if !cmsNamedColorInfo(namedColorList, i, &root[0], nil, nil, &pcs[0], &colorant[0]) {
+		if !cmsNamedColorInfo(namedColorList, i, root[:], nil, nil, pcs[:], colorant[:]) {
 			return false
 		}
 
@@ -2621,7 +2618,7 @@ func TypeProfileSequenceDescRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nIte
 	}
 	outSeq.n = count
 	// Convert `outSeq.seq` to a slice for indexing
-	seqSlice := unsafe.Slice(outSeq.seq, count)
+	seqSlice := outSeq.seq
 
 	for i := uint32(0); i < count; i++ {
 		sec := &seqSlice[i]
@@ -2685,7 +2682,7 @@ func TypeProfileSequenceDescWrite(self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr
 		return false
 	}
 	// Convert `outSeq.seq` to a slice for indexing
-	seqSlice := unsafe.Slice(seq.seq, seq.n)
+	seqSlice := seq.seq
 
 	for i := uint32(0); i < seq.n; i++ {
 		sec := &seqSlice[i]
@@ -2722,7 +2719,7 @@ identification of a profile used in a sequence
 */
 func ReadSeqID(self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo unsafe.Pointer, n, sizeOfTag uint32) bool {
 	outSeq := (*cmsSEQ)(cargo)
-	seqSlice := unsafe.Slice(outSeq.seq, outSeq.n) // Convert pointer to slice
+	seqSlice := outSeq.seq // Convert pointer to slice
 	seq := &seqSlice[n]
 
 	//	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&seq.ProfileID.ID8), 16, 1) != 1 {
@@ -2768,7 +2765,7 @@ func TypeProfileSequenceIdRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems
 
 func WriteSeqID(self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo unsafe.Pointer, n, sizeOfTag uint32) bool {
 	seq := (*cmsSEQ)(cargo)
-	seqSlice := unsafe.Slice(seq.seq, seq.n) // Convert pointer to slice
+	seqSlice := seq.seq // Convert pointer to slice
 	currentSeq := &seqSlice[n]
 
 	// Write Profile ID
@@ -2866,7 +2863,7 @@ func TypeUcrBgRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, si
 		goto Error
 	}
 
-	asciiString = make([]byte,signedSizeOfTag+1)
+	asciiString = make([]byte, signedSizeOfTag+1)
 	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&asciiString[0]), 1, uint32(signedSizeOfTag)) != uint32(signedSizeOfTag) {
 		cmsFree(self.ContextID, unsafe.Pointer(&asciiString[0]))
 		goto Error
@@ -3413,6 +3410,8 @@ func TypeLUTA2BFree(self *cmsTagTypeHandler, ptr unsafe.Pointer) {
 }
 
 func WriteMatrix(self *cmsTagTypeHandler, io *cmsIOHANDLER, mpe *cmsStage) bool {
+	fmt.Println("START WriteMatrix")
+
 	matrixData := (*cmsStageMatrixData)(mpe.Data)
 	n := mpe.InputChannels * mpe.OutputChannels
 
@@ -3437,6 +3436,7 @@ func WriteMatrix(self *cmsTagTypeHandler, io *cmsIOHANDLER, mpe *cmsStage) bool 
 			}
 		}
 	}
+	fmt.Println("END WriteMatrix")
 
 	return true
 }
@@ -4568,7 +4568,7 @@ func TypeVcgtRead(self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, siz
 				math.Pow(max-min, 1.0/gamma),
 				0, 0, 0, min, 0,
 			}
-			curves[i] = cmsBuildParametricToneCurve(self.ContextID, 5, &params[0])
+			curves[i] = cmsBuildParametricToneCurve(self.ContextID, 5, params)
 		}
 	default:
 		cmsSignalError(unsafe.Pointer(self.ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported tag type for VCGT")
@@ -4664,6 +4664,7 @@ func TypeVcgtFree(self *cmsTagTypeHandler, ptr unsafe.Pointer) {
 // ********************************************************************************
 
 func GenericMPEDup(self *cmsTagTypeHandler, ptr unsafe.Pointer, n uint32) unsafe.Pointer {
+	//	fmt.Println("GenericMPEDup")
 	return (unsafe.Pointer)(cmsStageDup((*cmsStage)(ptr)))
 
 }
@@ -4769,7 +4770,7 @@ func ReadSegmentedCurve(self *cmsTagTypeHandler, io *cmsIOHANDLER) *CmsToneCurve
 		}
 	}
 
-	curve := cmsBuildSegmentedToneCurve(self.ContextID, uint32(nSegments), &segments[0])
+	curve := cmsBuildSegmentedToneCurve(self.ContextID, uint32(nSegments), segments)
 
 	// Fix implicit points
 	for i := uint32(0); i < uint32(nSegments); i++ {

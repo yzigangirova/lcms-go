@@ -59,17 +59,17 @@ func SetSeqDescTag(hProfile CmsHPROFILE, Model *byte) bool {
 	}
 
 	// Initialize fields in Seq
-	(*Seq.seq).deviceMfg = 0
-	(*Seq.seq).deviceModel = 0
+	Seq.seq[0].deviceMfg = 0
+	Seq.seq[0].deviceModel = 0
 
 	// Set attributes based on conditional compilation
-	(*Seq.seq).attributes = 0
+	Seq.seq[0].attributes = 0
 
-	(*Seq.seq).technology = 0
+	Seq.seq[0].technology = 0
 
 	// Set Manufacturer and Model text
-	cmsMLUsetASCII((*Seq.seq).Manufacturer, cmsNoLanguage, cmsNoCountry, &([]byte("Little CMS"))[0])
-	cmsMLUsetASCII((*Seq.seq).Model, cmsNoLanguage, cmsNoCountry, Model)
+	cmsMLUsetASCII(Seq.seq[0].Manufacturer, cmsNoLanguage, cmsNoCountry, &([]byte("Little CMS"))[0])
+	cmsMLUsetASCII(Seq.seq[0].Model, cmsNoLanguage, cmsNoCountry, Model)
 
 	// Write the sequence description
 	if !cmsWriteProfileSequence(hProfile, Seq) {
@@ -277,7 +277,7 @@ func cmsCreateLinearizationDeviceLinkTHR(ContextID CmsContext, ColorSpace cmsCol
 		goto Error
 	}
 
-	if !cmsPipelineInsertStage(Pipeline, cmsAT_BEGIN, cmsStageAllocToneCurves(ContextID, uint32(nChannels), &TransferFunctions[0])) {
+	if !cmsPipelineInsertStage(Pipeline, cmsAT_BEGIN, cmsStageAllocToneCurves(ContextID, uint32(nChannels), TransferFunctions)) {
 		goto Error
 	}
 
@@ -606,7 +606,7 @@ func Build_sRGBGamma(ContextID CmsContext) *CmsToneCurve {
 	Parameters[3] = 1. / 12.92
 	Parameters[4] = 0.04045
 
-	return cmsBuildParametricToneCurve(ContextID, 4, &Parameters[0])
+	return cmsBuildParametricToneCurve(ContextID, 4, Parameters[:])
 }
 
 func CmsCreate_sRGBProfileTHR(ContextID CmsContext) CmsHPROFILE {

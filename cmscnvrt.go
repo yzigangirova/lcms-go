@@ -1,6 +1,7 @@
 package golcms
 
 import (
+	"fmt"
 	"math"
 	"unsafe"
 )
@@ -189,17 +190,17 @@ func ComputeAbsoluteIntent(
 
 		if AdaptationState == 0.0 {
 			m1 = *ChromaticAdaptationMatrixOut
-			cmsMAT3per(&m2, &m1, &Scale)
+			m2 = cmsMAT3per(&m1, &Scale)
 			// m2 holds CHAD from output white to D50 times abs. col. scaling
 
 			// Observer is not adapted, undo the chromatic adaptation
-			cmsMAT3per(m, &m2, ChromaticAdaptationMatrixOut)
+			*m = cmsMAT3per(&m2, ChromaticAdaptationMatrixOut)
 
 			m3 = *ChromaticAdaptationMatrixIn
 			if !cmsMAT3inverse(&m3, &m4) {
 				return false
 			}
-			cmsMAT3per(m, &m2, &m4)
+			*m = cmsMAT3per(&m2, &m4)
 		} else {
 			var MixedCHAD cmsMAT3
 			var TempSrc, TempDest, Temp float64
@@ -208,7 +209,7 @@ func ComputeAbsoluteIntent(
 			if !cmsMAT3inverse(&m1, &m2) {
 				return false
 			}
-			cmsMAT3per(&m3, &m2, &Scale)
+			m3 = cmsMAT3per(&m2, &Scale)
 			// m3 holds CHAD from input white to D50 times abs. col. scaling
 
 			TempSrc = CHAD2Temp(ChromaticAdaptationMatrixIn)
@@ -228,7 +229,7 @@ func ComputeAbsoluteIntent(
 			// Get a CHAD from whatever output temperature to D50. This replaces output CHAD
 			Temp2CHAD(&MixedCHAD, Temp)
 
-			cmsMAT3per(m, &m3, &MixedCHAD)
+			*m = cmsMAT3per(&m3, &MixedCHAD)
 		}
 	}
 	return true
@@ -247,6 +248,7 @@ func DefaultICCintents(
 	AdaptationStates []float64,
 	dwFlags uint32,
 ) *cmsPipeline {
+	fmt.Println("START DefaultICCintents")
 	var (
 		Lut               *cmsPipeline
 		Result            *cmsPipeline
@@ -259,7 +261,6 @@ func DefaultICCintents(
 		ClassSig          cmsProfileClassSignature
 		Intent            uint32
 	)
-
 	// For safety
 	if nProfiles == 0 {
 		return nil
@@ -274,6 +275,7 @@ func DefaultICCintents(
 	CurrentColorSpace = CmsGetColorSpace(hProfiles[0])
 
 	for i := uint32(0); i < nProfiles; i++ {
+		fmt.Println("start for")
 		var lIsDeviceLink, lIsInput bool
 
 		hProfile = hProfiles[i]
@@ -302,6 +304,7 @@ func DefaultICCintents(
 			cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_COLORSPACE_CHECK, "ColorSpace mismatch")
 			goto Error
 		}
+		fmt.Println("ddd")
 
 		// If devicelink or named color class
 		if lIsDeviceLink || (ClassSig == cmsSigNamedColorClass && nProfiles == 1) {
@@ -324,12 +327,16 @@ func DefaultICCintents(
 			}
 		} else {
 			if lIsInput {
+				fmt.Println("before cmsReadInputLUT ")
 				Lut = cmsReadInputLUT(hProfile, Intent)
+				fmt.Println("after cmsReadInputLUT ")
 				if Lut == nil {
 					goto Error
 				}
 			} else {
+				fmt.Println("before cmsReadOutputLUT ")
 				Lut = cmsReadOutputLUT(hProfile, Intent)
+				fmt.Println("after cmsReadOutputLUT ")
 				if Lut == nil {
 					goto Error
 				}
@@ -342,6 +349,7 @@ func DefaultICCintents(
 				}
 			}
 		}
+		fmt.Println("eee")
 
 		// Concatenate LUT
 		if !cmsPipelineCat(Result, Lut) {
@@ -352,6 +360,7 @@ func DefaultICCintents(
 		Lut = nil
 		// Update current space
 		CurrentColorSpace = ColorSpaceOut
+		fmt.Println("end for")
 	}
 
 	// Handle non-negatives clip
@@ -367,10 +376,13 @@ func DefaultICCintents(
 			}
 		}
 	}
+	fmt.Println("END DefaultICCintents")
 
 	return Result
 
 Error:
+	fmt.Println("END ERROR DefaultICCintents")
+
 	if Lut != nil {
 		cmsPipelineFree(Lut)
 	}
@@ -408,14 +420,16 @@ func IsEmptyLayer(m *cmsMAT3, off *cmsVEC3) bool {
 	cmsMAT3identity(&Ident)
 
 	// Compare the matrix `m` with the identity matrix.
-	for i = 0; i < 3*3; i++ {
-		diff += math.Abs((*(*[9]float64)(unsafe.Pointer(m)))[i] -
-			(*(*[9]float64)(unsafe.Pointer(&Ident)))[i])
+
+	for row := 0; row < 3; row++ {
+		for col := 0; col < 3; col++ {
+			diff += math.Abs(m.V[row].N[col] - Ident.V[row].N[col])
+		}
 	}
 
 	// Compare the offset `off` with a zero vector.
 	for i = 0; i < 3; i++ {
-		diff += math.Abs((*(*[3]float64)(unsafe.Pointer(off)))[i])
+		diff += math.Abs(off.N[i])
 	}
 
 	// If the total difference is below the threshold, consider the layer empty.
@@ -423,10 +437,10 @@ func IsEmptyLayer(m *cmsMAT3, off *cmsVEC3) bool {
 }
 
 func ComputeConversion(i uint32, hProfiles []CmsHPROFILE, Intent uint32, BPC bool, AdaptationState float64, m *cmsMAT3, off *cmsVEC3) bool {
+	fmt.Println("START ComputeConversion")
 	// Initialize m and off to identity
 	cmsMAT3identity(m)
 	cmsVEC3init(off, 0, 0, 0)
-
 	// Handle absolute colorimetric intent
 	if Intent == INTENT_ABSOLUTE_COLORIMETRIC {
 		var (
@@ -443,29 +457,47 @@ func ComputeConversion(i uint32, hProfiles []CmsHPROFILE, Intent uint32, BPC boo
 		if !ComputeAbsoluteIntent(AdaptationState, &WhitePointIn, &ChromaticAdaptationMatrixIn, &WhitePointOut, &ChromaticAdaptationMatrixOut, m) {
 			return false
 		}
-	} else if BPC {
-		// Handle black point compensation
-		var BlackPointIn, BlackPointOut cmsCIEXYZ
+	} else {
+		if BPC {
+			// Handle black point compensation
+			var BlackPointIn, BlackPointOut cmsCIEXYZ
 
-		cmsDetectBlackPoint(&BlackPointIn, hProfiles[i-1], Intent, 0)
-		cmsDetectDestinationBlackPoint(&BlackPointOut, hProfiles[i], Intent, 0)
+			cmsDetectBlackPoint(&BlackPointIn, hProfiles[i-1], Intent, 0)
+			cmsDetectDestinationBlackPoint(&BlackPointOut, hProfiles[i], Intent, 0)
+			fmt.Printf("BlackPointIn.X %f\n", BlackPointIn.X)
+			fmt.Printf("BlackPointIn.Y %f\n", BlackPointIn.Y)
+			fmt.Printf("BlackPointIn.Z %f\n", BlackPointIn.Z)
+			fmt.Printf("BlackPointOut.X %f\n", BlackPointOut.X)
+			fmt.Printf("BlackPointOut.Y %f\n", BlackPointOut.Y)
+			fmt.Printf("BlackPointOut.Z %f\n", BlackPointOut.Z)
 
-		// Skip if black points are equal
-		if BlackPointIn.X != BlackPointOut.X || BlackPointIn.Y != BlackPointOut.Y || BlackPointIn.Z != BlackPointOut.Z {
-			ComputeBlackPointCompensation(&BlackPointIn, &BlackPointOut, m, off)
+			// Skip if black points are equal
+
+			if BlackPointIn.X != BlackPointOut.X || BlackPointIn.Y != BlackPointOut.Y || BlackPointIn.Z != BlackPointOut.Z {
+				ComputeBlackPointCompensation(&BlackPointIn, &BlackPointOut, m, off)
+			}
 		}
 	}
 
 	// Adjust offset for encoding
+	// Offset should be adjusted because the encoding. We encode XYZ normalized to 0..1.0,
+	// to do that, we divide by MAX_ENCODEABLE_XZY. The conversion stage goes XYZ -> XYZ so
+	// we have first to convert from encoded to XYZ and then convert back to encoded.
+	// y = Mx + Off
+	// x = x'c
+	// y = M x'c + Off
+	// y = y'c; y' = y / c
+	// y' = (Mx'c + Off) /c = Mx' + (Off / c)
 	for k := 0; k < 3; k++ {
 		off.N[k] /= MAX_ENCODEABLE_XYZ
 	}
+	fmt.Println("END ComputeConversion")
 
 	return true
 }
 func AddConversion(Result *cmsPipeline, InPCS cmsColorSpaceSignature, OutPCS cmsColorSpaceSignature, m *cmsMAT3, off *cmsVEC3) bool {
-	mAsDbl := (*[9]float64)(unsafe.Pointer(m))[:]
-	offAsDbl := (*[3]float64)(unsafe.Pointer(off))[:]
+	mAsDbl := MatToSlice(*m)
+	offAsDbl := VecToSlice(*off)
 
 	// Handle PCS mismatches
 	switch InPCS {
@@ -600,6 +632,7 @@ func BlackPreservingKOnlyIntents(
 	AdaptationStates []float64,
 	dwFlags uint32,
 ) *cmsPipeline {
+	//fmt.Println("BlackPreservingKOnlyIntents")
 	var bp GrayOnlyParams
 	var Result *cmsPipeline
 	var CLUT *cmsStage
@@ -755,10 +788,10 @@ func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) int32 {
 	}
 
 	// Measure and keep Lab measurement for further usage
-	CmsDoTransform(bp.HProofOutput, unsafe.Pointer(&Out[0]), unsafe.Pointer(&ColorimetricLab), 1)
+	CmsDoTransform(bp.HProofOutput, Out, ColorimetricLab, 1)
 
 	// Transform to Lab
-	CmsDoTransform(bp.Cmyk2Lab, unsafe.Pointer(&Outf[0]), unsafe.Pointer(&LabK[0]), 1)
+	CmsDoTransform(bp.Cmyk2Lab, Outf, LabK, 1)
 
 	// Reverse interpolation to obtain CMY with fixed K
 	if !cmsPipelineEvalReverseFloat(LabK[:], Outf[:], Outf[:], bp.LabK2Cmyk) {
@@ -788,7 +821,7 @@ func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) int32 {
 	Out[3] = cmsQuickSaturateWord(float64(Outf[3] * 65535.0))
 
 	// Estimate the error
-	CmsDoTransform(bp.HProofOutput, unsafe.Pointer(&Out[0]), unsafe.Pointer(&BlackPreservingLab), 1)
+	CmsDoTransform(bp.HProofOutput, Out, BlackPreservingLab, 1)
 	Error = cmsDeltaE(&ColorimetricLab, &BlackPreservingLab)
 	if Error > bp.MaxError {
 		bp.MaxError = Error
@@ -807,6 +840,7 @@ func BlackPreservingKPlaneIntents(
 	AdaptationStates []float64,
 	dwFlags uint32,
 ) *cmsPipeline {
+	//fmt.Println("BlackPreservingKPlaneIntents")
 	var bp PreserveKPlaneParams
 	var Result *cmsPipeline
 	var CLUT *cmsStage
@@ -987,10 +1021,12 @@ func cmsRegisterRenderingIntentPlugin(id CmsContext, Data *cmsPluginBase) bool {
 	}
 
 	// Allocate memory for the new intent node.
-	fl := (*cmsIntentsList)(cmsPluginMalloc(id, uint32(unsafe.Sizeof(cmsIntentsList{}))))
-	if fl == nil {
+	//fl := (*cmsIntentsList)(cmsPluginMalloc(id, uint32(unsafe.Sizeof(cmsIntentsList{}))))
+	fl := allocateStruct[cmsIntentsList]()
+
+	/*	if fl == nil {
 		return false
-	}
+	}*/
 
 	// Populate the new node's fields.
 	fl.Intent = Plugin.Intent

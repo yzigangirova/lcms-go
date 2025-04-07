@@ -4,6 +4,7 @@ package golcms
 // and black preservation.
 
 import (
+	"fmt"
 	"math"
 	"unsafe"
 )
@@ -17,7 +18,6 @@ func CreateRoundtripXForm(hProfile CmsHPROFILE, nIntent uint32) CmsHTRANSFORM {
 	States := [4]float64{1.0, 1.0, 1.0, 1.0}
 	hProfiles := [4]CmsHPROFILE{hLab, hProfile, hProfile, hLab}
 	Intents := [4]uint32{INTENT_RELATIVE_COLORIMETRIC, nIntent, INTENT_RELATIVE_COLORIMETRIC, INTENT_RELATIVE_COLORIMETRIC}
-
 	xform = CmsHTRANSFORM(cmsCreateExtendedTransform(
 		ContextID, 4, hProfiles[:], BPC[:], Intents[:],
 		States[:], nil, 0, TYPE_Lab_DBL, TYPE_Lab_DBL, cmsFLAGS_NOCACHE|cmsFLAGS_NOOPTIMIZE,
@@ -38,6 +38,7 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 	var nChannels uint32
 	var Space cmsColorSpaceSignature
 	ContextID := cmsGetProfileContextID(hInput)
+	fmt.Println("START BlackPointAsDarkerColorant")
 
 	// If the profile does not support input direction, assume Black point 0.
 	if !cmsIsIntentSupported(hInput, Intent, LCMS_USED_AS_INPUT) {
@@ -79,10 +80,14 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 	}
 
 	// Create the transform.
+
+	fmt.Println("start: xform = cmsCreateTransformTHR")
 	xform = cmsCreateTransformTHR(
 		ContextID, hInput, dwFormat, hLab, TYPE_Lab_DBL,
 		Intent, cmsFLAGS_NOOPTIMIZE|cmsFLAGS_NOCACHE,
 	)
+	fmt.Println("end: xform = cmsCreateTransformTHR")
+
 	CmsCloseProfile(hLab)
 
 	if xform == nil {
@@ -93,7 +98,9 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 	}
 
 	// Convert black to Lab.
-	CmsDoTransform(xform, unsafe.Pointer(&Black[0]), unsafe.Pointer(&Lab), 1)
+	LabSlice := LabToSlice(Lab)
+	CmsDoTransform(xform, Black, LabSlice, 1)
+	Lab = SliceToLab(LabSlice)
 
 	// Force it to be neutral; check for inconsistencies.
 	Lab.a = 0
@@ -111,6 +118,7 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 	if BlackPoint != nil {
 		*BlackPoint = BlackXYZ
 	}
+	fmt.Println("END BlackPointAsDarkerColorant BlackPoint.X, BlackPoint.Y, BlackPoint.Z ", (*BlackPoint).X, (*BlackPoint).Y, (*BlackPoint).Z)
 
 	return true
 }
@@ -120,6 +128,7 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 // The process involves a roundtrip transformation using perceptual intent:
 // Lab (0, 0, 0) -> [Perceptual] Profile -> CMYK -> [Rel. Colorimetric] Profile -> Lab.
 func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE) bool {
+	fmt.Println("START BlackPointUsingPerceptualBlack")
 	var LabIn, LabOut cmsCIELab
 	var BlackXYZ cmsCIEXYZ
 
@@ -140,12 +149,10 @@ func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE)
 		return false
 	}
 
-	// Initialize input Lab to black
-	LabIn.L, LabIn.a, LabIn.b = 0, 0, 0
-
 	// Perform the roundtrip transformation
-	CmsDoTransform(hRoundTrip, unsafe.Pointer(&LabIn), unsafe.Pointer(&LabOut), 1)
-
+	LabOutSlice := LabToSlice(LabOut)
+	CmsDoTransform(hRoundTrip, []float64{LabIn.L, LabIn.a, LabIn.b}, LabOutSlice, 1)
+	LabOut = SliceToLab(LabOutSlice)
 	// Clip Lab values to reasonable limits
 	if LabOut.L > 50 {
 		LabOut.L = 50
@@ -162,6 +169,7 @@ func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE)
 	if BlackPoint != nil {
 		*BlackPoint = BlackXYZ
 	}
+	fmt.Println("END BlackPointUsingPerceptualBlack  BlackPoint.X, BlackPoint.Y, BlackPoint.Z ", (*BlackPoint).X, (*BlackPoint).Y, (*BlackPoint).Z)
 
 	return true
 }
@@ -170,6 +178,8 @@ func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE)
 // This function attempts to address the issues with broken black point tags in profiles.
 // It ensures the chromaticity of the black point is neutral to avoid tints during compensation.
 func cmsDetectBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE, Intent, dwFlags uint32) bool {
+	fmt.Println("START cmsDetectBlackPoint")
+
 	// Ensure the device class is adequate
 	devClass := cmsGetDeviceClass(hProfile)
 	if devClass == cmsSigLinkClass ||

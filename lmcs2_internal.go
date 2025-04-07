@@ -1,12 +1,11 @@
 package golcms
 
 import (
-	//"math"
-	"fmt"
+	"math"
+	"reflect"
 	"sync"
 	"time"
 	"unsafe"
-	"reflect"
 )
 
 // Determinant lower than that are assumed zero (used on matrix invert)
@@ -68,20 +67,18 @@ func cmsAssert(condition bool, message string) {
 
 // Fast floor conversion
 func cmsQuickFloor(val float64) int {
-	// Adjust for specific configurations
+	//	fmt.Println("cmsQuickFloor got ", val)
 	const _lcms_double2fixmagic = 68719476736.0 * 1.5 // 2^36 * 1.5
 
-	var temp struct {
-		val    float64
-		halves [2]int32
-	}
-
-	temp.val = val + _lcms_double2fixmagic
+	temp := val + _lcms_double2fixmagic
+	bits := math.Float64bits(temp) // Get IEEE-754 bit representation as uint64
 
 	if isBigEndian() {
-		return int(temp.halves[1] >> 16)
+		return int(int32(bits >> 32)) // Get upper 32 bits for big-endian
 	}
-	return int(temp.halves[0] >> 16)
+	//	fmt.Println("cmsQuickFloor result ", int(int32(bits)>>16))
+	return int(int32(bits) >> 16)
+
 }
 
 func isBigEndian() bool {
@@ -151,15 +148,13 @@ func NewCmsMutex() *cmsMutex {
 
 // Lock the mutex
 func cmsLockPrimitive(m *cmsMutex) int {
-	fmt.Println("m.mutex.Lock()")
-	m.mutex.Lock()
+	//m.mutex.Lock() //TEMPORARY
 	return 0
 }
 
 // Unlock the mutex
 func cmsUnlockPrimitive(m *cmsMutex) int {
-	fmt.Println("m.mutex.Unlock()")
-	m.mutex.Unlock()
+	//m.mutex.Unlock() //TEMPORARY
 	return 0
 }
 
@@ -550,26 +545,9 @@ func MemcpySlice[T any](dst, src []T, length int) {
 
 func MemmoveSlice[T any](dest, src []T, count int) {
 	if count > len(src) || count > len(dest) {
-		panic("Memmove: count exceeds slice bounds")
+		panic("MemmoveSlice: count exceeds slice bounds")
 	}
-
-	byteSize := int(unsafe.Sizeof(src[0])) * count
-	srcBytes := unsafe.Slice((*byte)(unsafe.Pointer(&src[0])), byteSize)
-	destBytes := unsafe.Slice((*byte)(unsafe.Pointer(&dest[0])), byteSize)
-
-	// Convert pointers to uintptr for comparison
-	srcPtr := uintptr(unsafe.Pointer(&src[0]))
-	destPtr := uintptr(unsafe.Pointer(&dest[0]))
-
-	if destPtr > srcPtr {
-		// Copy backwards (to handle overlap correctly)
-		for i := byteSize - 1; i >= 0; i-- {
-			destBytes[i] = srcBytes[i]
-		}
-	} else {
-		// Copy normally (no overlap risk)
-		copy(destBytes, srcBytes)
-	}
+	copy(dest[:count], src[:count])
 }
 
 func MemsetSlice[T any](slice []T, value T, length int) {
@@ -587,10 +565,47 @@ func MemsetSlice[T any](slice []T, value T, length int) {
 		byteSlice[i] = valBytes[0] // Repeat first byte of value
 	}
 }
+func LabToSlice(lab cmsCIELab) []float64 {
+	return []float64{lab.L, lab.a, lab.b}
+}
+
+func SliceToLab(f []float64) cmsCIELab {
+	return cmsCIELab{L: f[0], a: f[1], b: f[2]}
+}
+func MatToSlice(mat cmsMAT3) []float64 {
+	return []float64{
+		mat.V[0].N[0], mat.V[0].N[1], mat.V[0].N[2],
+		mat.V[1].N[0], mat.V[1].N[1], mat.V[1].N[2],
+		mat.V[2].N[0], mat.V[2].N[1], mat.V[2].N[2],
+	}
+}
+
+func SliceToMat(s []float64) cmsMAT3 {
+	if len(s) != 9 {
+		panic("SliceToMat: slice must have 9 elements")
+	}
+	return cmsMAT3{
+		V: [3]cmsVEC3{
+			{N: [3]float64{s[0], s[1], s[2]}},
+			{N: [3]float64{s[3], s[4], s[5]}},
+			{N: [3]float64{s[6], s[7], s[8]}},
+		},
+	}
+}
+
+func VecToSlice(vec cmsVEC3) []float64 {
+	return []float64{vec.N[0], vec.N[1], vec.N[2]}
+}
+
+func SliceToVec(s []float64) cmsVEC3 {
+	if len(s) != 3 {
+		panic("SliceToVec: slice must have 3 elements")
+	}
+	return cmsVEC3{N: [3]float64{s[0], s[1], s[2]}}
+}
 
 // memmove copies `n` bytes from `src` to `dst`.
 // It works like C's memmove, supporting overlapping memory regions.
-
 
 // memset sets a block of memory to a specified value.
 // Equivalent to C's memset function.
@@ -624,7 +639,6 @@ func memmove(dst, src unsafe.Pointer, n uintptr) {
 	// Use Go's copy function which handles overlapping memory safely
 	copy(dstSlice, srcSlice)
 }
-
 
 func memcpy(dst, src unsafe.Pointer, size uintptr) {
 	dstSlice := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{

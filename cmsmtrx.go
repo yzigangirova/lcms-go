@@ -80,7 +80,7 @@ func cmsMAT3isIdentity(a *cmsMAT3) bool {
 }
 
 // Multiply two matrices
-func cmsMAT3per(r, a, b *cmsMAT3) {
+/*func cmsMAT3per(r, a, b *cmsMAT3) {
 	// Helper function to compute the dot product for a specific row and column
 	rowCol := func(i, j int) float64 {
 		return a.V[i].N[0]*b.V[0].N[j] + a.V[i].N[1]*b.V[1].N[j] + a.V[i].N[2]*b.V[2].N[j]
@@ -90,7 +90,39 @@ func cmsMAT3per(r, a, b *cmsMAT3) {
 	cmsVEC3init(&r.V[0], rowCol(0, 0), rowCol(0, 1), rowCol(0, 2))
 	cmsVEC3init(&r.V[1], rowCol(1, 0), rowCol(1, 1), rowCol(1, 2))
 	cmsVEC3init(&r.V[2], rowCol(2, 0), rowCol(2, 1), rowCol(2, 2))
+}*/
+
+func cmsMAT3per(a, b *cmsMAT3) cmsMAT3 {
+	rowCol := func(i, j int) float64 {
+		return a.V[i].N[0]*b.V[0].N[j] + a.V[i].N[1]*b.V[1].N[j] + a.V[i].N[2]*b.V[2].N[j]
+	}
+
+	return cmsMAT3{
+		V: [3]cmsVEC3{
+			{N: [3]float64{rowCol(0, 0), rowCol(0, 1), rowCol(0, 2)}},
+			{N: [3]float64{rowCol(1, 0), rowCol(1, 1), rowCol(1, 2)}},
+			{N: [3]float64{rowCol(2, 0), rowCol(2, 1), rowCol(2, 2)}},
+		},
+	}
 }
+func cmsMAT3perFromSlices(a, b []float64) cmsMAT3 {
+	if len(a) != 9 || len(b) != 9 {
+		panic("cmsMAT3mulFromSlices: input slices must have 9 elements each")
+	}
+
+	rowCol := func(i, j int) float64 {
+		return a[i*3+0]*b[0*3+j] + a[i*3+1]*b[1*3+j] + a[i*3+2]*b[2*3+j]
+	}
+
+	return cmsMAT3{
+		V: [3]cmsVEC3{
+			{N: [3]float64{rowCol(0, 0), rowCol(0, 1), rowCol(0, 2)}},
+			{N: [3]float64{rowCol(1, 0), rowCol(1, 1), rowCol(1, 2)}},
+			{N: [3]float64{rowCol(2, 0), rowCol(2, 1), rowCol(2, 2)}},
+		},
+	}
+}
+
 
 // Inverse of a matrix b = a^(-1)
 func cmsMAT3inverse(a, b *cmsMAT3) bool {

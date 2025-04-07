@@ -1,6 +1,7 @@
 package golcms
 
 import (
+	"fmt"
 	"math"
 	"unsafe"
 )
@@ -15,7 +16,9 @@ func cmsStageAllocPlaceholder(
 	Data unsafe.Pointer,
 ) *cmsStage {
 	// Allocate memory for cmsStage and initialize to zero
-	ph := (*cmsStage)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsStage{}))))
+	//ph := (*cmsStage)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsStage{}))))
+	ph := allocateStruct[cmsStage]()
+
 	if ph == nil {
 		return nil
 	}
@@ -35,7 +38,7 @@ func cmsStageAllocPlaceholder(
 }
 
 func EvaluateIdentity(In []float32, Out []float32, mpe *cmsStage) {
-	Memmove(Out, In, int(mpe.InputChannels*uint32(unsafe.Sizeof(float32(0)))))
+	MemmoveSlice(Out, In, int(mpe.InputChannels))
 }
 func cmsStageAllocIdentity(ContextID CmsContext, nChannels uint32) *cmsStage {
 	return cmsStageAllocPlaceholder(ContextID,
@@ -66,6 +69,7 @@ func From16ToFloat(In []uint16, Out []float32, n uint32) {
 }
 
 func cmsPipelineCheckAndRetrieveStages(lut *cmsPipeline, n uint32, expectedTypes []cmsStageSignature, retrievedStages ...**cmsStage) bool {
+	fmt.Println("cmsPipelineCheckAndRetrieveStages")
 	// Ensure the number of stages matches
 	if cmsPipelineStageCount(lut) != n {
 		return false
@@ -129,7 +133,7 @@ func cmsStageGetPtrToCurveSet(mpe *cmsStage) []*CmsToneCurve {
 	return data.TheCurves
 }
 
-func EvaluateCurves(In []float32, Out []float32, mpe *cmsStage) {
+/*func EvaluateCurves(In []float32, Out []float32, mpe *cmsStage) {
 	data := (*cmsStageToneCurvesData)(mpe.Data)
 	if data == nil || data.TheCurves == nil {
 		return
@@ -139,6 +143,36 @@ func EvaluateCurves(In []float32, Out []float32, mpe *cmsStage) {
 		Out[i] = cmsEvalToneCurveFloat(data.TheCurves[i], In[i])
 
 	}
+}*/
+
+func EvaluateCurves(In []float32, Out []float32, mpe *cmsStage) {
+	fmt.Print("start EvaluateCurves - Input: ")
+	data := (*cmsStageToneCurvesData)(mpe.Data)
+	if data == nil || data.TheCurves == nil {
+		fmt.Println("EvaluateCurves: returning ")
+		return
+	}
+
+	// Debug: Print input values before processing
+	for i := uint32(0); i < data.NCurves; i++ {
+		fmt.Printf("%f ", In[i])
+	}
+	fmt.Println()
+
+	for i := uint32(0); i < data.NCurves; i++ {
+		fmt.Printf("Before cmsEvalToneCurveFloat: In[%d] = %f\n", i, In[i])
+
+		Out[i] = cmsEvalToneCurveFloat(data.TheCurves[i], In[i])
+
+		fmt.Printf("After cmsEvalToneCurveFloat: Out[%d] = %f\n", i, Out[i])
+	}
+
+	// Debug: Print final output values
+	fmt.Print("end EvaluateCurves - Output: ")
+	for i := uint32(0); i < data.NCurves; i++ {
+		fmt.Printf("%f ", Out[i])
+	}
+	fmt.Println()
 }
 
 func CurveSetElemTypeFree(mpe *cmsStage) {
@@ -159,6 +193,7 @@ func CurveSetElemTypeFree(mpe *cmsStage) {
 	cmsFree(mpe.ContextID, unsafe.Pointer(data))
 }
 func CurveSetDup(mpe *cmsStage) unsafe.Pointer {
+	//	fmt.Println("CurveSetDup")
 	// Access the data from the input stage
 	data := (*cmsStageToneCurvesData)(mpe.Data)
 
@@ -196,11 +231,13 @@ Error:
 }
 
 func cmsStageAllocToneCurves(ContextID CmsContext, nChannels uint32, Curves []*CmsToneCurve) *cmsStage {
+	fmt.Println("start cmsStageAllocToneCurves")
 	// Allocate the placeholder for the stage
 	newMPE := cmsStageAllocPlaceholder(ContextID, cmsSigCurveSetElemType, nChannels, nChannels, EvaluateCurves, CurveSetDup, CurveSetElemTypeFree, nil)
 	if newMPE == nil {
 		return nil
 	}
+	fmt.Println("EvaluateCurves created")
 
 	// Allocate the tone curves data structure
 	newElem := (*cmsStageToneCurvesData)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsStageToneCurvesData{}))))
@@ -234,6 +271,7 @@ func cmsStageAllocToneCurves(ContextID CmsContext, nChannels uint32, Curves []*C
 			return nil
 		}
 	}
+	fmt.Println("end cmsStageAllocToneCurves")
 
 	return newMPE
 
@@ -249,7 +287,8 @@ func cmsStageAllocIdentityCurves(ContextID CmsContext, nChannels uint32) *cmsSta
 }
 
 // EvaluateMatrix performs matrix multiplication and applies an optional offset.
-func EvaluateMatrix(in []float32, out []float32, mpe *cmsStage) {
+/*func EvaluateMatrix(in []float32, out []float32, mpe *cmsStage) {
+	fmt.Println("start EvaluateMatrix")
 	// Cast the unsafe pointer to the original struct type
 	data := (*cmsStageMatrixData)(mpe.Data)
 
@@ -264,11 +303,65 @@ func EvaluateMatrix(in []float32, out []float32, mpe *cmsStage) {
 		}
 		out[i] = float32(tmp)
 	}
+	fmt.Println("end EvaluateMatrix")
+}*/
 
+func EvaluateMatrix(in []float32, out []float32, mpe *cmsStage) {
+	fmt.Println("start EvaluateMatrix")
+
+	data := (*cmsStageMatrixData)(mpe.Data)
+
+	// Print matrix coefficients
+	/*fmt.Println("Matrix Coefficients (Double):")
+	for i := uint32(0); i < mpe.OutputChannels; i++ {
+		for j := uint32(0); j < mpe.InputChannels; j++ {
+			val := data.Double[i*mpe.InputChannels+j]
+			fmt.Printf("Double[%d][%d] = %.10f\n", i, j, val)
+		}
+	}*/
+
+	// Print offsets if available
+	/*if data.Offset != nil {
+		fmt.Println("Offsets:")
+		for i := uint32(0); i < mpe.OutputChannels; i++ {
+			fmt.Printf("Offset[%d] = %.10f\n", i, data.Offset[i])
+		}
+	} else {
+		fmt.Println("No offsets present.")
+	}*/
+
+	// Print input vector
+	/*fmt.Print("Input: ")
+	for j := uint32(0); j < mpe.InputChannels; j++ {
+		fmt.Printf("%f ", in[j])
+	}
+	fmt.Println()*/
+
+	for i := uint32(0); i < mpe.OutputChannels; i++ {
+		var tmp float64 = 0
+		for j := uint32(0); j < mpe.InputChannels; j++ {
+			coeff := data.Double[i*mpe.InputChannels+j]
+			product := float64(in[j]) * coeff
+			tmp += product
+			/*fmt.Printf("M[%d][%d] = %.10f, In[%d] = %.10f, product = %.10f\n",
+			i, j, coeff, j, in[j], product)*/
+		}
+
+		if data.Offset != nil {
+			tmp += data.Offset[i]
+			//fmt.Printf("Offset[%d] = %.10f\n", i, data.Offset[i])
+		}
+
+		out[i] = float32(tmp)
+		//fmt.Printf("Out[%d] = %.10f\n", i, out[i])
+	}
+
+	fmt.Println("end EvaluateMatrix")
 }
 
 // MatrixElemDup duplicates the matrix stage data.
 func MatrixElemDup(mpe *cmsStage) unsafe.Pointer {
+	//fmt.Println("MatrixElemDup")
 	if mpe == nil || mpe.Data == nil {
 		return nil
 	}
@@ -277,10 +370,9 @@ func MatrixElemDup(mpe *cmsStage) unsafe.Pointer {
 
 	NewElem := (*cmsStageMatrixData)(cmsMallocZero(mpe.ContextID, uint32(unsafe.Sizeof(cmsStageMatrixData{}))))
 
-	sz := int(mpe.InputChannels * mpe.OutputChannels)
-	MemcpySlice(NewElem.Double, Data.Double, sz*int(unsafe.Sizeof(float64(0))))
+	NewElem.Double = cmsDupMemSlice(Data.Double)
 	if Data.Offset != nil {
-		MemcpySlice(NewElem.Offset, Data.Offset, int(mpe.OutputChannels)*int(unsafe.Sizeof(float64(0))))
+		NewElem.Offset = cmsDupMemSlice(Data.Offset)
 	}
 
 	return unsafe.Pointer(NewElem)
@@ -303,6 +395,94 @@ func cmsStageAllocMatrix(
 	Rows, Cols uint32,
 	Matrix, Offset []float64,
 ) *cmsStage {
+	fmt.Println("start cmsStageAllocMatrix")
+
+	var i, n uint32
+	var NewElem *cmsStageMatrixData
+	var NewMPE *cmsStage
+
+	n = Rows * Cols
+
+	if n == 0 || n >= math.MaxUint32/Cols || n >= math.MaxUint32/Rows || n < Rows || n < Cols {
+		return nil
+	}
+
+	NewMPE = cmsStageAllocPlaceholder(
+		ContextID,
+		cmsSigMatrixElemType,
+		Cols,
+		Rows,
+		EvaluateMatrix,
+		MatrixElemDup,
+		MatrixElemTypeFree,
+		nil,
+	)
+	fmt.Println("EvaluateMatrix created with n elements", n)
+
+	if NewMPE == nil {
+		return nil
+	}
+
+	NewElem = (*cmsStageMatrixData)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsStageMatrixData{}))))
+	if NewElem == nil {
+		goto Error
+	}
+	NewMPE.Data = unsafe.Pointer(NewElem)
+
+	NewElem.Double = make([]float64, n)
+	copy(NewElem.Double, Matrix)
+
+	// Debug print: Matrix before and after copy
+	fmt.Printf("Matrix input:  ")
+	for _, val := range Matrix {
+		fmt.Printf("%f ", val)
+	}
+	fmt.Println()
+
+	fmt.Printf("NewElem->Double after copying: ")
+	for _, val := range NewElem.Double {
+		fmt.Printf("%f ", val)
+	}
+	fmt.Println()
+
+	if Offset != nil {
+		NewElem.Offset = make([]float64, Rows)
+		for i = 0; i < Rows; i++ {
+			NewElem.Offset[i] = Offset[i]
+		}
+
+		// Debug print: Offset before and after copy
+		fmt.Printf("Offset input:  ")
+		for _, val := range Offset {
+			fmt.Printf("%f ", val)
+		}
+		fmt.Println()
+
+		fmt.Printf("Offset copied: ")
+		for _, val := range NewElem.Offset {
+			fmt.Printf("%f ", val)
+		}
+		fmt.Println()
+	} else {
+		fmt.Println("No offsets")
+	}
+
+	fmt.Println("end cmsStageAllocMatrix")
+	return NewMPE
+
+Error:
+	if NewMPE != nil {
+		cmsStageFree(NewMPE)
+	}
+	return nil
+}
+
+/*func cmsStageAllocMatrix(
+	ContextID CmsContext,
+	Rows, Cols uint32,
+	Matrix, Offset []float64,
+) *cmsStage {
+	fmt.Println("start cmsStageAllocMatrix ", Matrix, Offset)
 	var i, n uint32
 	var NewElem *cmsStageMatrixData
 	var NewMPE *cmsStage
@@ -326,6 +506,8 @@ func cmsStageAllocMatrix(
 		MatrixElemTypeFree,
 		nil,
 	)
+	fmt.Println("EvaluateMatrix created")
+
 	if NewMPE == nil {
 		return nil
 	}
@@ -341,9 +523,7 @@ func cmsStageAllocMatrix(
 	NewElem.Double = make([]float64, n)
 
 	// Copy the matrix elements into the Double array
-	for i = 0; i < n; i++ {
-		NewElem.Double[i] = Matrix[i]
-	}
+	copy(NewElem.Double, Matrix)
 
 	// If an offset is provided, allocate memory for the Offset array and copy its elements
 	if Offset != nil {
@@ -352,6 +532,7 @@ func cmsStageAllocMatrix(
 			NewElem.Offset[i] = Offset[i]
 		}
 	}
+	fmt.Println("end cmsStageAllocMatrix")
 
 	return NewMPE
 
@@ -360,7 +541,7 @@ Error:
 		cmsStageFree(NewMPE)
 	}
 	return nil
-}
+}*/
 
 /*
 	func EvaluateXYZ2Lab(In *float32, Out *float32, mpe *cmsStage) {
@@ -384,6 +565,7 @@ Error:
 	}
 */
 func EvaluateXYZ2Lab(In []float32, Out []float32, mpe *cmsStage) {
+	fmt.Println("start EvaluateXYZ2Lab")
 	const XYZadj = MAX_ENCODEABLE_XYZ
 
 	var XYZ cmsCIEXYZ
@@ -402,6 +584,8 @@ func EvaluateXYZ2Lab(In []float32, Out []float32, mpe *cmsStage) {
 	Out[0] = float32(Lab.L / 100.0)
 	Out[1] = float32((Lab.a + 128.0) / 255.0)
 	Out[2] = float32((Lab.b + 128.0) / 255.0)
+	fmt.Println("end EvaluateXYZ2Lab")
+
 }
 
 func cmsStageAllocXYZ2Lab(ContextID CmsContext) *cmsStage {
@@ -473,6 +657,7 @@ func cmsSliceSpaceFloat(nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLERF
 // ********************************************************************************
 
 func EvaluateLab2XYZ(In []float32, Out []float32, mpe *cmsStage) {
+	fmt.Println("start EvaluateLab2XYZ")
 	const XYZadj = MAX_ENCODEABLE_XYZ
 
 	var XYZ cmsCIEXYZ
@@ -491,8 +676,37 @@ func EvaluateLab2XYZ(In []float32, Out []float32, mpe *cmsStage) {
 	Out[0] = float32(XYZ.X / XYZadj)
 	Out[1] = float32(XYZ.Y / XYZadj)
 	Out[2] = float32(XYZ.Z / XYZadj)
+	fmt.Println("end EvaluateLab2XYZ")
 
 }
+
+/*
+func EvaluateLab2XYZ(In []float32, Out []float32, mpe *cmsStage) {
+	fmt.Println("start EvaluateLab2XYZ")
+	const XYZadj = MAX_ENCODEABLE_XYZ
+
+	var XYZ cmsCIEXYZ
+	var Lab cmsCIELab
+
+	// V4 rules
+	Lab.L = float64(In[0] * 100.0)
+	Lab.a = float64(In[1]*255.0 - 128.0)
+	Lab.b = float64(In[2]*255.0 - 128.0)
+
+	fmt.Printf("Lab: L = %.10f, a = %.10f, b = %.10f\n", Lab.L, Lab.a, Lab.b)
+
+	cmsLab2XYZ(nil, &XYZ, &Lab)
+
+	fmt.Printf("XYZ (before adj): X = %.10f, Y = %.10f, Z = %.10f\n", XYZ.X, XYZ.Y, XYZ.Z)
+
+	Out[0] = float32(XYZ.X / XYZadj)
+	Out[1] = float32(XYZ.Y / XYZadj)
+	Out[2] = float32(XYZ.Z / XYZadj)
+
+	fmt.Printf("XYZ (after adj): X = %.10f, Y = %.10f, Z = %.10f\n", Out[0], Out[1], Out[2])
+
+	fmt.Println("end EvaluateLab2XYZ")
+}*/
 
 // No dup or free routines needed, as the structure has no pointers in it.
 func cmsStageAllocLab2XYZ(ContextID CmsContext) *cmsStage {
@@ -551,6 +765,7 @@ func cmsStageAllocLabV2ToV4curves(ContextID CmsContext) *cmsStage {
 
 // _cmsStageAllocLabV2ToV4 allocates a matrix-based stage for Lab v2 to v4 conversion.
 func cmsStageAllocLabV2ToV4(ContextID CmsContext) *cmsStage {
+	fmt.Println("cmsStageAllocLabV2ToV4")
 	var v2ToV4 = []float64{
 		65535.0 / 65280.0, 0, 0,
 		0, 65535.0 / 65280.0, 0,
@@ -698,6 +913,8 @@ func cmsStageNext(mpe *cmsStage) *cmsStage {
 	return mpe.Next
 }
 func cmsStageDup(mpe *cmsStage) *cmsStage {
+	//fmt.Println("cmsStageDup")
+
 	if mpe == nil {
 		return nil
 	}
@@ -734,10 +951,13 @@ func cmsStageDup(mpe *cmsStage) *cmsStage {
 
 // BlessLUT sets up the channel count and ensures consistency across stages.
 func BlessLUT(lut *cmsPipeline) bool {
+	fmt.Println("start BlessLUT")
 	// We can set the input/output channels only if we have elements.
 	if lut.Elements != nil {
-		first := cmsPipelineGetPtrToFirstStage(lut)
-		last := cmsPipelineGetPtrToLastStage(lut)
+		var prev, next *cmsStage
+		var first, last *cmsStage
+		first = cmsPipelineGetPtrToFirstStage(lut)
+		last = cmsPipelineGetPtrToLastStage(lut)
 
 		if first == nil || last == nil {
 			return false
@@ -747,18 +967,19 @@ func BlessLUT(lut *cmsPipeline) bool {
 		lut.OutputChannels = last.OutputChannels
 
 		// Check chain consistency
-		prev := first
-		next := prev.Next
+		prev = first
+		next = prev.Next
 
 		for next != nil {
 			if next.InputChannels != prev.OutputChannels {
 				return false
 			}
 
-			prev = next
 			next = next.Next
+			prev = prev.Next
 		}
 	}
+	fmt.Println("end BlessLUT")
 
 	return true
 }
@@ -767,14 +988,14 @@ func BlessLUT(lut *cmsPipeline) bool {
 func LUTeval16(In []uint16, Out []uint16, D unsafe.Pointer) {
 	lut := (*cmsPipeline)(D)
 	var Storage [2][MAX_STAGE_CHANNELS]float32
-	Phase := 0
+	var Phase, NextPhase int
 
 	// Convert input from 16-bit to float
 	From16ToFloat(In, Storage[Phase][:], lut.InputChannels)
 
 	// Process each stage in the pipeline
 	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
-		NextPhase := Phase ^ 1
+		NextPhase = Phase ^ 1
 		mpe.EvalPtr(Storage[Phase][:], Storage[NextPhase][:], mpe)
 		Phase = NextPhase
 	}
@@ -784,23 +1005,54 @@ func LUTeval16(In []uint16, Out []uint16, D unsafe.Pointer) {
 }
 
 // _LUTevalFloat evaluates the LUT on a float32 basis
+/*
 func LUTevalFloat(In []float32, Out []float32, D unsafe.Pointer) {
 	lut := (*cmsPipeline)(D)
 	var Storage [2][MAX_STAGE_CHANNELS]float32
-	Phase := 0
+	var Phase, NextPhase int
 
 	// Copy input to the first storage buffer
-	MemmoveSlice(Storage[Phase][:], In, int(lut.InputChannels)*int(unsafe.Sizeof(float32(0))))
+	MemmoveSlice(Storage[Phase][:], In, int(lut.InputChannels))
 
 	// Process each stage in the pipeline
 	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
-		NextPhase := Phase ^ 1
+		NextPhase = Phase ^ 1
 		mpe.EvalPtr(Storage[Phase][:], Storage[NextPhase][:], mpe)
 		Phase = NextPhase
 	}
 
 	// Copy the result to the output
-	MemmoveSlice(Out, Storage[Phase][:], int(lut.OutputChannels)*int(unsafe.Sizeof(float32(0))))
+	MemmoveSlice(Out, Storage[Phase][:], int(lut.OutputChannels))
+}
+*/
+func LUTevalFloat(In []float32, Out []float32, D unsafe.Pointer) {
+	fmt.Println("START LUTevalFloat")
+	lut := (*cmsPipeline)(D)
+	var Storage [2][MAX_STAGE_CHANNELS]float32
+	var Phase, NextPhase int
+
+	fmt.Println("LUTevalFloat Input:", In)
+	MemmoveSlice(Storage[Phase][:], In, int(lut.InputChannels))
+	fmt.Println("LUTevalFloat After copying input:", Storage[Phase][:lut.InputChannels])
+	var cycle int
+	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
+		fmt.Println("cycle for mpe", cycle)
+		cycle++
+		NextPhase = Phase ^ 1
+		fmt.Println("LUTevalFloat Before EvalPtr, Phase:", Phase, "NextPhase:", NextPhase)
+		fmt.Println("LUTevalFloat Storage before EvalPtr:", Storage[Phase][:lut.InputChannels])
+
+		mpe.EvalPtr(Storage[Phase][:], Storage[NextPhase][:], mpe)
+
+		fmt.Println("LUTevalFloat Storage after EvalPtr:", Storage[NextPhase][:])
+		Phase = NextPhase
+	}
+
+	fmt.Println("LUTevalFloat Final Storage:", Storage[Phase][:])
+	MemmoveSlice(Out, Storage[Phase][:], int(lut.OutputChannels))
+	fmt.Println("LUTevalFloat Output:", Out)
+	fmt.Println("END LUTevalFloat")
+
 }
 
 // cmsPipelineAlloc allocates and initializes a new LUT pipeline
@@ -811,10 +1063,8 @@ func cmsPipelineAlloc(contextID CmsContext, inputChannels, outputChannels uint32
 	}
 
 	// Allocate memory for the cmsPipeline struct
-	newLUT := (*cmsPipeline)(cmsMallocZero(contextID, uint32(unsafe.Sizeof(cmsPipeline{}))))
-	if newLUT == nil {
-		return nil
-	}
+	//newLUT := (*cmsPipeline)(cmsMallocZero(contextID, uint32(unsafe.Sizeof(cmsPipeline{}))))
+	newLUT := allocateStruct[cmsPipeline]()
 
 	// Initialize the LUT structure
 	newLUT.InputChannels = inputChannels
@@ -828,7 +1078,6 @@ func cmsPipelineAlloc(contextID CmsContext, inputChannels, outputChannels uint32
 
 	// Validate the LUT
 	if !BlessLUT(newLUT) {
-		cmsFree(contextID, unsafe.Pointer(newLUT))
 		return nil
 	}
 
@@ -882,6 +1131,7 @@ func cmsPipelineEvalFloat(In []float32, Out []float32, lut *cmsPipeline) {
 	lut.EvalFloatFn(In, Out, unsafe.Pointer(lut))
 }
 func cmsPipelineDup(lut *cmsPipeline) *cmsPipeline {
+	//fmt.Println("cmsPipelineDup")
 	if lut == nil {
 		return nil
 	}
@@ -928,6 +1178,7 @@ func cmsPipelineDup(lut *cmsPipeline) *cmsPipeline {
 	return NewLUT
 }
 func cmsPipelineInsertStage(lut *cmsPipeline, loc cmsStageLoc, mpe *cmsStage) bool {
+	fmt.Println("cmsPipelineInsertStage")
 	if lut == nil || mpe == nil {
 		return false
 	}
@@ -956,6 +1207,7 @@ func cmsPipelineInsertStage(lut *cmsPipeline, loc cmsStageLoc, mpe *cmsStage) bo
 	return BlessLUT(lut)
 }
 func cmsPipelineUnlinkStage(lut *cmsPipeline, loc cmsStageLoc, mpe **cmsStage) {
+	//	fmt.Println("cmsPipelineUnlinkStage")
 	if lut.Elements == nil {
 		if mpe != nil {
 			*mpe = nil
@@ -996,6 +1248,7 @@ func cmsPipelineUnlinkStage(lut *cmsPipeline, loc cmsStageLoc, mpe **cmsStage) {
 	BlessLUT(lut)
 }
 func cmsPipelineCat(l1 *cmsPipeline, l2 *cmsPipeline) bool {
+	//	fmt.Println("cmsPipelineCat")
 	if l1.Elements == nil && l2.Elements == nil {
 		l1.InputChannels = l2.InputChannels
 		l1.OutputChannels = l2.OutputChannels
@@ -1212,6 +1465,7 @@ func EvaluateCLUTfloat(In []float32, Out []float32, mpe *cmsStage) {
 
 // EvaluateCLUTfloatIn16 converts to 16 bits, evaluates, and back to floating point.
 func EvaluateCLUTfloatIn16(In []float32, Out []float32, mpe *cmsStage) {
+	fmt.Println("start EvaluateCLUTfloatIn16")
 	var In16 [MAX_STAGE_CHANNELS]uint16
 	var Out16 [MAX_STAGE_CHANNELS]uint16
 
@@ -1224,6 +1478,7 @@ func EvaluateCLUTfloatIn16(In []float32, Out []float32, mpe *cmsStage) {
 	FromFloatTo16(In, In16[:], mpe.InputChannels)
 	data.Params.Interpolation.Lerp16(In16[:], Out16[:], data.Params)
 	From16ToFloat(Out16[:], Out, mpe.OutputChannels)
+	fmt.Println("end EvaluateCLUTfloatIn16")
 }
 
 // CubeSize calculates the total number of nodes in a hypercube.
@@ -1346,8 +1601,8 @@ func cmsStageAllocCLut16bitGranular(
 		cmsStageFree(NewMPE)
 		return nil
 	}
-
 	NewElem.Tab.T = make([]uint16, NewElem.NEntries)
+	fmt.Printf("111 make([]uint16 %d %p %p\n", NewElem.NEntries, &NewElem.Tab.T[0], NewElem.Tab)
 
 	if Table != nil {
 		for i := 0; i < int(NewElem.NEntries); i++ {
@@ -1520,7 +1775,7 @@ func cmsStageSampleCLut16bit(
 			}
 		}
 
-		if Sampler(In[:], Out[:], Cargo) != 0 {
+		if Sampler(In[:], Out[:], Cargo) == 0 {
 			return false
 		}
 
@@ -1583,7 +1838,7 @@ func cmsStageSampleCLutFloat(
 
 		if clut.Tab.TFloat != nil {
 			for t := 0; t < int(nOutputs); t++ {
-                Out[t] = clut.Tab.TFloat[index + t];
+				Out[t] = clut.Tab.TFloat[index+t]
 			}
 		}
 
@@ -1594,7 +1849,7 @@ func cmsStageSampleCLutFloat(
 		if dwFlags&SAMPLER_INSPECT == 0 {
 			if clut.Tab.TFloat != nil {
 				for t := 0; t < int(nOutputs); t++ {
-					clut.Tab.TFloat[index + t] = Out[t];
+					clut.Tab.TFloat[index+t] = Out[t]
 				}
 			}
 		}

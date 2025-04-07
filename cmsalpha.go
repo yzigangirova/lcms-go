@@ -33,181 +33,555 @@ func trueBytesSize(format uint32) uint32 {
 }
 
 // Formatter function type
-type FormatterAlphaFn func(dst, src unsafe.Pointer)
+type FormatterAlphaFn func(dst, src any)
 
 // Formatters from 8-bit
-func copy8(dst, src unsafe.Pointer) {
-	memmove(dst, src, 1)
+func copy8(dst, src any) {
+	// Type assertion for input and output
+	inBytes, okIn := src.([]byte)
+	outBytes, okOut := dst.([]byte)
+	if !okIn || !okOut {
+		panic("in and out must be of type []byte")
+	}
+	outBytes[0] = inBytes[0]
+
+}
+func from8to16(dst, src any) {
+	// Type assertion to ensure src is []uint8 and dst is []uint16
+	srcSlice, okSrc := src.([]uint8)
+	dstSlice, okDst := dst.([]uint16)
+
+	if !okSrc || !okDst {
+		panic("from8to16: expected src to be []uint8 and dst to be []uint16")
+	}
+
+	// Ensure the slices have at least one element
+	if len(srcSlice) == 0 || len(dstSlice) == 0 {
+		panic("from8to16: source or destination slice is empty")
+	}
+
+	// Perform the conversion
+	n := srcSlice[0]                      // Read first byte
+	dstSlice[0] = uint16(FROM_8_TO_16(n)) // Convert and store in first uint16
 }
 
-func from8to16(dst, src unsafe.Pointer) {
-	n := *(*uint8)(src)
-	*(*uint16)(dst) = uint16(FROM_8_TO_16(n)) // FROM_8_TO_16(n)
+// Dummy implementations for external functions
+/*func changeEndian(n uint16) uint16 {
+	return (n>>8)&0x00FF | (n<<8)&0xFF00
 }
 
-func from8to16SE(dst, src unsafe.Pointer) {
-	n := *(*uint8)(src)
-	*(*uint16)(dst) = changeEndian(FROM_8_TO_16(n))
+func FROM_8_TO_16(n uint8) uint16 {
+	return uint16(n) * 257 // Expands 8-bit range [0-255] to 16-bit range [0-65535]
 }
 
-func from8toFLT(dst, src unsafe.Pointer) {
-	*(*float32)(dst) = float32(*(*uint8)(src) / 255.0)
+func cmsFloat2Half(f float32) uint16 {
+	// Simulates conversion from float32 to half-precision float
+	return uint16(math.Float32bits(f) >> 16) // Basic approximation
+}*/
+
+// Converts from 8-bit to 16-bit with endian swap
+func from8to16SE(dst, src any) {
+	srcBytes, okSrc := src.([]uint8)
+	dstBytes, okDst := dst.([]uint16)
+
+	if !okSrc || !okDst {
+		panic("from8to16SE: src must be []uint8 and dst must be []uint16")
+	}
+
+	if len(srcBytes) == 0 || len(dstBytes) == 0 {
+		panic("from8to16SE: empty source or destination slice")
+	}
+
+	n := srcBytes[0]
+	dstBytes[0] = changeEndian(FROM_8_TO_16(n))
+}
+
+// Converts from 8-bit to float32
+func from8toFLT(dst, src any) {
+	srcBytes, okSrc := src.([]uint8)
+	dstBytes, okDst := dst.([]float32)
+
+	if !okSrc || !okDst {
+		panic("from8toFLT: src must be []uint8 and dst must be []float32")
+	}
+
+	if len(srcBytes) == 0 || len(dstBytes) == 0 {
+		panic("from8toFLT: empty source or destination slice")
+	}
+
+	dstBytes[0] = float32(srcBytes[0]) / 255.0
 }
 
 // Converts from 8-bit to double (64-bit float)
-func from8toDBL(dst, src unsafe.Pointer) {
-	*(*float64)(dst) = float64(*(*uint8)(src) / 255.0)
+func from8toDBL(dst, src any) {
+	srcBytes, okSrc := src.([]uint8)
+	dstBytes, okDst := dst.([]float64)
+
+	if !okSrc || !okDst {
+		panic("from8toDBL: src must be []uint8 and dst must be []float64")
+	}
+
+	if len(srcBytes) == 0 || len(dstBytes) == 0 {
+		panic("from8toDBL: empty source or destination slice")
+	}
+
+	dstBytes[0] = float64(srcBytes[0]) / 255.0
 }
 
 // Converts from 8-bit to half-precision float
-func from8toHLF(dst, src unsafe.Pointer) {
+func from8toHLF(dst, src any) {
+	srcBytes, okSrc := src.([]uint8)
+	dstBytes, okDst := dst.([]uint16)
 
-	n := float32(*(*uint8)(src) / 255.0)
-	*(*uint16)(dst) = cmsFloat2Half(n) // Assumes FloatToHalf is implemented
+	if !okSrc || !okDst {
+		panic("from8toHLF: src must be []uint8 and dst must be []uint16")
+	}
 
+	if len(srcBytes) == 0 || len(dstBytes) == 0 {
+		panic("from8toHLF: empty source or destination slice")
+	}
+
+	n := float32(srcBytes[0]) / 255.0
+	dstBytes[0] = cmsFloat2Half(n) // Assumes FloatToHalf is implemented
 }
 
 // Converts from 16-bit to 8-bit
-func from16to8(dst, src unsafe.Pointer) {
-	n := *(*uint16)(src)
-	*(*uint8)(dst) = FROM_16_TO_8(n) // Uses previously defined From16To8 function
+func from16to8(dst, src any) {
+	srcBytes, okSrc := src.([]uint16)
+	dstBytes, okDst := dst.([]uint8)
+
+	if !okSrc || !okDst {
+		panic("from16to8: src must be []uint16 and dst must be []uint8")
+	}
+
+	if len(srcBytes) == 0 || len(dstBytes) == 0 {
+		panic("from16to8: empty source or destination slice")
+	}
+
+	dstBytes[0] = FROM_16_TO_8(srcBytes[0])
 }
 
 // Converts from 16-bit (big-endian) to 8-bit
-func from16SEto8(dst, src unsafe.Pointer) {
-	n := *(*uint16)(src)
-	*(*uint8)(dst) = FROM_16_TO_8(changeEndian(n)) // Uses changeEndian function
+func from16SEto8(dst, src any) {
+	srcBytes, okSrc := src.([]uint16)
+	dstBytes, okDst := dst.([]uint8)
+
+	if !okSrc || !okDst {
+		panic("from16SEto8: src must be []uint16 and dst must be []uint8")
+	}
+
+	if len(srcBytes) == 0 || len(dstBytes) == 0 {
+		panic("from16SEto8: empty source or destination slice")
+	}
+
+	dstBytes[0] = FROM_16_TO_8(changeEndian(srcBytes[0]))
 }
 
 // Copies 2 bytes from src to dst
-func copy16(dst, src unsafe.Pointer) {
-	memmove(dst, src, 2) // Uses the previously defined memmove function
+func copy16(dst, src any) {
+	srcBytes, okSrc := src.([]byte)
+	dstBytes, okDst := dst.([]byte)
+
+	if !okSrc || !okDst {
+		panic("copy16: src and dst must be []byte")
+	}
+
+	if len(srcBytes) < 2 || len(dstBytes) < 2 {
+		panic("copy16: insufficient slice length")
+	}
+
+	MemmoveSlice(dstBytes, srcBytes, 2)
 }
 
 // Converts from 16-bit to 16-bit with endian swap
-func from16to16(dst, src unsafe.Pointer) {
-	n := *(*uint16)(src)
-	*(*uint16)(dst) = changeEndian(n)
+func from16to16(dst, src any) {
+	srcBytes, okSrc := src.([]uint16)
+	dstBytes, okDst := dst.([]uint16)
+
+	if !okSrc || !okDst {
+		panic("from16to16: src and dst must be []uint16")
+	}
+
+	if len(srcBytes) == 0 || len(dstBytes) == 0 {
+		panic("from16to16: empty source or destination slice")
+	}
+
+	dstBytes[0] = changeEndian(srcBytes[0])
 }
 
 // Converts from 16-bit to 32-bit float
-func from16toFLT(dst, src unsafe.Pointer) {
-	*(*float32)(dst) = float32(*(*uint16)(src) / 65535.0)
+func from16toFLT(dst, src any) {
+	srcUint16, okSrc := src.([]uint16)
+	dstFloat32, okDst := dst.([]float32)
+
+	if !okSrc || !okDst {
+		panic("from16toFLT: src must be []uint16 and dst must be []float32")
+	}
+
+	if len(srcUint16) == 0 || len(dstFloat32) == 0 {
+		panic("from16toFLT: empty source or destination slice")
+	}
+
+	dstFloat32[0] = float32(srcUint16[0]) / 65535.0
 }
 
-func from16SEtoFLT(dst, src unsafe.Pointer) {
-	*(*float32)(dst) = float32(changeEndian(*(*uint16)(src)) / 65535.0)
+// Converts from 16-bit big-endian to 32-bit float
+func from16SEtoFLT(dst, src any) {
+	srcUint16, okSrc := src.([]uint16)
+	dstFloat32, okDst := dst.([]float32)
+
+	if !okSrc || !okDst {
+		panic("from16SEtoFLT: src must be []uint16 and dst must be []float32")
+	}
+
+	if len(srcUint16) == 0 || len(dstFloat32) == 0 {
+		panic("from16SEtoFLT: empty source or destination slice")
+	}
+
+	dstFloat32[0] = float32(changeEndian(srcUint16[0])) / 65535.0
 }
 
-func from16toDBL(dst, src unsafe.Pointer) {
-	*(*float64)(dst) = float64(*(*uint16)(src) / 65535.0)
+// Converts from 16-bit to 64-bit float (double)
+func from16toDBL(dst, src any) {
+	srcUint16, okSrc := src.([]uint16)
+	dstFloat64, okDst := dst.([]float64)
+
+	if !okSrc || !okDst {
+		panic("from16toDBL: src must be []uint16 and dst must be []float64")
+	}
+
+	if len(srcUint16) == 0 || len(dstFloat64) == 0 {
+		panic("from16toDBL: empty source or destination slice")
+	}
+
+	dstFloat64[0] = float64(srcUint16[0]) / 65535.0
 }
 
-func from16SEtoDBL(dst, src unsafe.Pointer) {
-	*(*float64)(dst) = float64(changeEndian(*(*uint16)(src)) / 65535.0)
+// Converts from 16-bit big-endian to 64-bit float (double)
+func from16SEtoDBL(dst, src any) {
+	srcUint16, okSrc := src.([]uint16)
+	dstFloat64, okDst := dst.([]float64)
+
+	if !okSrc || !okDst {
+		panic("from16SEtoDBL: src must be []uint16 and dst must be []float64")
+	}
+
+	if len(srcUint16) == 0 || len(dstFloat64) == 0 {
+		panic("from16SEtoDBL: empty source or destination slice")
+	}
+
+	dstFloat64[0] = float64(changeEndian(srcUint16[0])) / 65535.0
 }
 
-func from16toHLF(dst, src unsafe.Pointer) {
-	n := float32((*(*uint16)(src) / 65535.0))
-	*(*uint16)(dst) = cmsFloat2Half(n)
+// Converts from 16-bit to 16-bit half-precision float
+func from16toHLF(dst, src any) {
+	srcUint16, okSrc := src.([]uint16)
+	dstUint16, okDst := dst.([]uint16)
+
+	if !okSrc || !okDst {
+		panic("from16toHLF: src and dst must be []uint16")
+	}
+
+	if len(srcUint16) == 0 || len(dstUint16) == 0 {
+		panic("from16toHLF: empty source or destination slice")
+	}
+
+	n := float32(srcUint16[0]) / 65535.0
+	dstUint16[0] = cmsFloat2Half(n)
 }
 
-func from16SEtoHLF(dst, src unsafe.Pointer) {
-	n := float32(changeEndian(*(*uint16)(src) / 65535.0))
-	*(*uint16)(dst) = cmsFloat2Half(n)
+// Converts from 16-bit big-endian to 16-bit half-precision float
+func from16SEtoHLF(dst, src any) {
+	srcUint16, okSrc := src.([]uint16)
+	dstUint16, okDst := dst.([]uint16)
 
+	if !okSrc || !okDst {
+		panic("from16SEtoHLF: src and dst must be []uint16")
+	}
+
+	if len(srcUint16) == 0 || len(dstUint16) == 0 {
+		panic("from16SEtoHLF: empty source or destination slice")
+	}
+
+	n := float32(changeEndian(srcUint16[0])) / 65535.0
+	dstUint16[0] = cmsFloat2Half(n)
 }
 
-// From Float
+// From Float to 8-bit
+func fromFLTto8(dst, src any) {
+	srcFloat64, okSrc := src.([]float64)
+	dstUint8, okDst := dst.([]uint8)
 
-func fromFLTto8(dst, src unsafe.Pointer) {
-	n := *(*float64)(src)
-	*(*uint8)(dst) = cmsQuickSaturateByte(n * 255.0)
+	if !okSrc || !okDst {
+		panic("fromFLTto8: src must be []float64 and dst must be []uint8")
+	}
+
+	if len(srcFloat64) == 0 || len(dstUint8) == 0 {
+		panic("fromFLTto8: empty source or destination slice")
+	}
+
+	dstUint8[0] = cmsQuickSaturateByte(srcFloat64[0] * 255.0)
 }
 
-func fromFLTto16(dst, src unsafe.Pointer) {
-	n := *(*float64)(src)
-	*(*uint16)(dst) = cmsQuickSaturateWord(n * 65535.0)
+// From Float to 16-bit
+func fromFLTto16(dst, src any) {
+	srcFloat64, okSrc := src.([]float64)
+	dstUint16, okDst := dst.([]uint16)
+
+	if !okSrc || !okDst {
+		panic("fromFLTto16: src must be []float64 and dst must be []uint16")
+	}
+
+	if len(srcFloat64) == 0 || len(dstUint16) == 0 {
+		panic("fromFLTto16: empty source or destination slice")
+	}
+
+	dstUint16[0] = cmsQuickSaturateWord(srcFloat64[0] * 65535.0)
 }
 
-func fromFLTto16SE(dst, src unsafe.Pointer) {
-	n := *(*float64)(src)
-	i := cmsQuickSaturateWord(n * 65535.0)
+// From Float to 16-bit with Endian Swap
+func fromFLTto16SE(dst, src any) {
+	srcFloat64, okSrc := src.([]float64)
+	dstUint16, okDst := dst.([]uint16)
 
-	*(*uint16)(dst) = changeEndian(i)
+	if !okSrc || !okDst {
+		panic("fromFLTto16SE: src must be []float64 and dst must be []uint16")
+	}
+
+	if len(srcFloat64) == 0 || len(dstUint16) == 0 {
+		panic("fromFLTto16SE: empty source or destination slice")
+	}
+
+	i := cmsQuickSaturateWord(srcFloat64[0] * 65535.0)
+	dstUint16[0] = changeEndian(i)
 }
 
-func copy32(dst, src unsafe.Pointer) {
-	memmove(dst, src, unsafe.Sizeof(float32(0)))
+// Copy 32-bit float (equivalent to memmove)
+func copy32(dst, src any) {
+	srcFloat32, okSrc := src.([]float32)
+	dstFloat32, okDst := dst.([]float32)
+
+	if !okSrc || !okDst {
+		panic("copy32: src and dst must be []float32")
+	}
+
+	if len(srcFloat32) == 0 || len(dstFloat32) == 0 {
+		panic("copy32: empty source or destination slice")
+	}
+
+	dstFloat32[0] = srcFloat32[0]
 }
 
-func fromFLTtoDBL(dst, src unsafe.Pointer) {
-	n := *(*float32)(src)
-	*(*float64)(dst) = float64(n)
+// From Float to Double
+func fromFLTtoDBL(dst, src any) {
+	srcFloat32, okSrc := src.([]float32)
+	dstFloat64, okDst := dst.([]float64)
+
+	if !okSrc || !okDst {
+		panic("fromFLTtoDBL: src must be []float32 and dst must be []float64")
+	}
+
+	if len(srcFloat32) == 0 || len(dstFloat64) == 0 {
+		panic("fromFLTtoDBL: empty source or destination slice")
+	}
+
+	dstFloat64[0] = float64(srcFloat32[0])
 }
 
-func fromFLTtoHLF(dst, src unsafe.Pointer) {
-	n := *(*float32)(src)
-	*(*uint16)(dst) = cmsFloat2Half(n)
+// From Float to Half Precision Float
+func fromFLTtoHLF(dst, src any) {
+	srcFloat32, okSrc := src.([]float32)
+	dstUint16, okDst := dst.([]uint16)
+
+	if !okSrc || !okDst {
+		panic("fromFLTtoHLF: src must be []float32 and dst must be []uint16")
+	}
+
+	if len(srcFloat32) == 0 || len(dstUint16) == 0 {
+		panic("fromFLTtoHLF: empty source or destination slice")
+	}
+
+	dstUint16[0] = cmsFloat2Half(srcFloat32[0])
 }
 
-// From HALF
+// From Half-Precision Float (uint16) to 8-bit
+func fromHLFto8(dst, src any) {
+	srcUint16, okSrc := src.([]uint16)
+	dstUint8, okDst := dst.([]uint8)
 
-func fromHLFto8(dst, src unsafe.Pointer) {
-	n := cmsHalf2Float(*(*uint16)(src))
-	*(*uint8)(dst) = cmsQuickSaturateByte(float64(n) * 255.0)
+	if !okSrc || !okDst {
+		panic("fromHLFto8: src must be []uint16 and dst must be []uint8")
+	}
+	if len(srcUint16) == 0 || len(dstUint8) == 0 {
+		panic("fromHLFto8: empty source or destination slice")
+	}
+
+	n := cmsHalf2Float(srcUint16[0])
+	dstUint8[0] = cmsQuickSaturateByte(float64(n) * 255.0)
 }
 
-func fromHLFto16(dst, src unsafe.Pointer) {
-	n := cmsHalf2Float(*(*uint16)(src))
-	*(*uint16)(dst) = cmsQuickSaturateWord(float64(n) * 65535.0)
+// From Half-Precision Float (uint16) to 16-bit
+func fromHLFto16(dst, src any) {
+	srcUint16, okSrc := src.([]uint16)
+	dstUint16, okDst := dst.([]uint16)
+
+	if !okSrc || !okDst {
+		panic("fromHLFto16: src must be []uint16 and dst must be []uint16")
+	}
+	if len(srcUint16) == 0 || len(dstUint16) == 0 {
+		panic("fromHLFto16: empty source or destination slice")
+	}
+
+	n := cmsHalf2Float(srcUint16[0])
+	dstUint16[0] = cmsQuickSaturateWord(float64(n) * 65535.0)
 }
 
-func fromHLFto16SE(dst, src unsafe.Pointer) {
-	n := cmsHalf2Float(*(*uint16)(src))
+// From Half-Precision Float (uint16) to 16-bit with Endian Swap
+func fromHLFto16SE(dst, src any) {
+	srcUint16, okSrc := src.([]uint16)
+	dstUint16, okDst := dst.([]uint16)
+
+	if !okSrc || !okDst {
+		panic("fromHLFto16SE: src must be []uint16 and dst must be []uint16")
+	}
+	if len(srcUint16) == 0 || len(dstUint16) == 0 {
+		panic("fromHLFto16SE: empty source or destination slice")
+	}
+
+	n := cmsHalf2Float(srcUint16[0])
 	i := cmsQuickSaturateWord(float64(n) * 65535.0)
-	*(*uint16)(dst) = changeEndian(i)
+	dstUint16[0] = changeEndian(i)
 }
 
-func fromHLFtoFLT(dst, src unsafe.Pointer) {
-	*(*float32)(dst) = cmsHalf2Float(*(*uint16)(src))
+// From Half-Precision Float (uint16) to Float32
+func fromHLFtoFLT(dst, src any) {
+	srcUint16, okSrc := src.([]uint16)
+	dstFloat32, okDst := dst.([]float32)
 
+	if !okSrc || !okDst {
+		panic("fromHLFtoFLT: src must be []uint16 and dst must be []float32")
+	}
+	if len(srcUint16) == 0 || len(dstFloat32) == 0 {
+		panic("fromHLFtoFLT: empty source or destination slice")
+	}
+
+	dstFloat32[0] = cmsHalf2Float(srcUint16[0])
 }
 
-func fromHLFtoDBL(dst, src unsafe.Pointer) {
-	*(*float64)(dst) = float64(cmsHalf2Float(*(*uint16)(src)))
+// From Half-Precision Float (uint16) to Float64 (Double)
+func fromHLFtoDBL(dst, src any) {
+	srcUint16, okSrc := src.([]uint16)
+	dstFloat64, okDst := dst.([]float64)
 
+	if !okSrc || !okDst {
+		panic("fromHLFtoDBL: src must be []uint16 and dst must be []float64")
+	}
+	if len(srcUint16) == 0 || len(dstFloat64) == 0 {
+		panic("fromHLFtoDBL: empty source or destination slice")
+	}
+
+	dstFloat64[0] = float64(cmsHalf2Float(srcUint16[0]))
 }
 
-// From double
-func fromDBLto8(dst, src unsafe.Pointer) {
-	n := *(*float64)(src)
-	*(*uint8)(dst) = cmsQuickSaturateByte(n * 255.0)
+// Converts from double (64-bit float) to 8-bit
+func fromDBLto8(dst, src any) {
+	srcFloat64, okSrc := src.([]float64)
+	dstUint8, okDst := dst.([]uint8)
+
+	if !okSrc || !okDst {
+		panic("fromDBLto8: src must be []float64 and dst must be []uint8")
+	}
+
+	if len(srcFloat64) == 0 || len(dstUint8) == 0 {
+		panic("fromDBLto8: empty source or destination slice")
+	}
+
+	n := srcFloat64[0]
+	dstUint8[0] = cmsQuickSaturateByte(n * 255.0)
 }
 
-func fromDBLto16(dst, src unsafe.Pointer) {
-	n := *(*float64)(src)
-	*(*uint16)(dst) = cmsQuickSaturateWord(n * 65535.0)
+// Converts from double (64-bit float) to 16-bit
+func fromDBLto16(dst, src any) {
+	srcFloat64, okSrc := src.([]float64)
+	dstUint16, okDst := dst.([]uint16)
+
+	if !okSrc || !okDst {
+		panic("fromDBLto16: src must be []float64 and dst must be []uint16")
+	}
+
+	if len(srcFloat64) == 0 || len(dstUint16) == 0 {
+		panic("fromDBLto16: empty source or destination slice")
+	}
+
+	n := srcFloat64[0]
+	dstUint16[0] = cmsQuickSaturateWord(n * 65535.0)
 }
 
-func fromDBLto16SE(dst, src unsafe.Pointer) {
-	n := *(*float64)(src)
+// Converts from double (64-bit float) to 16-bit with endian swap
+func fromDBLto16SE(dst, src any) {
+	srcFloat64, okSrc := src.([]float64)
+	dstUint16, okDst := dst.([]uint16)
+
+	if !okSrc || !okDst {
+		panic("fromDBLto16SE: src must be []float64 and dst must be []uint16")
+	}
+
+	if len(srcFloat64) == 0 || len(dstUint16) == 0 {
+		panic("fromDBLto16SE: empty source or destination slice")
+	}
+
+	n := srcFloat64[0]
 	i := cmsQuickSaturateWord(n * 65535.0)
-	*(*uint16)(dst) = changeEndian(i)
+	dstUint16[0] = changeEndian(i)
 }
 
-func fromDBLtoFLT(dst, src unsafe.Pointer) {
-	n := *(*float64)(src)
-	*(*float32)(dst) = float32(n)
+// Converts from double (64-bit float) to 32-bit float
+func fromDBLtoFLT(dst, src any) {
+	srcFloat64, okSrc := src.([]float64)
+	dstFloat32, okDst := dst.([]float32)
+
+	if !okSrc || !okDst {
+		panic("fromDBLtoFLT: src must be []float64 and dst must be []float32")
+	}
+
+	if len(srcFloat64) == 0 || len(dstFloat32) == 0 {
+		panic("fromDBLtoFLT: empty source or destination slice")
+	}
+
+	dstFloat32[0] = float32(srcFloat64[0])
 }
 
-func fromDBLtoHLF(dst, src unsafe.Pointer) {
-	n := float32(*(*float64)(src))
-	*(*uint16)(dst) = cmsFloat2Half(n)
+// Converts from double (64-bit float) to half-precision float
+func fromDBLtoHLF(dst, src any) {
+	srcFloat64, okSrc := src.([]float64)
+	dstUint16, okDst := dst.([]uint16)
+
+	if !okSrc || !okDst {
+		panic("fromDBLtoHLF: src must be []float64 and dst must be []uint16")
+	}
+
+	if len(srcFloat64) == 0 || len(dstUint16) == 0 {
+		panic("fromDBLtoHLF: empty source or destination slice")
+	}
+
+	n := float32(srcFloat64[0])
+	dstUint16[0] = cmsFloat2Half(n)
 }
 
-func copy64(dst, src unsafe.Pointer) {
-	memmove(dst, src, unsafe.Sizeof(float64(0)))
+// Copies 64-bit double from src to dst
+func copy64(dst, src any) {
+	srcFloat64, okSrc := src.([]float64)
+	dstFloat64, okDst := dst.([]float64)
+
+	if !okSrc || !okDst {
+		panic("copy64: src and dst must be []float64")
+	}
+
+	if len(srcFloat64) == 0 || len(dstFloat64) == 0 {
+		panic("copy64: empty source or destination slice")
+	}
+
+	dstFloat64[0] = srcFloat64[0]
 }
 
 // Returns the position (x or y) of the formatter in the table of functions
@@ -237,7 +611,7 @@ func FormatterPos(frm uint32) int32 {
 }
 
 // Define function types for the formatters
-type cmsFormatterAlphaFn func(dst, src unsafe.Pointer)
+type cmsFormatterAlphaFn func(dst, src any)
 
 // FormatterAlpha is a static array of functions
 var FormatterAlpha = [6][6]cmsFormatterAlphaFn{
@@ -369,8 +743,7 @@ func ComputeComponentIncrements(format, bytesPerPlane uint32, componentStartingO
 // Function to handle extra channels copying alpha
 func cmsHandleExtraChannels(
 	p *cmsTRANSFORM,
-	in unsafe.Pointer,
-	out unsafe.Pointer,
+	in, out any,
 	PixelsPerLine uint32,
 	LineCount uint32,
 	Stride *cmsStride,
@@ -386,9 +759,16 @@ func cmsHandleExtraChannels(
 	if p.DwOriginalFlags&cmsFLAGS_COPY_ALPHA == 0 {
 		return
 	}
+	// Type assertion for input and output
+	inBytes, okIn := in.([]byte)
+	outBytes, okOut := out.([]byte)
 
+	if !okIn || !okOut {
+		panic("cmsHandleExtraChannels: in and out must be of type []byte")
+	}
 	// Exit early for in-place color management
-	if p.InputFormat == p.OutputFormat && in == out {
+	//In C pointers are compared here!  Do I have to do deep comparing?
+	if p.InputFormat == p.OutputFormat && unsafe.SliceData(inBytes) == unsafe.SliceData(outBytes) {
 		return
 	}
 
@@ -413,19 +793,21 @@ func cmsHandleExtraChannels(
 		return
 	}
 
+
 	if nExtra == 1 { // Optimized routine for single extra channel
 		var SourceStrideIncrement, DestStrideIncrement uint32
 
 		for i := uint32(0); i < LineCount; i++ {
 			// Prepare pointers
-			SourcePtr := uintptr(in) + uintptr(SourceStartingOrder[0]+SourceStrideIncrement)
-			DestPtr := uintptr(out) + uintptr(DestStartingOrder[0]+DestStrideIncrement)
+			SourcePtr := inBytes[SourceStartingOrder[0]+SourceStrideIncrement:]
+			DestPtr := outBytes[DestStartingOrder[0]+DestStrideIncrement:]
 
 			for j := uint32(0); j < PixelsPerLine; j++ {
-				copyValueFn(unsafe.Pointer(DestPtr), unsafe.Pointer(SourcePtr))
+				//COPYVALUEFN needs rethinking and rewriting into interfaces!
+				copyValueFn(DestPtr, SourcePtr)
 
-				SourcePtr += uintptr(SourceIncrements[0])
-				DestPtr += uintptr(DestIncrements[0])
+				SourcePtr = SourcePtr[SourceIncrements[0]:]
+				DestPtr = DestPtr[DestIncrements[0]:]
 			}
 
 			SourceStrideIncrement += Stride.BytesPerLineIn
@@ -433,8 +815,8 @@ func cmsHandleExtraChannels(
 		}
 	} else { // General case for multiple extra channels
 		var (
-			SourcePtr              [cmsMAXCHANNELS]uintptr
-			DestPtr                [cmsMAXCHANNELS]uintptr
+			SourcePtr              [cmsMAXCHANNELS][]byte
+			DestPtr                [cmsMAXCHANNELS][]byte
 			SourceStrideIncrements [cmsMAXCHANNELS]uint32
 			DestStrideIncrements   [cmsMAXCHANNELS]uint32
 		)
@@ -442,16 +824,16 @@ func cmsHandleExtraChannels(
 		for i := uint32(0); i < LineCount; i++ {
 			// Prepare pointers
 			for j := uint32(0); j < uint32(nExtra); j++ {
-				SourcePtr[j] = uintptr(in) + uintptr(SourceStartingOrder[j]+SourceStrideIncrements[j])
-				DestPtr[j] = uintptr(out) + uintptr(DestStartingOrder[j]+DestStrideIncrements[j])
+				SourcePtr[j] = inBytes[(SourceStartingOrder[j] + SourceStrideIncrements[j]):]
+				DestPtr[j] = outBytes[DestStartingOrder[j]+DestStrideIncrements[j]:]
 			}
 
 			for j := uint32(0); j < PixelsPerLine; j++ {
 				for k := uint32(0); k < uint32(nExtra); k++ {
-					copyValueFn(unsafe.Pointer(DestPtr[k]), unsafe.Pointer(SourcePtr[k]))
+					copyValueFn(DestPtr[k], SourcePtr[k])
 
-					SourcePtr[k] += uintptr(SourceIncrements[k])
-					DestPtr[k] += uintptr(DestIncrements[k])
+					SourcePtr[k] = SourcePtr[k][SourceIncrements[k]:]
+					DestPtr[k] = DestPtr[k][DestIncrements[k]:]
 				}
 			}
 

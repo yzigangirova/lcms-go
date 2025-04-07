@@ -4,6 +4,7 @@ import (
 	//"errors"
 	"unsafe"
 	//"sync"
+	"fmt"
 	"reflect"
 )
 
@@ -84,7 +85,7 @@ func cmsSetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP [cmsMAXCHANNELS]uint1
 		panic("ContextAlarmCodes is nil")
 	}
 
-	Memcpy(ContextAlarmCodes.AlarmCodes[:], AlarmCodesP[:], 16)
+	MemcpySlice(ContextAlarmCodes.AlarmCodes[:], AlarmCodesP[:], 16)
 }
 
 // cmsGetAlarmCodesTHR gets the alarm codes for a specific context.
@@ -97,7 +98,7 @@ func cmsGetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP [cmsMAXCHANNELS]uint1
 		panic("ContextAlarmCodes is nil")
 	}
 
-	Memcpy(AlarmCodesP[:], ContextAlarmCodes.AlarmCodes[:], 16)
+	MemcpySlice(AlarmCodesP[:], ContextAlarmCodes.AlarmCodes[:], 16)
 }
 
 // cmsSetAlarmCodes sets the global alarm codes.
@@ -199,7 +200,7 @@ func PixelSize(Format uint32) uint32 {
 }
 
 // cmsDoTransform applies a transformation to the input buffer and writes the result to the output buffer.
-func CmsDoTransform(Transform CmsHTRANSFORM, InputBuffer, OutputBuffer unsafe.Pointer, Size uint32) {
+func CmsDoTransform(Transform CmsHTRANSFORM, InputBuffer, OutputBuffer any, Size uint32) {
 	p := (*cmsTRANSFORM)(Transform) // Cast the generic Transform to the specific type cmsTRANSFORM
 	var stride cmsStride
 
@@ -212,10 +213,10 @@ func CmsDoTransform(Transform CmsHTRANSFORM, InputBuffer, OutputBuffer unsafe.Po
 	// Perform the transformation
 	p.Xform(p, InputBuffer, OutputBuffer, Size, 1, &stride)
 }
+
 func CmsDoTransformStride(
 	Transform CmsHTRANSFORM,
-	InputBuffer unsafe.Pointer,
-	OutputBuffer unsafe.Pointer,
+	InputBuffer, OutputBuffer any,
 	Size uint32,
 	Stride uint32) {
 
@@ -232,8 +233,8 @@ func CmsDoTransformStride(
 
 func CmsDoTransformLineStride(
 	Transform CmsHTRANSFORM,
-	InputBuffer unsafe.Pointer,
-	OutputBuffer unsafe.Pointer,
+	InputBuffer,
+	OutputBuffer any,
 	PixelsPerLine uint32,
 	LineCount uint32,
 	BytesPerLineIn uint32,
@@ -259,27 +260,53 @@ func CmsDoTransformLineStride(
 
 func FloatXFORM(
 	p *cmsTRANSFORM,
-	in unsafe.Pointer,
-	out unsafe.Pointer,
+	in, out any,
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
 	var fIn, fOut [cmsMAXCHANNELS]float32
 	var OutOfGamut float32
 	var strideIn, strideOut uint32
+	var inBytes, outBytes []byte
+	// Type assertion for input and output
+	var accum, output []byte
+
+	// Type assertion and conversion for input
+	switch v := in.(type) {
+	case []byte:
+		inBytes = v
+	case []float32:
+		inBytes = float32SliceToBytes(v)
+	case []float64:
+		inBytes = float64SliceToBytes(v)
+	case []uint16:
+		inBytes = uint16SliceToBytes(v)
+	default:
+		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16")
+	}
+
+	// Type assertion and conversion for output
+	switch v := out.(type) {
+	case []byte:
+		outBytes = v
+	case []float32:
+		outBytes = float32SliceToBytes(v)
+	case []float64:
+		outBytes = float64SliceToBytes(v)
+	case []uint16:
+		outBytes = uint16SliceToBytes(v)
+	default:
+		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16")
+	}
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
 
 	strideIn, strideOut = 0, 0
 
-	//  Convert input and output buffers to slices once
-	inSlice := unsafe.Slice((*uint8)(in), PixelsPerLine*LineCount*Stride.BytesPerPlaneIn)
-	outSlice := unsafe.Slice((*uint8)(out), PixelsPerLine*LineCount*Stride.BytesPerPlaneOut)
-
 	for i := uint32(0); i < LineCount; i++ {
 		//  Use slices with offsets instead of unsafe
-		accum := inSlice[strideIn:]
-		output := outSlice[strideOut:]
+		accum = inBytes[strideIn:]
+		output = outBytes[strideOut:]
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			//  Process input correctly using slice indexing
@@ -318,30 +345,29 @@ func FloatXFORM(
 
 func NullFloatXFORM(
 	p *cmsTRANSFORM,
-	in unsafe.Pointer,
-	out unsafe.Pointer,
+	in, out any,
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
 	var fIn [cmsMAXCHANNELS]float32
 	var strideIn, strideOut uint32
+	var accum, output []byte
+	// Type assertion for input and output
+	inBytes, okIn := in.([]byte)
+	outBytes, okOut := out.([]byte)
+
+	if !okIn || !okOut {
+		panic(" in and out must be of type []byte")
+	}
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
 
 	strideIn, strideOut = 0, 0
 
-	//  Compute correct slice sizes
-	inSize := int(PixelsPerLine * LineCount * Stride.BytesPerPlaneIn)
-	outSize := int(PixelsPerLine * LineCount * Stride.BytesPerPlaneOut)
-
-	//  Convert input and output buffers to slices once
-	inSlice := unsafe.Slice((*uint8)(in), inSize)
-	outSlice := unsafe.Slice((*uint8)(out), outSize)
-
 	for i := uint32(0); i < LineCount; i++ {
 		//  Use slices with offsets instead of unsafe
-		accum := inSlice[strideIn:]
-		output := outSlice[strideOut:]
+		accum = inBytes[strideIn:]
+		output = outBytes[strideOut:]
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			//  Process input correctly using slice indexing
@@ -357,30 +383,29 @@ func NullFloatXFORM(
 
 func NullXFORM(
 	p *cmsTRANSFORM,
-	in unsafe.Pointer,
-	out unsafe.Pointer,
+	in, out any,
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
 	var wIn [cmsMAXCHANNELS]uint16
 	var strideIn, strideOut uint32
+	var accum, output []byte
+	// Type assertion for input and output
+	inBytes, okIn := in.([]byte)
+	outBytes, okOut := out.([]byte)
+
+	if !okIn || !okOut {
+		panic(" in and out must be of type []byte")
+	}
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
 
 	strideIn, strideOut = 0, 0
 
-	//  Compute correct slice sizes
-	inSize := int(PixelsPerLine * LineCount * Stride.BytesPerPlaneIn)
-	outSize := int(PixelsPerLine * LineCount * Stride.BytesPerPlaneOut)
-
-	//  Convert input and output buffers to slices once
-	inSlice := unsafe.Slice((*uint8)(in), inSize)
-	outSlice := unsafe.Slice((*uint8)(out), outSize)
-
 	for i := uint32(0); i < LineCount; i++ {
 		//  Use slices with offsets instead of unsafe
-		accum := inSlice[strideIn:]
-		output := outSlice[strideOut:]
+		accum = inBytes[strideIn:]
+		output = outBytes[strideOut:]
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			//  Process input correctly using slice indexing
@@ -396,26 +421,29 @@ func NullXFORM(
 
 func PrecalculatedXFORM(
 	p *cmsTRANSFORM,
-	in unsafe.Pointer,
-	out unsafe.Pointer,
+	in, out any,
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
 	var wIn, wOut [cmsMAXCHANNELS]uint16
 	var strideIn, strideOut uint32
+	var accum, output []byte
+	// Type assertion for input and output
+	inBytes, okIn := in.([]byte)
+	outBytes, okOut := out.([]byte)
+
+	if !okIn || !okOut {
+		panic(" in and out must be of type []byte")
+	}
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
 
 	strideIn, strideOut = 0, 0
 
-	// Convert input and output to slices
-	inSlice := unsafe.Slice((*uint8)(in), PixelsPerLine*LineCount*Stride.BytesPerPlaneIn)
-	outSlice := unsafe.Slice((*uint8)(out), PixelsPerLine*LineCount*Stride.BytesPerPlaneOut)
-
 	for i := uint32(0); i < LineCount; i++ {
 		// Accumulator slices for this line
-		accum := inSlice[strideIn:]
-		output := outSlice[strideOut:]
+		accum = inBytes[strideIn:]
+		output = outBytes[strideOut:]
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			// Process input
@@ -438,11 +466,11 @@ func PrecalculatedXFORM(
 func TransformOnePixelWithGamutCheck(p *cmsTRANSFORM, wIn, wOut []uint16) {
 	var wOutOfGamut uint16
 
-	woutOfGamutSlice := (*[1]uint16)(unsafe.Pointer(&wOutOfGamut))[:]
+	woutOfGamutSlice := []uint16{wOutOfGamut}
 	// Evaluate the gamut check function
 	p.GamutCheck.Eval16Fn(wIn, woutOfGamutSlice, p.GamutCheck.Data)
 
-	if wOutOfGamut >= 1 {
+	if woutOfGamutSlice[0] >= 1 {
 		// If out of gamut, use alarm codes
 		contextAlarmCodes := (*cmsAlarmCodesChunkType)(CmsContextGetClientChunk(p.ContextID, AlarmCodesContext))
 		for i := uint32(0); i < p.Lut.OutputChannels; i++ {
@@ -456,25 +484,29 @@ func TransformOnePixelWithGamutCheck(p *cmsTRANSFORM, wIn, wOut []uint16) {
 
 func PrecalculatedXFORMGamutCheck(
 	p *cmsTRANSFORM,
-	in, out unsafe.Pointer,
+	in, out any,
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
 	var wIn, wOut [cmsMAXCHANNELS]uint16
 	var strideIn, strideOut uint32
+	var accum, output []byte
+	// Type assertion for input and output
+	inBytes, okIn := in.([]byte)
+	outBytes, okOut := out.([]byte)
+
+	if !okIn || !okOut {
+		panic(" in and out must be of type []byte")
+	}
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
 
 	strideIn, strideOut = 0, 0
 
-	// Convert input and output buffers to slices ONCE before looping
-	inSlice := unsafe.Slice((*uint8)(in), PixelsPerLine*LineCount*Stride.BytesPerPlaneIn)
-	outSlice := unsafe.Slice((*uint8)(out), PixelsPerLine*LineCount*Stride.BytesPerPlaneOut)
-
 	for i := uint32(0); i < LineCount; i++ {
 		// Use slices with offsets instead of large allocation
-		accum := inSlice[strideIn:]
-		output := outSlice[strideOut:]
+		accum = inBytes[strideIn:]
+		output = outBytes[strideOut:]
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			// Correctly advance accum and output slices
@@ -491,13 +523,21 @@ func PrecalculatedXFORMGamutCheck(
 
 func CachedXFORM(
 	p *cmsTRANSFORM,
-	in, out unsafe.Pointer,
+	in, out any,
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
 	var wIn, wOut [cmsMAXCHANNELS]uint16
 	var strideIn, strideOut uint32
 	var cache cmsCACHE
+	var accum, output []byte
+	// Type assertion for input and output
+	inBytes, okIn := in.([]byte)
+	outBytes, okOut := out.([]byte)
+	//	fmt.Println("CachedXFORM")
+	if !okIn || !okOut {
+		panic(" in and out must be of type []byte")
+	}
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
 
@@ -506,14 +546,10 @@ func CachedXFORM(
 
 	strideIn, strideOut = 0, 0
 
-	// Convert input and output buffers to slices once before looping
-	inSlice := unsafe.Slice((*uint8)(in), PixelsPerLine*LineCount*Stride.BytesPerPlaneIn)
-	outSlice := unsafe.Slice((*uint8)(out), PixelsPerLine*LineCount*Stride.BytesPerPlaneOut)
-
 	for i := uint32(0); i < LineCount; i++ {
 		// Use slices with offsets instead of pointer arithmetic
-		accum := inSlice[strideIn:]
-		output := outSlice[strideOut:]
+		accum = inBytes[strideIn:]
+		output = outBytes[strideOut:]
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			// Correctly advance accum and output using slices
@@ -540,13 +576,21 @@ func CachedXFORM(
 
 func CachedXFORMGamutCheck(
 	p *cmsTRANSFORM,
-	in, out unsafe.Pointer,
+	in, out any,
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
 	var wIn, wOut [cmsMAXCHANNELS]uint16
 	var strideIn, strideOut uint32
 	var cache cmsCACHE
+	var accum, output []byte
+	// Type assertion for input and output
+	inBytes, okIn := in.([]byte)
+	outBytes, okOut := out.([]byte)
+
+	if !okIn || !okOut {
+		panic(" in and out must be of type []byte")
+	}
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
 
@@ -555,14 +599,10 @@ func CachedXFORMGamutCheck(
 
 	strideIn, strideOut = 0, 0
 
-	//  Convert input and output buffers to slices once
-	inSlice := unsafe.Slice((*uint8)(in), PixelsPerLine*LineCount*Stride.BytesPerPlaneIn)
-	outSlice := unsafe.Slice((*uint8)(out), PixelsPerLine*LineCount*Stride.BytesPerPlaneOut)
-
 	for i := uint32(0); i < LineCount; i++ {
 		//  Use slices with offsets instead of unsafe
-		accum := inSlice[strideIn:]
-		output := outSlice[strideOut:]
+		accum = inBytes[strideIn:]
+		output = outBytes[strideOut:]
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			//  Correctly advance accum using slices
@@ -648,14 +688,23 @@ func cmsAllocTransformPluginChunk(ctx CmsContext, src CmsContext) {
 }
 
 // cmsTransform2toTransformAdaptor adapts new-style transforms to the old-style interface.
-func cmsTransform2toTransformAdaptor(cmmcargo *cmsTRANSFORM, inputBuffer unsafe.Pointer, outputBuffer unsafe.Pointer, pixelsPerLine, lineCount uint32, stride *cmsStride) {
+func cmsTransform2toTransformAdaptor(cmmcargo *cmsTRANSFORM, in, out any, pixelsPerLine, lineCount uint32, stride *cmsStride) {
 	var strideIn, strideOut uint32
+	var accum, output []byte
 
-	cmsHandleExtraChannels(cmmcargo, inputBuffer, outputBuffer, pixelsPerLine, lineCount, stride)
+	cmsHandleExtraChannels(cmmcargo, in, out, pixelsPerLine, lineCount, stride)
+
+	// Type assertion for input and output
+	inBytes, okIn := in.([]byte)
+	outBytes, okOut := out.([]byte)
+
+	if !okIn || !okOut {
+		panic(" in and out must be of type []byte")
+	}
 
 	for i := uint32(0); i < lineCount; i++ {
-		accum := unsafe.Pointer(uintptr(inputBuffer) + uintptr(strideIn))
-		output := unsafe.Pointer(uintptr(outputBuffer) + uintptr(strideOut))
+		accum = inBytes[strideIn:]
+		output = outBytes[strideOut:]
 
 		cmmcargo.OldXform(cmmcargo, accum, output, pixelsPerLine, stride.BytesPerPlaneIn)
 
@@ -666,8 +715,8 @@ func cmsTransform2toTransformAdaptor(cmmcargo *cmsTRANSFORM, inputBuffer unsafe.
 
 func cmsTransform2toTransformConverter(
 	p *cmsTRANSFORM,
-	InputBuffer unsafe.Pointer,
-	OutputBuffer unsafe.Pointer,
+	InputBuffer,
+	OutputBuffer any,
 	Size uint32,
 	Stride uint32,
 ) {
@@ -866,7 +915,7 @@ func AllocEmptyTransform(
 					// Handle old transform plugins
 					if plugin.OldXform {
 						// Wrap the current Xform with an adapter
-						p.OldXform = func(CMMcargo *cmsTRANSFORM, InputBuffer unsafe.Pointer, OutputBuffer unsafe.Pointer, Size uint32, Stride uint32) {
+						p.OldXform = func(CMMcargo *cmsTRANSFORM, InputBuffer any, OutputBuffer any, Size uint32, Stride uint32) {
 							if p.Xform != nil {
 								cmsTransform2toTransformConverter(p, InputBuffer, OutputBuffer, Size, Stride)
 							}
@@ -1063,6 +1112,7 @@ func cmsCreateExtendedTransform(
 	OutputFormat uint32,
 	dwFlags uint32,
 ) *cmsTRANSFORM {
+	fmt.Println("cmsCreateExtendedTransform")
 	// Check if it's a fake transform
 	if dwFlags&cmsFLAGS_NULLTRANSFORM != 0 {
 		return AllocEmptyTransform(ContextID, nil, INTENT_PERCEPTUAL, &InputFormat, &OutputFormat, &dwFlags)
@@ -1192,6 +1242,7 @@ func cmsCreateMultiprofileTransformTHR(
 	Intent uint32,
 	dwFlags uint32,
 ) CmsHTRANSFORM {
+	fmt.Println("cmsCreateMultiprofileTransformTHR")
 	var BPC [256]bool
 	var Intents [256]uint32
 	var AdaptationStates [256]float64
@@ -1253,11 +1304,14 @@ func cmsCreateTransformTHR(
 	Intent uint32,
 	dwFlags uint32,
 ) CmsHTRANSFORM {
+	fmt.Println("CmsCreateTransformTHR")
+
 	hProfiles := []CmsHPROFILE{Input, Output}
 	nProfiles := uint32(1)
 	if Output != nil {
 		nProfiles = 2
 	}
+
 	return cmsCreateMultiprofileTransformTHR(ContextID, hProfiles, nProfiles, InputFormat, OutputFormat, Intent, dwFlags)
 }
 
@@ -1269,6 +1323,7 @@ func CmsCreateTransform(
 	Intent uint32,
 	dwFlags uint32,
 ) CmsHTRANSFORM {
+	fmt.Println("CmsCreateTransform")
 	return cmsCreateTransformTHR(cmsGetProfileContextID(Input), Input, InputFormat, Output, OutputFormat, Intent, dwFlags)
 }
 
@@ -1283,6 +1338,8 @@ func cmsCreateProofingTransformTHR(
 	ProofingIntent uint32,
 	dwFlags uint32,
 ) CmsHTRANSFORM {
+	fmt.Println("cmsCreateProofingTransformTHR")
+
 	hArray := []CmsHPROFILE{InputProfile, ProofingProfile, ProofingProfile, OutputProfile}
 	Intents := []uint32{nIntent, nIntent, INTENT_RELATIVE_COLORIMETRIC, ProofingIntent}
 	BPC := []bool{

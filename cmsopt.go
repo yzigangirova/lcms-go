@@ -1,6 +1,7 @@
 package golcms
 
 import (
+	"fmt"
 	"math"
 	"unsafe"
 )
@@ -166,14 +167,14 @@ func _MultiplyMatrix(Lut *cmsPipeline) bool {
 				return false
 			}
 
-			cmsMAT3per(&res, (*cmsMAT3)(unsafe.Pointer(&m2.Double[0])), (*cmsMAT3)(unsafe.Pointer(&m1.Double[0])))
+			res = cmsMAT3perFromSlices(m2.Double[:], m1.Double[:])
 
 			chain := (*pt2).Next
 			RemoveElement(pt2)
 			RemoveElement(pt1)
 
 			if !isFloatMatrixIdentity(&res) {
-				Multmat := cmsStageAllocMatrix(Lut.ContextID, 3, 3, (res.V[0].N[:]), nil)
+				Multmat := cmsStageAllocMatrix(Lut.ContextID, 3, 3, MatToSlice(res), nil)
 				if Multmat == nil {
 					return false
 				}
@@ -268,6 +269,7 @@ func Prelin16dup(ContextID CmsContext, ptr unsafe.Pointer) unsafe.Pointer {
 // PrelinOpt16alloc allocates and initializes Prelin16Data
 // PrelinOpt16alloc allocates and initializes Prelin16Data
 func PrelinOpt16alloc(ContextID CmsContext, ColorMap *cmsInterpParams, nInputs uint32, In []*CmsToneCurve, nOutputs uint32, Out []*CmsToneCurve) *Prelin16Data {
+	fmt.Println(" PrelinOpt16alloc")
 	p16 := (*Prelin16Data)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(Prelin16Data{}))))
 	if p16 == nil {
 		return nil
@@ -322,6 +324,7 @@ const PRELINEARIZATION_POINTS = 4096
 
 func XFormSampler16(In []uint16, Out []uint16, Cargo unsafe.Pointer) int32 {
 	Lut := (*cmsPipeline)(Cargo)
+	fmt.Printf("XFormSampler16 %p\n", (*cmsStageToneCurvesData)(Lut.Elements.Data).TheCurves[0].InterpParams.Table)
 	var InFloat [cmsMAXCHANNELS]float32
 	var OutFloat [cmsMAXCHANNELS]float32
 	var i uint32
@@ -549,7 +552,7 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		DataSetOut       []*CmsToneCurve
 		p16              *Prelin16Data
 	)
-
+	//fmt.Println("OptimizeByResampling")
 	// Lossy optimization, not suitable for floating-point formats
 	if cmsFormatterIsFloat(*InputFormat) || cmsFormatterIsFloat(*OutputFormat) {
 		return false
@@ -760,8 +763,12 @@ func PrelinEval8(Input []uint16, Output []uint16, D unsafe.Pointer) {
 	p8 := (*Prelin8Data)(D)
 	p := p8.P
 	TotalOut := int(p.nOutputs)
-	LutTable := p.Table // Access table with a large assumed size
-
+	// Ensure `p.Table` is a `[]uint16`
+	LutTable, ok := p.Table.([]uint16)
+	if !ok {
+		fmt.Println("Error: p.Table is not of type []uint16 in LinLerp1D")
+		return
+	}
 	// DENS implementation
 	DENS := func(i, j, k, outChan uint32) cmsS15Fixed16Number {
 		return cmsS15Fixed16Number(LutTable[int(i+j+k+outChan)])
@@ -1079,6 +1086,7 @@ func CurvesDup(ContextID CmsContext, ptr unsafe.Pointer) unsafe.Pointer {
 	for i := uint32(0); i < srcData.NCurves; i++ {
 		if srcData.Curves[i] != nil {
 			// Allocate new slice for each curve
+			fmt.Println("333 make([]uint16", srcData.NElements)
 			data.Curves[i] = make([]uint16, srcData.NElements)
 
 			// Copy the curve data
@@ -1099,6 +1107,7 @@ func CurvesAlloc(ContextID CmsContext, nCurves, nElements uint32, G []*CmsToneCu
 
 	// Step 2: Allocate memory for each curve (each row in 2D array)
 	for i := uint32(0); i < nCurves; i++ {
+		fmt.Println("444 make([]uint16", nElements)
 		c16.Curves[i] = make([]uint16, nElements) // Allocate slice for each row
 
 		// Step 3: Fill the curve with evaluated values
@@ -1442,6 +1451,7 @@ func SetMatShaper(Dest *cmsPipeline, Curve1 [3]*CmsToneCurve, Mat *cmsMAT3, Off 
 	return true
 }
 func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) bool {
+	//	fmt.Println("OptimizeMatrixShaper")
 	var Curve1, Curve2 *cmsStage
 	var Matrix1, Matrix2 *cmsStage
 	var res cmsMAT3
@@ -1482,7 +1492,7 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		}
 
 		// Multiply both matrices to get the result
-		cmsMAT3per(&res, (*cmsMAT3)(unsafe.Pointer(&Data2.Double[0])), (*cmsMAT3)(unsafe.Pointer(&Data1.Double[0])))
+		res = cmsMAT3perFromSlices(Data2.Double[:], Data1.Double[:])
 
 		// Only the second matrix has an offset
 		Offset = Data2.Offset
@@ -1497,7 +1507,9 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		Data := (*cmsStageMatrixData)(cmsStageData(Matrix1))
 
 		// Copy the matrix to the result
-		Memcpy(res.V[0].N[:], Data.Double, int(unsafe.Sizeof(res.V[0].N[:])))
+		ressl := MatToSlice(res)
+		MemcpySlice(ressl, Data.Double, len(Data.Double))
+		res = SliceToMat(ressl)
 
 		// Preserve the offset (may be nil for zero offset)
 		Offset = Data.Offset
@@ -1516,18 +1528,18 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	if Dest == nil {
 		return false
 	}
-
+	var ressl []float64
 	// Assemble the new LUT
 	if !cmsPipelineInsertStage(Dest, cmsAT_BEGIN, cmsStageDup(Curve1)) {
 		goto Error
 	}
-
+	ressl = MatToSlice(res)
 	if !IdentityMat {
-		if !cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageAllocMatrix(Dest.ContextID, 3, 3, res.V[0].N[:], Offset)) {
+		if !cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageAllocMatrix(Dest.ContextID, 3, 3, ressl, Offset)) {
 			goto Error
 		}
 	}
-
+	res = SliceToMat(ressl)
 	if !cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageDup(Curve2)) {
 		goto Error
 	}
@@ -1543,7 +1555,8 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		*dwFlags |= cmsFLAGS_NOCACHE
 
 		// Set up optimization routines
-		SetMatShaper(Dest, ConvertToToneCurveArray(mpeC1.TheCurves), &res, (*cmsVEC3)(unsafe.Pointer(&Offset[0])), ConvertToToneCurveArray(mpeC2.TheCurves), OutputFormat)
+		vec := SliceToVec(Offset[:])
+		SetMatShaper(Dest, ConvertToToneCurveArray(mpeC1.TheCurves), &res, &vec, ConvertToToneCurveArray(mpeC2.TheCurves), OutputFormat)
 	}
 
 	// Free the original pipeline and replace it with the optimized one

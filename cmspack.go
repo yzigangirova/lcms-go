@@ -635,9 +635,9 @@ func UnrollLabDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride
 		posa := accum[stride:]
 		posb := accum[stride*2:]
 
-		Lab.L = *(*float64)(unsafe.Pointer(&posL[0]))
-		Lab.a = *(*float64)(unsafe.Pointer(&posa[0]))
-		Lab.b = *(*float64)(unsafe.Pointer(&posb[0]))
+		Lab.L = (float64)(posL[0])
+		Lab.a = (float64)(posa[0])
+		Lab.b = (float64)(posb[0])
 
 		cmsFloat2LabEncoded(*(*[3]uint16)(wIn), &Lab)
 		return accum[8:] // sizeof(float64)
@@ -656,16 +656,16 @@ func UnrollLabFloatTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride 
 		posa := accum[stride:]
 		posb := accum[stride*2:]
 
-		Lab.L = *(*float64)(unsafe.Pointer(&posL[0]))
-		Lab.a = *(*float64)(unsafe.Pointer(&posa[0]))
-		Lab.b = *(*float64)(unsafe.Pointer(&posb[0]))
+		Lab.L = (float64)(posL[0])
+		Lab.a = (float64)(posa[0])
+		Lab.b = (float64)(posb[0])
 
 		cmsFloat2LabEncoded(*(*[3]uint16)(wIn), &Lab)
 		return accum[4:] // sizeof(float32)
 	} else {
-		Lab.L = *(*float64)(unsafe.Pointer(&accum[0]))
-		Lab.a = *(*float64)(unsafe.Pointer(&accum[4]))
-		Lab.b = *(*float64)(unsafe.Pointer(&accum[8]))
+		Lab.L = (float64)(accum[0])
+		Lab.a = (float64)(accum[4])
+		Lab.b = (float64)(accum[8])
 
 		cmsFloat2LabEncoded(*(*[3]uint16)(wIn), &Lab)
 		extra := T_EXTRA(info.InputFormat)
@@ -681,9 +681,9 @@ func UnrollXYZDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride
 		posY := accum[stride:]
 		posZ := accum[stride*2:]
 
-		XYZ.X = *(*float64)(unsafe.Pointer(&posX[0]))
-		XYZ.Y = *(*float64)(unsafe.Pointer(&posY[0]))
-		XYZ.Z = *(*float64)(unsafe.Pointer(&posZ[0]))
+		XYZ.X = (float64)(posX[0])
+		XYZ.Y = (float64)(posY[0])
+		XYZ.Z = (float64)(posZ[0])
 
 		cmsFloat2XYZEncoded(*(*[3]uint16)(wIn), &XYZ)
 
@@ -703,9 +703,9 @@ func UnrollXYZFloatTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride 
 		posY := accum[stride:]
 		posZ := accum[stride*2:]
 
-		XYZ.X = *(*float64)(unsafe.Pointer(&posX[0]))
-		XYZ.Y = *(*float64)(unsafe.Pointer(&posY[0]))
-		XYZ.Z = *(*float64)(unsafe.Pointer(&posZ[0]))
+		XYZ.X = (float64)(posX[0])
+		XYZ.Y = (float64)(posY[0])
+		XYZ.Z = (float64)(posZ[0])
 
 		cmsFloat2XYZEncoded(*(*[3]uint16)(wIn), &XYZ)
 
@@ -2581,8 +2581,8 @@ type cmsFormattersFactoryList struct {
 	Next    *cmsFormattersFactoryList
 }
 
+var cmsFormattersPluginChunk = cmsFormattersPluginChunkType{FactoryList: nil}
 
-var cmsFormattersPluginChunk = cmsFormattersPluginChunkType{ FactoryList: nil }
 // Duplicate the zone of memory used by the plugin in the new context
 func DupFormatterFactoryList(ctx CmsContext, src CmsContext) {
 	var newHead cmsFormattersPluginChunkType

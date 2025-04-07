@@ -1,6 +1,7 @@
 package golcms
 
 import (
+	"fmt"
 	"math"
 	"unsafe"
 )
@@ -16,7 +17,7 @@ const (
 // cmsParametricCurvesCollection represents the list of supported parametric curves.
 type cmsParametricCurvesCollection struct {
 	NFunctions     uint32                           // Number of supported functions in this chunk
-	FunctionTypes  [MAX_TYPES_IN_LCMS_PLUGIN]int32  // The identification types
+	FunctionTypes  [MAX_TYPES_IN_LCMS_PLUGIN]uint32 // The identification types
 	ParameterCount [MAX_TYPES_IN_LCMS_PLUGIN]uint32 // Number of parameters for each function
 	Evaluator      cmsParametricCurveEvaluator      // The evaluator
 	Next           *cmsParametricCurvesCollection   // Next in list
@@ -25,7 +26,7 @@ type cmsParametricCurvesCollection struct {
 // The built-in list
 var DefaultCurves = cmsParametricCurvesCollection{
 	NFunctions:     10,
-	FunctionTypes:  [MAX_TYPES_IN_LCMS_PLUGIN]int32{1, 2, 3, 4, 5, 6, 7, 8, 108, 109},
+	FunctionTypes:  [MAX_TYPES_IN_LCMS_PLUGIN]uint32{1, 2, 3, 4, 5, 6, 7, 8, 108, 109},
 	ParameterCount: [MAX_TYPES_IN_LCMS_PLUGIN]uint32{1, 3, 4, 5, 7, 4, 5, 5, 1, 1},
 	Evaluator:      DefaultEvalParametricFn, // Replace with the actual function reference
 	Next:           nil,
@@ -61,8 +62,8 @@ func cmsRegisterParametricCurvesPlugin(ContextID CmsContext, Data *cmsPluginBase
 	}
 
 	// Copy function types and parameter counts.
-	memmove(unsafe.Pointer(&fl.FunctionTypes[0]), unsafe.Pointer(&Plugin.FunctionTypes[0]), uintptr(fl.NFunctions))
-	memmove(unsafe.Pointer(&fl.ParameterCount[0]), unsafe.Pointer(&Plugin.ParameterCount[0]), uintptr(fl.NFunctions))
+	MemmoveSlice(fl.FunctionTypes[:], Plugin.FunctionTypes[:], int(fl.NFunctions))
+	MemmoveSlice(fl.ParameterCount[:], Plugin.ParameterCount[:], int(fl.NFunctions))
 
 	// Update the linked list.
 	fl.Next = ctx.ParametricCurves
@@ -137,6 +138,7 @@ func AllocateToneCurveStruct(
 	Segments []cmsCurveSegment,
 	Values []uint16,
 ) *CmsToneCurve {
+	//fmt.Println("start AllocateToneCurveStruct")
 	if nEntries > 65530 {
 		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Couldn't create tone curve of more than 65530 entries")
 		return nil
@@ -171,6 +173,7 @@ func AllocateToneCurveStruct(
 	} else {
 		p.Table16 = nil
 	}
+	fmt.Printf("222 make([]uint16 %d %p %p\n", nEntries, &p.Table16[0], p)
 
 	// Copy values to Table16 if provided
 	if Values != nil && nEntries > 0 {
@@ -207,6 +210,8 @@ func AllocateToneCurveStruct(
 
 	// Compute interpolation parameters
 	p.InterpParams = cmsComputeInterpParams(ContextID, p.nEntries, 1, 1, p.Table16, CMS_LERP_FLAGS_16BITS)
+	//fmt.Println("end AllocateToneCurveStruct")
+
 	if p.InterpParams != nil {
 		return p
 	}
@@ -269,10 +274,11 @@ func cmsFreeToneCurveTriple(Curve [3]*CmsToneCurve) {
 
 // Duplicate a tone curve.
 func cmsDupToneCurve(In *CmsToneCurve) *CmsToneCurve {
+
 	if In == nil {
 		return nil
 	}
-
+	//fmt.Println("cmsDupToneCurve")
 	return AllocateToneCurveStruct(In.InterpParams.ContextID, In.nEntries, In.nSegments, In.Segments, In.Table16)
 }
 
@@ -408,10 +414,10 @@ func cmsEvalToneCurveFloat(curve *CmsToneCurve, v float32) float32 {
 	}
 
 	// Check if this is a limited-precision tone curve with 16-bit table.
+	fmt.Printf("cmsEvalToneCurveFloat %.6f %d %d %d\n", v, curve.nSegments, curve.InterpParams.Interpolation.Lerp16, curve.InterpParams.Interpolation.LerpFloat)
 	if curve.nSegments == 0 {
-		inValue := uint16(v * 65535.0)
+		inValue := uint16(cmsQuickSaturateWord(float64(v) * 65535.0))
 		outValue := cmsEvalToneCurve16(curve, inValue)
-
 		return float32(outValue) / 65535.0
 	}
 
@@ -420,11 +426,14 @@ func cmsEvalToneCurveFloat(curve *CmsToneCurve, v float32) float32 {
 
 // cmsEvalToneCurve16 evaluates a tone curve at a specific point (16-bit input and output).
 func cmsEvalToneCurve16(Curve *CmsToneCurve, v uint16) uint16 {
+	fmt.Printf("start cmsEvalToneCurve16 %p\n", Curve)
 	var out uint16
 
 	cmsAssert(Curve != nil, "curve is nil")
-
-	Curve.InterpParams.Interpolation.Lerp16([]uint16{v}, []uint16{out}, Curve.InterpParams)
+	outSlice := []uint16{0} // Create a slice with an actual mutable value
+	Curve.InterpParams.Interpolation.Lerp16([]uint16{v}, outSlice, Curve.InterpParams)
+	out = outSlice[0] // Extract the modified value from the slice
+	fmt.Println("end cmsEvalToneCurve16", out)
 	return out
 }
 
@@ -484,6 +493,9 @@ func cmsGetToneCurveParams(t *CmsToneCurve) []float64 {
 
 // cmsBuildTabulatedToneCurve16 creates an empty gamma curve using tables.
 func cmsBuildTabulatedToneCurve16(ContextID CmsContext, nEntries uint32, Values []uint16) *CmsToneCurve {
+
+	//fmt.Println("cmsBuildTabulatedToneCurve16(")
+
 	return AllocateToneCurveStruct(ContextID, nEntries, 0, nil, Values)
 }
 
@@ -497,6 +509,8 @@ func EntriesByGamma(Gamma float64) uint32 {
 
 // cmsBuildSegmentedToneCurve creates a segmented gamma curve and fills the table.
 func cmsBuildSegmentedToneCurve(ContextID CmsContext, nSegments uint32, Segments []cmsCurveSegment) *CmsToneCurve {
+	//fmt.Println("cmsBuildSegmentedToneCurve")
+
 	if Segments == nil {
 		cmsAssert(Segments != nil, "Segments cannot be null")
 
@@ -555,7 +569,7 @@ func cmsBuildParametricToneCurve(ContextID CmsContext, Type int, Params []float6
 		Type: int32(Type),
 	}
 
-	size := c.ParameterCount[Pos] * uint32(unsafe.Sizeof(float64(0)))
+	size := c.ParameterCount[Pos]
 	MemmoveSlice(Seg0.Params[:], Params, int(size))
 
 	return cmsBuildSegmentedToneCurve(ContextID, 1, []cmsCurveSegment{Seg0})
@@ -764,28 +778,40 @@ func DefaultEvalParametricFn(Type int32, Params []float64, R float64) float64 {
 // EvalSegmentedFn evaluates a segmented function for a single value.
 // Returns math.Inf(-1) if no valid segment is found.
 // If the function type is 0, performs interpolation on the table.
+// EvalSegmentedFn evaluates a segmented function for a single value.
+// Returns math.Inf(-1) if no valid segment is found.
+// If the function type is 0, performs interpolation on the table.
 func EvalSegmentedFn(g *CmsToneCurve, R float64) float64 {
+	//fmt.Println("start EvalSegmentedFn")
 	var Out float64
 	var Out32 float32
 
 	for i := int(g.nSegments) - 1; i >= 0; i-- {
+		seg := g.Segments[i]
 
 		// Check for domain
-		if R > float64(g.Segments[i].X0) && R <= float64(g.Segments[i].X1) {
-			if g.Segments[i].Type == 0 {
+		if R > float64(seg.X0) && R <= float64(seg.X1) {
+			if seg.Type == 0 {
 				// Type == 0 means segment is sampled
-				R1 := float32((R - float64(g.Segments[i].X0)) / float64(g.Segments[i].X1-g.Segments[i].X0))
+				R1 := float32((R - float64(seg.X0)) / float64(seg.X1-seg.X0))
 
-				// Setup the table (TODO: clean that)
-				for j := 0; j < len(g.SegInterp[i].Table); j++ {
-					g.SegInterp[i].Table[j] = uint16(g.Segments[i].SampledPoints[j])
+				// Ensure Table is of type []float32
+				table, ok := g.SegInterp[i].Table.([]float32)
+				if !ok {
+					fmt.Println("Error: Table is not of type []float32")
+					return math.Inf(-1) // Return invalid result
 				}
 
-				g.SegInterp[i].Interpolation.LerpFloat([]float32{R1}, []float32{Out32}, g.SegInterp[i])
-				Out = float64(Out32)
+				// Copy SampledPoints into Table
+				copy(table, seg.SampledPoints)
+
+				// Perform interpolation
+				out32Slice := []float32{Out32}
+				g.SegInterp[i].Interpolation.LerpFloat([]float32{R1}, out32Slice, g.SegInterp[i])
+				Out = float64(out32Slice[0])
 			} else {
 				// Evaluate the function for the segment
-				Out = g.Evals[i](g.Segments[i].Type, g.Segments[i].Params[:], R)
+				Out = g.Evals[i](seg.Type, seg.Params[:], R)
 			}
 
 			// Check for infinity
@@ -795,12 +821,16 @@ func EvalSegmentedFn(g *CmsToneCurve, R float64) float64 {
 				return math.Inf(-1) // MINUS_INF
 			}
 
+			//	fmt.Println("end EvalSegmentedFn")
 			return Out
 		}
 	}
+	//	fmt.Println("end EvalSegmentedFn")
 	return math.Inf(-1) // MINUS_INF
 }
+
 func cmsReverseToneCurveEx(nResultSamples uint32, inCurve *CmsToneCurve) *CmsToneCurve {
+	fmt.Println("got inCurve InCurve->nEntries ", inCurve.nEntries)
 	var a, b, y, x1, y1, x2, y2 float64
 	var i, j int
 	var ascending bool

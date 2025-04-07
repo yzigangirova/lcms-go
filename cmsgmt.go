@@ -81,7 +81,7 @@ func ComputeKToLstar(ContextID CmsContext,
 	for i := uint32(0); i < nPoints; i++ {
 		cmyk := [4]float32{0, 0, 0, float32((float64(i) * 100.0) / float64(nPoints-1))}
 		var Lab cmsCIELab
-		CmsDoTransform(xform, unsafe.Pointer(&cmyk[0]), unsafe.Pointer(&Lab), 1)
+		CmsDoTransform(xform, cmyk, Lab, 1)
 
 		// Calculate the offset for the current index and assign the value
 		SampledPoints[i] = float32(1.0 - Lab.L/100.0) // Negate K for easier operation
@@ -163,7 +163,7 @@ func EstimateTAC(in []uint16, out []uint16, cargo unsafe.Pointer) int32 {
 	var sum float32
 
 	// Evaluate the transform
-	CmsDoTransform(bp.hRoundTrip, unsafe.Pointer(&in[0]), unsafe.Pointer(&roundTrip[0]), 1)
+	CmsDoTransform(bp.hRoundTrip, in, roundTrip, 1)
 
 	// Sum all amounts of ink
 	for i := 0; i < int(bp.nOutputChans); i++ {
@@ -276,20 +276,30 @@ func GamutSampler(In []uint16, Out []uint16, Cargo unsafe.Pointer) int32 {
 	ErrorRatio = 1.0
 
 	// Convert input to Lab
-	CmsDoTransform(t.hInput, unsafe.Pointer(&In[0]), unsafe.Pointer(&LabIn1), 1)
+	//CmsDoTransform(t.hInput, In,LabIn1, 1)
+	LabIn1Slice := LabToSlice(LabIn1)
+	CmsDoTransform(t.hInput, In, LabIn1Slice, 1)
 
 	// Convert from PCS to colorant. This always returns in-gamut values.
-	CmsDoTransform(t.hForward, unsafe.Pointer(&LabIn1), unsafe.Pointer(&Proof[0]), 1)
+	CmsDoTransform(t.hForward, LabIn1Slice, Proof[:], 1)
 
 	// Convert from colorant to PCS.
-	CmsDoTransform(t.hReverse, unsafe.Pointer(&Proof[0]), unsafe.Pointer(&LabOut1), 1)
+	LabOut1Slice := LabToSlice(LabOut1)
+	CmsDoTransform(t.hReverse, Proof[:], LabOut1Slice, 1)
 
 	// Copy LabOut1 to LabIn2
-	memmove(unsafe.Pointer(&LabIn2), unsafe.Pointer(&LabOut1), unsafe.Sizeof(cmsCIELab{}))
 
+	//memmove(unsafe.Pointer(&LabIn2), unsafe.Pointer(&LabOut1), unsafe.Sizeof(cmsCIELab{}))
+	LabIn2Slice := LabToSlice(LabIn2)
+	copy(LabIn2Slice, LabOut1Slice)
+	LabIn1 = SliceToLab(LabIn1Slice)
+	LabIn2 = SliceToLab(LabIn2Slice)
 	// Forward and reverse transform again, using LabOut1 as input
-	CmsDoTransform(t.hForward, unsafe.Pointer(&LabOut1), unsafe.Pointer(&Proof2[0]), 1)
-	CmsDoTransform(t.hReverse, unsafe.Pointer(&Proof2[0]), unsafe.Pointer(&LabOut2), 1)
+	CmsDoTransform(t.hForward, LabOut1Slice, Proof2[:], 1)
+	LabOut2Slice := LabToSlice(LabOut2)
+	CmsDoTransform(t.hReverse, Proof2[:], LabOut2Slice, 1)
+	LabOut2 = SliceToLab(LabOut2Slice)
+	LabOut1 = SliceToLab(LabOut1Slice)
 
 	// Compute differences
 	dE1 = cmsDeltaE(&LabIn1, &LabOut1)
@@ -350,9 +360,6 @@ func cmsCreateGamutCheckPipeline(
 	var BPCList [256]bool
 	var AdaptationList [256]float64
 	var IntentList [256]uint32
-
-	// Initialize Chain to zero
-	memset(unsafe.Pointer(&Chain), 0, unsafe.Sizeof(Chain))
 
 	// Validate PCS position
 	if nGamutPCSposition <= 0 || nGamutPCSposition > 255 {
@@ -511,7 +518,7 @@ func cmsDetectRGBProfileGamma(hProfile CmsHPROFILE, threshold float64) float64 {
 	}
 
 	// Perform the transform
-	CmsDoTransform(xform, unsafe.Pointer(&rgb[0]), unsafe.Pointer(&XYZ[0]), 256)
+	CmsDoTransform(xform, rgb[:], XYZ[:], 256)
 
 	// Clean up the transform and XYZ profile
 	cmsDeleteTransform(xform)

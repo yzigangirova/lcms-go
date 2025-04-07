@@ -76,7 +76,7 @@ type cmsInterpParams struct {
 	nSamples      [MAX_INPUT_DIMENSIONS]uint32 // Valid samples for each dimension
 	Domain        [MAX_INPUT_DIMENSIONS]uint32 // Domain = nSamples - 1
 	opta          [MAX_INPUT_DIMENSIONS]uint32 // Optimization values for 3D CLUT
-	Table         []uint16                     // Pointer to the actual interpolation table
+	Table         any                     // Pointer to the actual interpolation table
 	Interpolation cmsInterpFunction            // Interpolation functions
 }
 
@@ -214,11 +214,11 @@ type cmsFreeUserDataFn func(ContextID CmsContext, Data unsafe.Pointer)
 type cmsDupUserDataFn func(ContextID CmsContext, Data unsafe.Pointer) unsafe.Pointer
 type cmsFormatter16 func(CMMcargo *cmsTRANSFORM, Values []uint16, Buffer []uint8, Stride uint32) []uint8
 type cmsFormatterFloat func(CMMcargo *cmsTRANSFORM, Values []float32, Buffer []uint8, Stride uint32) []uint8
-type cmsTransformFn func(CMMcargo *cmsTRANSFORM, InputBuffer unsafe.Pointer,
-	OutputBuffer unsafe.Pointer, Size uint32, Stride uint32)
+type cmsTransformFn func(CMMcargo *cmsTRANSFORM, InputBuffer,
+	OutputBuffer any, Size uint32, Stride uint32)
 
-type cmsTransform2Fn func(CMMcargo *cmsTRANSFORM, InputBuffer unsafe.Pointer,
-	OutputBuffer unsafe.Pointer, PixelsPerLine uint32, LineCount uint32, Stride *cmsStride)
+type cmsTransform2Fn func(CMMcargo *cmsTRANSFORM, InputBuffer,
+	OutputBuffer any, PixelsPerLine uint32, LineCount uint32, Stride *cmsStride)
 
 type cmsTransformFactory func(xform *cmsTransformFn, UserData *unsafe.Pointer,
 	FreePrivateDataFn *cmsFreeUserDataFn, Lut **cmsPipeline, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) bool

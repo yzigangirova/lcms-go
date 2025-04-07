@@ -1,6 +1,8 @@
 package golcms
 
 import (
+	"fmt"
+	"log"
 	"math"
 	"unsafe"
 )
@@ -69,9 +71,11 @@ func cmsComputeInterpParamsEx(
 	nSamples []uint32,
 	InputChan uint32,
 	OutputChan uint32,
-	Table []uint16,
+	Table any,
 	dwFlags uint32,
 ) *cmsInterpParams {
+	//fmt.Printf("cmsComputeInterpParamsEx")
+
 	var i uint32
 
 	// Check for maximum inputs
@@ -124,6 +128,7 @@ func cmsComputeInterpParams(
 	Table any,
 	dwFlags uint32,
 ) *cmsInterpParams {
+	//fmt.Printf("cmsComputeInterpParams")
 	var Samples [MAX_INPUT_DIMENSIONS]uint32
 
 	// Fill the auxiliary array
@@ -150,20 +155,42 @@ func LinearInterp(a, l, h int32) uint16 {
 }
 
 // Linear interpolation (Fixed-point optimized)
+
+// Linear interpolation (Fixed-point optimized)
 func LinLerp1D(Value, Output []uint16, p *cmsInterpParams) {
 	var y1, y0 uint16
 	var val3, cell0, rest int32
-	LutTable := p.Table
 
-	// if last value or just one point
+	// Ensure `p.Table` is a `[]uint16`
+	LutTable, ok := p.Table.([]uint16)
+	if !ok {
+		fmt.Printf("Error: p.Table is not of type []uint16 in LinLerp1D")
+		return
+	}
+	if len(LutTable) == 0 {
+		fmt.Printf("Error: p.Table is empty in LinLerp1D")
+		return
+	}
+
+	// If last value or just one point
 	if Value[0] == 0xffff || p.Domain[0] == 0 {
+		if p.Domain[0] >= uint32(len(LutTable)) {
+			fmt.Printf("Error: p.Domain[0] index %d out of bounds for LUT of size %d", p.Domain[0], len(LutTable))
+			return
+		}
 		Output[0] = LutTable[p.Domain[0]]
 	} else {
 		val3 = int32(p.Domain[0] * uint32(Value[0]))
-		val3 = int32(cmsToFixedDomain(int(val3))) // To fixed 15.16
+		val3 = int32(cmsToFixedDomain(int(val3))) // To fixed 15.16 format
 
-		cell0 = FIXED_TO_INT(cmsS15Fixed16Number(val3))            // Cell is 16 MSB bits
-		rest = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(val3))) // Rest is 16 LSB bits
+		cell0 = FIXED_TO_INT(cmsS15Fixed16Number(val3))            // Extract integer part (MSB)
+		rest = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(val3))) // Extract fractional part (LSB)
+
+		fmt.Printf("LinLerp1D %d %p\n", cell0, &LutTable[0])
+		if cell0 < 0 || cell0+1 >= int32(len(LutTable)) {
+			fmt.Printf("Error: Interpolation index out of range in LinLerp1D (cell0=%d, LUT size=%d)", cell0, len(LutTable))
+			return
+		}
 
 		y0 = LutTable[cell0]
 		y1 = LutTable[cell0+1]
@@ -185,22 +212,24 @@ func fclamp(v float32) float32 {
 // Floating-point version of 1D interpolation
 
 // LinLerp1Dfloat performs 1D linear interpolation on floating-point values.
-func LinLerp1Dfloat(Value []float32, Output []float32, p *cmsInterpParams) {
 
+// LinLerp1Dfloat performs 1D linear interpolation on floating-point values.
+func LinLerp1Dfloat(Value []float32, Output []float32, p *cmsInterpParams) {
 	var y1, y0, val2, rest float32
 	var cell0, cell1 int
 
-	// Convert LUT from []uint16 to []float32
-	LutTable := make([]float32, len(p.Table))
-	for i, v := range p.Table {
-		LutTable[i] = float32(v) / 65535.0 // Normalize 16-bit values to [0,1] range
+	// Ensure p.Table is a []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		fmt.Printf("Error: p.Table is not of type []float32 in LinLerp1Dfloat")
+		return
 	}
 
 	val2 = fclamp(Value[0])
 
 	// If last value or domain is zero
 	if val2 == 1.0 || p.Domain[0] == 0 {
-		Output[0] = LutTable[p.Domain[0]] // Use slice indexing instead of pointer arithmetic
+		Output[0] = LutTable[p.Domain[0]]
 	} else {
 		val2 *= float32(p.Domain[0])
 
@@ -210,7 +239,6 @@ func LinLerp1Dfloat(Value []float32, Output []float32, p *cmsInterpParams) {
 		// Rest is the fractional part
 		rest = val2 - float32(cell0)
 
-		// Interpolation using slice indexing
 		y0 = LutTable[cell0]
 		y1 = LutTable[cell1]
 
@@ -218,20 +246,25 @@ func LinLerp1Dfloat(Value []float32, Output []float32, p *cmsInterpParams) {
 	}
 }
 
+// Eval1Input performs 1D interpolation for a single input.
 func Eval1Input(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	var fk, k0, k1, rk, K0, K1 cmsS15Fixed16Number
 	var v int
 	var OutChan uint32
 
-	// Convert LUT from `[]uint16`
-	LutTable := p16.Table
+	// Ensure p16.Table is a []uint16
+	LutTable, ok := p16.Table.([]uint16)
+	if !ok {
+		fmt.Printf("Error: p16.Table is not of type []uint16 in Eval1Input")
+		return
+	}
 
 	// If last value or domain is zero
 	if Input[0] == 0xffff || p16.Domain[0] == 0 {
 		y0 := uint32(p16.Domain[0]) * uint32(p16.opta[0])
 
 		for OutChan = 0; OutChan < p16.nOutputs; OutChan++ {
-			// Direct slice indexing instead of `unsafe
+			// Direct slice indexing
 			Output[OutChan] = LutTable[y0+OutChan]
 		}
 	} else {
@@ -251,11 +284,11 @@ func Eval1Input(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 		K1 = cmsS15Fixed16Number(p16.opta[0]) * k1
 
 		for OutChan = 0; OutChan < p16.nOutputs; OutChan++ {
-			// Direct slice indexing instead of pointer arithmetic
+			// Direct slice indexing
 			LutTableVal0 := LutTable[K0+cmsS15Fixed16Number(OutChan)]
 			LutTableVal1 := LutTable[K1+cmsS15Fixed16Number(OutChan)]
 
-			// Directly assign interpolated value to Output slice
+			// Assign interpolated value to Output slice
 			Output[OutChan] = LinearInterp(int32(rk), int32(LutTableVal0), int32(LutTableVal1))
 		}
 	}
@@ -267,14 +300,16 @@ func Eval1InputFloat(Value []float32, Output []float32, p *cmsInterpParams) {
 	var cell0, cell1 int
 
 	// Ensure Value and Output have at least 1 element
-	if len(Value) == 0 || len(Output) < int(p.nOutputs) || len(p.Table) == 0 {
+	if len(Value) == 0 || len(Output) < int(p.nOutputs) || p.Table == nil {
+		log.Println("Error: Invalid input parameters in Eval1InputFloat")
 		return
 	}
 
-	// Convert LUT from `[]uint16` to `[]float32`
-	LutTable := make([]float32, len(p.Table))
-	for i, v := range p.Table {
-		LutTable[i] = float32(v) / 65535.0 // Normalize 16-bit values to [0,1] range
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval1InputFloat")
+		return
 	}
 
 	val2 = fclamp(Value[0])
@@ -284,7 +319,7 @@ func Eval1InputFloat(Value []float32, Output []float32, p *cmsInterpParams) {
 		start := uint32(p.Domain[0]) * uint32(p.opta[0])
 
 		for OutChan := uint32(0); OutChan < p.nOutputs; OutChan++ {
-			// Direct slice indexing instead of `unsafe
+			// Direct slice indexing
 			Output[OutChan] = LutTable[start+OutChan]
 		}
 	} else {
@@ -323,16 +358,16 @@ func BilinearInterpFloat(Input []float32, Output []float32, p *cmsInterpParams) 
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input and Output have enough elements
-	if len(Input) < 2 || len(Output) < TotalOut || len(p.Table) == 0 {
+	if len(Input) < 2 || len(Output) < TotalOut {
 		return
 	}
 
-	// Convert LUT from `[]uint16` to `[]float32`
-	LutTable := make([]float32, len(p.Table))
-	for i, v := range p.Table {
-		LutTable[i] = float32(v) / 65535.0 // Normalize 16-bit values to [0,1] range
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval1InputFloat")
+		return
 	}
-
 	// Inline functions for LERP and DENS
 	LERP := func(a, l, h float32) float32 {
 		return l + (h-l)*a
@@ -382,7 +417,13 @@ func BilinearInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input and Output have enough elements
-	if len(Input) < 2 || len(Output) < TotalOut || len(p.Table) == 0 {
+	if len(Input) < 2 || len(Output) < TotalOut {
+		return
+	}
+	// Ensure p16.Table is a []uint16
+	LutTable, ok := p.Table.([]uint16)
+	if !ok {
+		fmt.Printf("Error: p16.Table is not of type []uint16 in Eval1Input")
 		return
 	}
 
@@ -392,7 +433,7 @@ func BilinearInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 	}
 
 	DENS := func(i, j, outChan int) int {
-		return int(p.Table[i+j+outChan])
+		return int(LutTable[i+j+outChan])
 	}
 
 	fx := cmsToFixedDomain(int(Input[0]) * int(p.Domain[0]))
@@ -435,14 +476,15 @@ func TrilinearInterpFloat(Input []float32, Output []float32, p *cmsInterpParams)
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input and Output have enough elements
-	if len(Input) < 3 || len(Output) < TotalOut || len(p.Table) == 0 {
+	if len(Input) < 3 || len(Output) < TotalOut {
 		return
 	}
 
-	// Convert LUT from `[]uint16` to `[]float32`
-	LutTable := make([]float32, len(p.Table))
-	for i, v := range p.Table {
-		LutTable[i] = float32(v) / 65535.0 // Normalize 16-bit values to [0,1] range
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval1InputFloat")
+		return
 	}
 
 	// Inline functions for LERP and DENS
@@ -506,10 +548,17 @@ func TrilinearInterpFloat(Input []float32, Output []float32, p *cmsInterpParams)
 
 // TrilinearInterp16 performs trilinear interpolation for 16-bit values.
 func TrilinearInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
+	fmt.Println("start TrilinearInterp16")
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input and Output have enough elements
-	if len(Input) < 3 || len(Output) < TotalOut || len(p.Table) == 0 {
+	if len(Input) < 3 || len(Output) < TotalOut {
+		return
+	}
+	// Ensure p16.Table is a []uint16
+	LutTable, ok := p.Table.([]uint16)
+	if !ok {
+		fmt.Printf("Error: p16.Table is not of type []uint16 in Eval1Input")
 		return
 	}
 
@@ -519,7 +568,7 @@ func TrilinearInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 	}
 
 	DENS := func(i, j, k, outChan int) int {
-		return int(p.Table[i+j+k+outChan])
+		return int(LutTable[i+j+k+outChan])
 	}
 
 	fx := cmsToFixedDomain(int(Input[0]) * int(p.Domain[0]))
@@ -571,6 +620,8 @@ func TrilinearInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 
 		Output[outChan] = LERP(int(rz), int(dxy0), int(dxy1))
 	}
+	fmt.Println("end TrilinearInterp16")
+
 }
 
 // TetrahedralInterpFloat performs tetrahedral interpolation for floating-point values.
@@ -578,14 +629,15 @@ func TetrahedralInterpFloat(Input []float32, Output []float32, p *cmsInterpParam
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input and Output have enough elements
-	if len(Input) < 3 || len(Output) < TotalOut || len(p.Table) == 0 {
+	if len(Input) < 3 || len(Output) < TotalOut {
 		return
 	}
 
-	// Convert LUT from `[]uint16` to `[]float32`
-	LutTable := make([]float32, len(p.Table))
-	for i, v := range p.Table {
-		LutTable[i] = float32(v) / 65535.0 // Normalize 16-bit values to [0,1] range
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval1InputFloat")
+		return
 	}
 
 	// Inline function for LUT lookup
@@ -662,13 +714,19 @@ func TetrahedralInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 	TotalOut := uint32(p.nOutputs)
 
 	// Ensure Input and Output have enough elements
-	if len(Input) < 3 || len(Output) < int(TotalOut) || len(p.Table) == 0 {
+	if len(Input) < 3 || len(Output) < int(TotalOut) {
+		return
+	}
+	// Ensure p16.Table is a []uint16
+	LutTable, ok := p.Table.([]uint16)
+	if !ok {
+		fmt.Printf("Error: p16.Table is not of type []uint16 in Eval1Input")
 		return
 	}
 
 	// Inline function for LUT lookup
 	DENS := func(i, j, k, outChan uint32) int {
-		return int(p.Table[i+j+k+outChan])
+		return int(LutTable[i+j+k+outChan])
 	}
 
 	fx := cmsToFixedDomain(int(Input[0]) * int(p.Domain[0]))
@@ -718,17 +776,27 @@ func TetrahedralInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 }
 
 // Eval4Inputs performs tetrahedral interpolation with 4 input channels for 16-bit values.
+// Eval4Inputs performs tetrahedral interpolation with 4 input channels for 16-bit values.
 func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
+	fmt.Println("Start Eval4Inputs Input ", Input[0], Input[1], Input[2], Input[3])
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 4 || len(Output) < TotalOut || len(p.Table) == 0 {
+	if len(Input) < 4 || len(Output) < TotalOut {
+		return
+	}
+
+	// Ensure p.Table is a []uint16
+	LutTable, ok := p.Table.([]uint16)
+	//fmt.Printf("len(LutTable) ", len(LutTable))
+	if !ok {
+		fmt.Printf("Error: p.Table is not of type []uint16 in Eval4Inputs")
 		return
 	}
 
 	// Inline function for LUT lookup
 	DENS := func(i, j, k, outChan int) int {
-		return int(p.Table[i+j+k+outChan])
+		return int(LutTable[i+j+k+outChan])
 	}
 
 	// Convert input values to fixed-point representation
@@ -777,22 +845,33 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
 
 	// Process K0
+
+	fmt.Println("got K0", K0)
+	fmt.Println("got X0", X0)
+	fmt.Println("got Y0", Y0)
+	fmt.Println("got Z0", Z0)
+	fmt.Println("got X1", X1)
+	fmt.Println("got Y1", Y1)
+	fmt.Println("got Z1", Z1)
+
+	LutTable, _ = p.Table.([]uint16) // Reset to original LUT
+	fmt.Println("len(LutTable)", len(LutTable))
+	LutTable = LutTable[K0:] // Shift by K0
+	if X0 > 127 || Y0 > 127 || Z0 > 127 || X1 > 127 || Y1 > 127 || Z1 > 127 {
+		fmt.Println("DENS value too big")
+	}
+
 	for outChan := 0; outChan < TotalOut; outChan++ {
-		c0 := DENS(K0+X0, Y0, Z0, outChan)
+		c0 := DENS(X0, Y0, Z0, outChan)
+		fmt.Println("got c0", c0)
 		var c1, c2, c3 int
 
 		if rx >= ry && ry >= rz {
-			c1 = DENS(K0+X1, Y0, Z0, outChan) - c0
-			c2 = DENS(K0+X1, Y1, Z0, outChan) - DENS(K0+X1, Y0, Z0, outChan)
-			c3 = DENS(K0+X1, Y1, Z1, outChan) - DENS(K0+X1, Y1, Z0, outChan)
-		} else if rx >= rz && rz >= ry {
-			c1 = DENS(K0+X1, Y0, Z0, outChan) - c0
-			c2 = DENS(K0+X1, Y1, Z1, outChan) - DENS(K0+X1, Y0, Z1, outChan)
-			c3 = DENS(K0+X1, Y0, Z1, outChan) - DENS(K0+X1, Y0, Z0, outChan)
+			c1 = DENS(X1, Y0, Z0, outChan) - c0
+			c2 = DENS(X1, Y1, Z0, outChan) - DENS(X1, Y0, Z0, outChan)
+			c3 = DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan)
 		} else {
-			c1 = 0
-			c2 = 0
-			c3 = 0
+			c1, c2, c3 = 0, 0, 0
 		}
 
 		Rest := c1*int(rx) + c2*int(ry) + c3*int(rz)
@@ -800,18 +879,19 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 	}
 
 	// Process K1
+	LutTable, _ = p.Table.([]uint16) // Reset to original LUT
+	LutTable = LutTable[K1:]         // Shift by K1
+
 	for outChan := 0; outChan < TotalOut; outChan++ {
-		c0 := DENS(K1+X0, Y0, Z0, outChan)
+		c0 := DENS(X0, Y0, Z0, outChan)
 		var c1, c2, c3 int
 
 		if rx >= ry && ry >= rz {
-			c1 = DENS(K1+X1, Y0, Z0, outChan) - c0
-			c2 = DENS(K1+X1, Y1, Z0, outChan) - DENS(K1+X1, Y0, Z0, outChan)
-			c3 = DENS(K1+X1, Y1, Z1, outChan) - DENS(K1+X1, Y1, Z0, outChan)
+			c1 = DENS(X1, Y0, Z0, outChan) - c0
+			c2 = DENS(X1, Y1, Z0, outChan) - DENS(X1, Y0, Z0, outChan)
+			c3 = DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan)
 		} else {
-			c1 = 0
-			c2 = 0
-			c3 = 0
+			c1, c2, c3 = 0, 0, 0
 		}
 
 		Rest := c1*int(rx) + c2*int(ry) + c3*int(rz)
@@ -822,63 +902,10 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 	for i := 0; i < TotalOut; i++ {
 		Output[i] = LinearInterp(int32(rk), int32(Tmp1[i]), int32(Tmp2[i]))
 	}
+	fmt.Println("END Eval4Inputs Output ", Output[0], Output[1], Output[2])
+
 }
 
-// Eval4InputsFloat performs tetrahedral interpolation with 4 input channels for floating-point values.
-/*func Eval4InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
-	TotalOut := int(p.nOutputs)
-
-	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 4 || len(Output) < TotalOut || len(p.Table) == 0 {
-		return
-	}
-
-	// Convert LUT from `[]uint16` to `[]float32`
-	LutTable := make([]float32, len(p.Table))
-	for i, v := range p.Table {
-		LutTable[i] = float32(v) / 65535.0 // Normalize 16-bit values to [0,1] range
-	}
-
-	// Inline function for LUT lookup
-	DENS := func(i, j, k, outChan int) float32 {
-		return LutTable[i+j+k+outChan]
-	}
-
-	// Convert input values to normalized floating-point representation
-	pk := fclamp(Input[0]) * float32(p.Domain[0])
-	k0 := int(math.Floor(float64(pk)))
-	rest := pk - float32(k0)
-
-	K0 := int(p.opta[3]) * k0
-	K1 := K0
-	if Input[0] < 1.0 {
-		K1 += int(p.opta[3])
-	}
-
-	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
-
-	// Process K0
-	TetrahedralInterpFloat(Input[1:], Tmp1[:], &cmsInterpParams{
-		Domain: [15]uint32{p.Domain[1], p.Domain[2], p.Domain[3], 0},
-		opta:   [15]uint32{p.opta[1], p.opta[2], p.opta[3], 0},
-		Table:  LutTable[K0:], // Use a slice instead of pointer arithmetic
-		nOutputs: p.nOutputs,
-	})
-
-	// Process K1
-	TetrahedralInterpFloat(Input[1:], Tmp2[:], &cmsInterpParams{
-		Domain: [15]uint32{p.Domain[1], p.Domain[2], p.Domain[3], 0},
-		opta:   [15]uint32{p.opta[1], p.opta[2], p.opta[3], 0},
-		Table:  LutTable[K1:], // Use a slice instead of pointer arithmetic
-		nOutputs: p.nOutputs,
-	})
-
-	// Final interpolation
-	for i := 0; i < TotalOut; i++ {
-		Output[i] = Tmp1[i] + (Tmp2[i]-Tmp1[i])*rest
-	}
-}*/
 /*Summary of Fixes:
 
 Removed the unused DENS function
@@ -887,11 +914,22 @@ Avoided unnecessary []uint16 to []float32 conversions
 Ensured correct struct copying & domain shifting
 Now directly slices p.Table, improving efficiency*/
 
+// Eval4InputsFloat evaluates a 4-input floating-point LUT.
+
+// Eval4InputsFloat performs tetrahedral interpolation with 4 input channels for floating-point values.
 func Eval4InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input and Output slices have enough elements
-	if len(Input) < 4 || len(Output) < TotalOut || len(p.Table) == 0 {
+	if len(Input) < 4 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval4InputsFloat")
+		return
+	}
+
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval4InputsFloat")
 		return
 	}
 
@@ -914,11 +952,11 @@ func Eval4InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
 
 	// Process K0
-	p1.Table = p.Table[K0:] // Access LUT at K0 position
+	p1.Table = LutTable[K0:] // Access LUT at K0 position
 	TetrahedralInterpFloat(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p.Table[K1:] // Access LUT at K1 position
+	p1.Table = LutTable[K1:] // Access LUT at K1 position
 	TetrahedralInterpFloat(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -927,11 +965,20 @@ func Eval4InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 }
 
+// Eval5Inputs evaluates a 5-input LUT.
 func Eval5Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 5 || len(Output) < TotalOut || len(p16.Table) == 0 {
+	if len(Input) < 5 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval5Inputs")
+		return
+	}
+
+	// Ensure p16.Table is of type []uint16
+	LutTable, ok := p16.Table.([]uint16)
+	if !ok {
+		log.Println("Error: p16.Table is not of type []uint16 in Eval5Inputs")
 		return
 	}
 
@@ -947,6 +994,12 @@ func Eval5Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 		K1 += int(p16.opta[4])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval5Inputs")
+		return
+	}
+
 	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
 
@@ -955,11 +1008,11 @@ func Eval5Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	copy(p1.Domain[:4], p16.Domain[1:5])
 
 	// Process K0
-	p1.Table = p16.Table[K0:] // Adjust LUT slice for K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval4Inputs(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p16.Table[K1:] // Adjust LUT slice for K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval4Inputs(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -968,59 +1021,20 @@ func Eval5Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	}
 }
 
-/*
-	func Eval5InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
-		TotalOut := int(p.nOutputs)
-
-		// Ensure Input, Output, and Table have enough elements
-		if len(Input) < 5 || len(Output) < TotalOut || len(p.Table) == 0 {
-			return
-		}
-
-		// Convert LUT from `[]uint16` to `[]float32`
-		LutTable := make([]float32, len(p.Table))
-		for i, v := range p.Table {
-			LutTable[i] = float32(v) / 65535.0 // Normalize 16-bit values to [0,1] range
-		}
-
-		// Convert input to normalized floating-point representation
-		pk := fclamp(Input[0]) * float32(p.Domain[0])
-		k0 := int(math.Floor(float64(pk)))
-		rest := pk - float32(k0)
-
-		// Compute LUT table indices
-		K0 := int(p.opta[4]) * k0
-		K1 := K0
-		if Input[0] < 1.0 {
-			K1 += int(p.opta[4])
-		}
-
-		// Temporary storage for interpolation results
-		var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
-
-		// Create a new interpolation parameter structure
-		p1 := *p
-		copy(p1.Domain[:4], p.Domain[1:5])
-
-		// Process K0
-		p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-		Eval4InputsFloat(Input[1:], Tmp1[:], &p1)
-
-		// Process K1
-		p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-		Eval4InputsFloat(Input[1:], Tmp2[:], &p1)
-
-		// Final interpolation
-		for i := 0; i < TotalOut; i++ {
-			Output[i] = Tmp1[i] + (Tmp2[i]-Tmp1[i])*rest
-		}
-	}
-*/
+// Eval5InputsFloat evaluates a 5-input LUT using floating-point interpolation.
 func Eval5InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 5 || len(Output) < TotalOut || len(p.Table) == 0 {
+	if len(Input) < 5 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval5InputsFloat")
+		return
+	}
+
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval5InputsFloat")
 		return
 	}
 
@@ -1036,6 +1050,12 @@ func Eval5InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 		K1 += int(p.opta[4])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval5InputsFloat")
+		return
+	}
+
 	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
 
@@ -1044,11 +1064,11 @@ func Eval5InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	copy(p1.Domain[:4], p.Domain[1:5])
 
 	// Process K0
-	p1.Table = p.Table[K0:] // Use `p.Table` directly with correct slicing
+	p1.Table = LutTable[K0:] // Use `LutTable` directly with correct slicing
 	Eval4InputsFloat(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p.Table[K1:] // Use `p.Table` directly with correct slicing
+	p1.Table = LutTable[K1:] // Use `LutTable` directly with correct slicing
 	Eval4InputsFloat(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -1057,11 +1077,20 @@ func Eval5InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 }
 
+// Eval6Inputs evaluates a 6-input LUT with `[]uint16` table.
 func Eval6Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 6 || len(Output) < TotalOut || len(p16.Table) == 0 {
+	if len(Input) < 6 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval6Inputs")
+		return
+	}
+
+	// Ensure p.Table is of type []uint16
+	LutTable, ok := p16.Table.([]uint16)
+	if !ok {
+		log.Println("Error: p.Table is not of type []uint16 in Eval6Inputs")
 		return
 	}
 
@@ -1077,6 +1106,12 @@ func Eval6Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 		K1 += int(p16.opta[5])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval6Inputs")
+		return
+	}
+
 	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
 
@@ -1085,11 +1120,11 @@ func Eval6Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	copy(p1.Domain[:5], p16.Domain[1:6])
 
 	// Process K0
-	p1.Table = p16.Table[K0:] // Adjust LUT slice for K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval5Inputs(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p16.Table[K1:] // Adjust LUT slice for K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval5Inputs(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -1097,11 +1132,21 @@ func Eval6Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 		Output[i] = LinearInterp(int32(rk), int32(Tmp1[i]), int32(Tmp2[i]))
 	}
 }
+
+// Eval6InputsFloat evaluates a 6-input LUT with `[]float32` table.
 func Eval6InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 6 || len(Output) < TotalOut || len(p.Table) == 0 {
+	if len(Input) < 6 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval6InputsFloat")
+		return
+	}
+
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval6InputsFloat")
 		return
 	}
 
@@ -1117,6 +1162,12 @@ func Eval6InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 		K1 += int(p.opta[5])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval6InputsFloat")
+		return
+	}
+
 	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
 
@@ -1125,11 +1176,11 @@ func Eval6InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	copy(p1.Domain[:5], p.Domain[1:6])
 
 	// Process K0
-	p1.Table = p.Table[K0:] // Keep as []uint16
+	p1.Table = LutTable[K0:] // Use correct slicing
 	Eval5InputsFloat(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p.Table[K1:] // Keep as []uint16
+	p1.Table = LutTable[K1:] // Use correct slicing
 	Eval5InputsFloat(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -1138,11 +1189,20 @@ func Eval6InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 }
 
+// Eval7Inputs evaluates a 7-input LUT with `[]uint16` table.
 func Eval7Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 7 || len(Output) < TotalOut || len(p16.Table) == 0 {
+	if len(Input) < 7 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval7Inputs")
+		return
+	}
+
+	// Ensure p.Table is of type []uint16
+	LutTable, ok := p16.Table.([]uint16)
+	if !ok {
+		log.Println("Error: p.Table is not of type []uint16 in Eval7Inputs")
 		return
 	}
 
@@ -1158,6 +1218,12 @@ func Eval7Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 		K1 += int(p16.opta[6])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval7Inputs")
+		return
+	}
+
 	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
 
@@ -1166,11 +1232,11 @@ func Eval7Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	copy(p1.Domain[:6], p16.Domain[1:7])
 
 	// Process K0
-	p1.Table = p16.Table[K0:] // Adjust LUT slice for K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval6Inputs(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p16.Table[K1:] // Adjust LUT slice for K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval6Inputs(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -1178,11 +1244,21 @@ func Eval7Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 		Output[i] = LinearInterp(int32(rk), int32(Tmp1[i]), int32(Tmp2[i]))
 	}
 }
+
+// Eval7InputsFloat evaluates a 7-input LUT with `[]float32` table.
 func Eval7InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 7 || len(Output) < TotalOut || len(p.Table) == 0 {
+	if len(Input) < 7 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval7InputsFloat")
+		return
+	}
+
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval7InputsFloat")
 		return
 	}
 
@@ -1198,6 +1274,12 @@ func Eval7InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 		K1 += int(p.opta[6])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval7InputsFloat")
+		return
+	}
+
 	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
 
@@ -1206,11 +1288,11 @@ func Eval7InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	copy(p1.Domain[:6], p.Domain[1:7])
 
 	// Process K0
-	p1.Table = p.Table[K0:] // Use []uint16 directly
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval6InputsFloat(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p.Table[K1:] // Use []uint16 directly
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval6InputsFloat(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -1219,11 +1301,20 @@ func Eval7InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 }
 
+// Eval8Inputs evaluates an 8-input LUT with `[]uint16` table.
 func Eval8Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 8 || len(Output) < TotalOut || len(p16.Table) == 0 {
+	if len(Input) < 8 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval8Inputs")
+		return
+	}
+
+	// Ensure p.Table is of type []uint16
+	LutTable, ok := p16.Table.([]uint16)
+	if !ok {
+		log.Println("Error: p.Table is not of type []uint16 in Eval8Inputs")
 		return
 	}
 
@@ -1239,6 +1330,12 @@ func Eval8Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 		K1 += int(p16.opta[7])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval8Inputs")
+		return
+	}
+
 	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
 
@@ -1247,11 +1344,11 @@ func Eval8Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	copy(p1.Domain[:7], p16.Domain[1:8])
 
 	// Process K0
-	p1.Table = p16.Table[K0:] // Adjust LUT slice for K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval7Inputs(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p16.Table[K1:] // Adjust LUT slice for K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval7Inputs(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -1259,11 +1356,21 @@ func Eval8Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 		Output[i] = LinearInterp(int32(rk), int32(Tmp1[i]), int32(Tmp2[i]))
 	}
 }
+
+// Eval8InputsFloat evaluates an 8-input LUT with `[]float32` table.
 func Eval8InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 8 || len(Output) < TotalOut || len(p.Table) == 0 {
+	if len(Input) < 8 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval8InputsFloat")
+		return
+	}
+
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval8InputsFloat")
 		return
 	}
 
@@ -1279,6 +1386,12 @@ func Eval8InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 		K1 += int(p.opta[7])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval8InputsFloat")
+		return
+	}
+
 	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
 
@@ -1287,11 +1400,11 @@ func Eval8InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	copy(p1.Domain[:7], p.Domain[1:8])
 
 	// Process K0
-	p1.Table = p.Table[K0:] // Use []uint16 directly
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval7InputsFloat(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p.Table[K1:] // Use []uint16 directly
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval7InputsFloat(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -1300,11 +1413,20 @@ func Eval8InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 }
 
+// Eval9Inputs evaluates a 9-input LUT with `[]uint16` table.
 func Eval9Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 9 || len(Output) < TotalOut || len(p16.Table) == 0 {
+	if len(Input) < 9 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval9Inputs")
+		return
+	}
+
+	// Ensure p.Table is of type []uint16
+	LutTable, ok := p16.Table.([]uint16)
+	if !ok {
+		log.Println("Error: p.Table is not of type []uint16 in Eval9Inputs")
 		return
 	}
 
@@ -1320,6 +1442,12 @@ func Eval9Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 		K1 += int(p16.opta[8])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval9Inputs")
+		return
+	}
+
 	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
 
@@ -1328,11 +1456,11 @@ func Eval9Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	copy(p1.Domain[:8], p16.Domain[1:9])
 
 	// Process K0
-	p1.Table = p16.Table[K0:] // Adjust LUT slice for K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval8Inputs(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p16.Table[K1:] // Adjust LUT slice for K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval8Inputs(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -1340,11 +1468,21 @@ func Eval9Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 		Output[i] = LinearInterp(int32(rk), int32(Tmp1[i]), int32(Tmp2[i]))
 	}
 }
+
+// Eval9InputsFloat evaluates a 9-input LUT with `[]float32` table.
 func Eval9InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 9 || len(Output) < TotalOut || len(p.Table) == 0 {
+	if len(Input) < 9 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval9InputsFloat")
+		return
+	}
+
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval9InputsFloat")
 		return
 	}
 
@@ -1360,6 +1498,12 @@ func Eval9InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 		K1 += int(p.opta[8])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval9InputsFloat")
+		return
+	}
+
 	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
 
@@ -1368,11 +1512,11 @@ func Eval9InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	copy(p1.Domain[:8], p.Domain[1:9])
 
 	// Process K0
-	p1.Table = p.Table[K0:] // Use []uint16 directly
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval8InputsFloat(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p.Table[K1:] // Use []uint16 directly
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval8InputsFloat(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -1381,11 +1525,20 @@ func Eval9InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 }
 
+// Eval10Inputs evaluates a 10-input LUT with `[]uint16` table.
 func Eval10Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 10 || len(Output) < TotalOut || len(p16.Table) == 0 {
+	if len(Input) < 10 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval10Inputs")
+		return
+	}
+
+	// Ensure p.Table is of type []uint16
+	LutTable, ok := p16.Table.([]uint16)
+	if !ok {
+		log.Println("Error: p.Table is not of type []uint16 in Eval10Inputs")
 		return
 	}
 
@@ -1401,6 +1554,12 @@ func Eval10Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 		K1 += int(p16.opta[9])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval10Inputs")
+		return
+	}
+
 	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
 
@@ -1409,11 +1568,11 @@ func Eval10Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	copy(p1.Domain[:9], p16.Domain[1:10])
 
 	// Process K0
-	p1.Table = p16.Table[K0:] // Adjust LUT slice for K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval9Inputs(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p16.Table[K1:] // Adjust LUT slice for K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval9Inputs(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -1422,11 +1581,20 @@ func Eval10Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	}
 }
 
+// Eval10InputsFloat evaluates a 10-input LUT with `[]float32` table.
 func Eval10InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 10 || len(Output) < TotalOut || len(p.Table) == 0 {
+	if len(Input) < 10 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval10InputsFloat")
+		return
+	}
+
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval10InputsFloat")
 		return
 	}
 
@@ -1442,19 +1610,25 @@ func Eval10InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 		K1 += int(p.opta[9])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval10InputsFloat")
+		return
+	}
+
 	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
 
-	// Create a new interpolation parameter structure
+	// Create a modified interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:9], p.Domain[1:10])
 
 	// Process K0
-	p1.Table = p.Table[K0:] // Adjust LUT slice for K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval9InputsFloat(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p.Table[K1:] // Adjust LUT slice for K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval9InputsFloat(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -1462,11 +1636,21 @@ func Eval10InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 		Output[i] = Tmp1[i] + (Tmp2[i]-Tmp1[i])*rest
 	}
 }
+
+// Eval11Inputs evaluates an 11-input LUT with `[]uint16` table.
 func Eval11Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 11 || len(Output) < TotalOut || len(p16.Table) == 0 {
+	if len(Input) < 11 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval11Inputs")
+		return
+	}
+
+	// Ensure p.Table is of type []uint16
+	LutTable, ok := p16.Table.([]uint16)
+	if !ok {
+		log.Println("Error: p.Table is not of type []uint16 in Eval11Inputs")
 		return
 	}
 
@@ -1482,6 +1666,12 @@ func Eval11Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 		K1 += int(p16.opta[10])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval11Inputs")
+		return
+	}
+
 	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
 
@@ -1490,11 +1680,11 @@ func Eval11Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	copy(p1.Domain[:10], p16.Domain[1:11])
 
 	// Process K0
-	p1.Table = p16.Table[K0:] // Adjust LUT slice for K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval10Inputs(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p16.Table[K1:] // Adjust LUT slice for K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval10Inputs(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -1502,11 +1692,21 @@ func Eval11Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 		Output[i] = LinearInterp(int32(rk), int32(Tmp1[i]), int32(Tmp2[i]))
 	}
 }
+
+// Eval11InputsFloat evaluates an 11-input LUT with `[]float32` table.
 func Eval11InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
-	if len(Input) < 11 || len(Output) < TotalOut || len(p.Table) == 0 {
+	if len(Input) < 11 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval11InputsFloat")
+		return
+	}
+
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval11InputsFloat")
 		return
 	}
 
@@ -1522,6 +1722,12 @@ func Eval11InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 		K1 += int(p.opta[10])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval11InputsFloat")
+		return
+	}
+
 	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
 
@@ -1530,11 +1736,11 @@ func Eval11InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	copy(p1.Domain[:10], p.Domain[1:11])
 
 	// Process K0
-	p1.Table = p.Table[K0:] // Adjust LUT slice for K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval10InputsFloat(Input[1:], Tmp1[:], &p1)
 
 	// Process K1
-	p1.Table = p.Table[K1:] // Adjust LUT slice for K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval10InputsFloat(Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
@@ -1542,259 +1748,450 @@ func Eval11InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 		Output[i] = Tmp1[i] + (Tmp2[i]-Tmp1[i])*rest
 	}
 }
+
+// Eval12Inputs evaluates a 12-input LUT with `[]uint16` table.
 func Eval12Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure Input, Output, and LUT have enough elements
-	if len(Input) < 12 || len(Output) < TotalOut || len(p16.Table) == 0 {
+	if len(Input) < 12 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval12Inputs")
 		return
 	}
 
+	// Ensure p.Table is of type []uint16
+	LutTable, ok := p16.Table.([]uint16)
+	if !ok {
+		log.Println("Error: p.Table is not of type []uint16 in Eval12Inputs")
+		return
+	}
+
+	// Convert input to fixed-point representation
 	fk := cmsToFixedDomain(int(Input[0]) * int(p16.Domain[0]))
 	k0 := FIXED_TO_INT(fk)
 	rk := FIXED_REST_TO_INT(fk)
 
+	// Compute LUT table indices
 	K0 := int(p16.opta[11]) * int(k0)
 	K1 := K0
 	if Input[0] != 0xFFFF {
 		K1 += int(p16.opta[11])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval12Inputs")
+		return
+	}
+
+	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
 
+	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:11], p16.Domain[1:12])
 
-	p1.Table = p16.Table[K0:] // Adjust LUT slice for K0
+	// Process K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval11Inputs(Input[1:], Tmp1[:], &p1)
 
-	p1.Table = p16.Table[K1:] // Adjust LUT slice for K1
+	// Process K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval11Inputs(Input[1:], Tmp2[:], &p1)
 
+	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
 		Output[i] = LinearInterp(int32(rk), int32(Tmp1[i]), int32(Tmp2[i]))
 	}
 }
+
+// Eval12InputsFloat evaluates a 12-input LUT with `[]float32` table.
 func Eval12InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
-	if len(Input) < 12 || len(Output) < TotalOut || len(p.Table) == 0 {
+	// Ensure Input, Output, and LUT have enough elements
+	if len(Input) < 12 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval12InputsFloat")
 		return
 	}
 
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval12InputsFloat")
+		return
+	}
+
+	// Convert input to normalized floating-point representation
 	pk := fclamp(Input[0]) * float32(p.Domain[0])
 	k0 := int(math.Floor(float64(pk)))
 	rest := pk - float32(k0)
 
+	// Compute LUT table indices
 	K0 := int(p.opta[11]) * k0
 	K1 := K0
 	if Input[0] < 1.0 {
 		K1 += int(p.opta[11])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval12InputsFloat")
+		return
+	}
+
+	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
 
+	// Create a new interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:11], p.Domain[1:12])
 
-	p1.Table = p.Table[K0:]
+	// Process K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval11InputsFloat(Input[1:], Tmp1[:], &p1)
 
-	p1.Table = p.Table[K1:]
+	// Process K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval11InputsFloat(Input[1:], Tmp2[:], &p1)
 
+	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
 		Output[i] = Tmp1[i] + (Tmp2[i]-Tmp1[i])*rest
 	}
 }
+
+// Eval13Inputs evaluates a 13-input LUT with `[]uint16` table.
 func Eval13Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
-	if len(Input) < 13 || len(Output) < TotalOut || len(p16.Table) == 0 {
+	// Ensure Input, Output, and LUT have enough elements
+	if len(Input) < 13 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval13Inputs")
 		return
 	}
 
+	// Ensure p.Table is of type []uint16
+	LutTable, ok := p16.Table.([]uint16)
+	if !ok {
+		log.Println("Error: p.Table is not of type []uint16 in Eval13Inputs")
+		return
+	}
+
+	// Convert input to fixed-point representation
 	fk := cmsToFixedDomain(int(Input[0]) * int(p16.Domain[0]))
 	k0 := FIXED_TO_INT(fk)
 	rk := FIXED_REST_TO_INT(fk)
 
+	// Compute LUT table indices
 	K0 := int(p16.opta[12]) * int(k0)
 	K1 := K0
 	if Input[0] != 0xFFFF {
 		K1 += int(p16.opta[12])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval13Inputs")
+		return
+	}
+
+	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
 
+	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:12], p16.Domain[1:13])
 
-	p1.Table = p16.Table[K0:]
+	// Process K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval12Inputs(Input[1:], Tmp1[:], &p1)
 
-	p1.Table = p16.Table[K1:]
+	// Process K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval12Inputs(Input[1:], Tmp2[:], &p1)
 
+	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
 		Output[i] = LinearInterp(int32(rk), int32(Tmp1[i]), int32(Tmp2[i]))
 	}
 }
+
+// Eval13InputsFloat evaluates a 13-input LUT with `[]float32` table.
 func Eval13InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
-	if len(Input) < 13 || len(Output) < TotalOut || len(p.Table) == 0 {
+	// Ensure Input, Output, and LUT have enough elements
+	if len(Input) < 13 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval13InputsFloat")
 		return
 	}
 
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval13InputsFloat")
+		return
+	}
+
+	// Convert input to normalized floating-point representation
 	pk := fclamp(Input[0]) * float32(p.Domain[0])
 	k0 := int(math.Floor(float64(pk)))
 	rest := pk - float32(k0)
 
+	// Compute LUT table indices
 	K0 := int(p.opta[12]) * k0
 	K1 := K0
 	if Input[0] < 1.0 {
 		K1 += int(p.opta[12])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval13InputsFloat")
+		return
+	}
+
+	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
 
+	// Create a new interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:12], p.Domain[1:13])
 
-	p1.Table = p.Table[K0:]
+	// Process K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval12InputsFloat(Input[1:], Tmp1[:], &p1)
 
-	p1.Table = p.Table[K1:]
+	// Process K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval12InputsFloat(Input[1:], Tmp2[:], &p1)
 
+	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
 		Output[i] = Tmp1[i] + (Tmp2[i]-Tmp1[i])*rest
 	}
 }
+
+// Eval14Inputs evaluates a 14-input LUT with `[]uint16` table.
 func Eval14Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
-	if len(Input) < 14 || len(Output) < TotalOut || len(p16.Table) == 0 {
+	// Ensure Input, Output, and LUT have enough elements
+	if len(Input) < 14 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval14Inputs")
 		return
 	}
 
+	// Ensure p.Table is of type []uint16
+	LutTable, ok := p16.Table.([]uint16)
+	if !ok {
+		log.Println("Error: p.Table is not of type []uint16 in Eval14Inputs")
+		return
+	}
+
+	// Convert input to fixed-point representation
 	fk := cmsToFixedDomain(int(Input[0]) * int(p16.Domain[0]))
 	k0 := FIXED_TO_INT(fk)
 	rk := FIXED_REST_TO_INT(fk)
 
+	// Compute LUT table indices
 	K0 := int(p16.opta[13]) * int(k0)
 	K1 := K0
 	if Input[0] != 0xFFFF {
 		K1 += int(p16.opta[13])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval14Inputs")
+		return
+	}
+
+	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
 
+	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:13], p16.Domain[1:14])
 
-	p1.Table = p16.Table[K0:]
+	// Process K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval13Inputs(Input[1:], Tmp1[:], &p1)
 
-	p1.Table = p16.Table[K1:]
+	// Process K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval13Inputs(Input[1:], Tmp2[:], &p1)
 
+	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
 		Output[i] = LinearInterp(int32(rk), int32(Tmp1[i]), int32(Tmp2[i]))
 	}
 }
+
+// Eval14InputsFloat evaluates a 14-input LUT with `[]float32` table.
 func Eval14InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
-	if len(Input) < 14 || len(Output) < TotalOut || len(p.Table) == 0 {
+	// Ensure Input, Output, and LUT have enough elements
+	if len(Input) < 14 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval14InputsFloat")
 		return
 	}
 
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval14InputsFloat")
+		return
+	}
+
+	// Convert input to normalized floating-point representation
 	pk := fclamp(Input[0]) * float32(p.Domain[0])
 	k0 := int(math.Floor(float64(pk)))
 	rest := pk - float32(k0)
 
+	// Compute LUT table indices
 	K0 := int(p.opta[13]) * k0
 	K1 := K0
 	if Input[0] < 1.0 {
 		K1 += int(p.opta[13])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval14InputsFloat")
+		return
+	}
+
+	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
 
+	// Create a new interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:13], p.Domain[1:14])
 
-	p1.Table = p.Table[K0:]
+	// Process K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval13InputsFloat(Input[1:], Tmp1[:], &p1)
 
-	p1.Table = p.Table[K1:]
+	// Process K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval13InputsFloat(Input[1:], Tmp2[:], &p1)
 
+	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
 		Output[i] = Tmp1[i] + (Tmp2[i]-Tmp1[i])*rest
 	}
 }
+
+// Eval15Inputs evaluates a 15-input LUT with `[]uint16` table.
 func Eval15Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
-	if len(Input) < 15 || len(Output) < TotalOut || len(p16.Table) == 0 {
+	// Ensure Input, Output, and LUT have enough elements
+	if len(Input) < 15 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval15Inputs")
 		return
 	}
 
+	// Ensure p.Table is of type []uint16
+	LutTable, ok := p16.Table.([]uint16)
+	if !ok {
+		log.Println("Error: p.Table is not of type []uint16 in Eval15Inputs")
+		return
+	}
+
+	// Convert input to fixed-point representation
 	fk := cmsToFixedDomain(int(Input[0]) * int(p16.Domain[0]))
 	k0 := FIXED_TO_INT(fk)
 	rk := FIXED_REST_TO_INT(fk)
 
+	// Compute LUT table indices
 	K0 := int(p16.opta[14]) * int(k0)
 	K1 := K0
 	if Input[0] != 0xFFFF {
 		K1 += int(p16.opta[14])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval15Inputs")
+		return
+	}
+
+	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
 
+	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:14], p16.Domain[1:15])
 
-	p1.Table = p16.Table[K0:]
+	// Process K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval14Inputs(Input[1:], Tmp1[:], &p1)
 
-	p1.Table = p16.Table[K1:]
+	// Process K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval14Inputs(Input[1:], Tmp2[:], &p1)
 
+	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
 		Output[i] = LinearInterp(int32(rk), int32(Tmp1[i]), int32(Tmp2[i]))
 	}
 }
+
+// Eval15InputsFloat evaluates a 15-input LUT with `[]float32` table.
 func Eval15InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
-	if len(Input) < 15 || len(Output) < TotalOut || len(p.Table) == 0 {
+	// Ensure Input, Output, and LUT have enough elements
+	if len(Input) < 15 || len(Output) < TotalOut {
+		log.Println("Error: Invalid input/output slice sizes in Eval15InputsFloat")
 		return
 	}
 
+	// Ensure p.Table is of type []float32
+	LutTable, ok := p.Table.([]float32)
+	if !ok {
+		log.Println("Error: p.Table is not of type []float32 in Eval15InputsFloat")
+		return
+	}
+
+	// Convert input to normalized floating-point representation
 	pk := fclamp(Input[0]) * float32(p.Domain[0])
 	k0 := int(math.Floor(float64(pk)))
 	rest := pk - float32(k0)
 
+	// Compute LUT table indices
 	K0 := int(p.opta[14]) * k0
 	K1 := K0
 	if Input[0] < 1.0 {
 		K1 += int(p.opta[14])
 	}
 
+	// Ensure K0 and K1 do not exceed LUT bounds
+	if K0 >= len(LutTable) || K1 >= len(LutTable) {
+		log.Println("Error: LUT index out of range in Eval15InputsFloat")
+		return
+	}
+
+	// Temporary storage for interpolation results
 	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
 
+	// Create a new interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:14], p.Domain[1:15])
 
-	p1.Table = p.Table[K0:]
+	// Process K0
+	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
 	Eval14InputsFloat(Input[1:], Tmp1[:], &p1)
 
-	p1.Table = p.Table[K1:]
+	// Process K1
+	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
 	Eval14InputsFloat(Input[1:], Tmp2[:], &p1)
 
+	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
 		Output[i] = Tmp1[i] + (Tmp2[i]-Tmp1[i])*rest
 	}

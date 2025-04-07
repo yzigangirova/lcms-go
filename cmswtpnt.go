@@ -159,8 +159,8 @@ func ComputeChromaticAdaptation(Conversion *cmsMAT3, SourceWhitePoint, DestWhite
 	cmsVEC3init(&Cone.V[1], 0.0, ConeDestRGB.N[1]/ConeSourceRGB.N[1], 0.0)
 	cmsVEC3init(&Cone.V[2], 0.0, 0.0, ConeDestRGB.N[2]/ConeSourceRGB.N[2])
 
-	cmsMAT3per(&Tmp, &Cone, Chad)
-	cmsMAT3per(Conversion, &ChadInv, &Tmp)
+	Tmp = cmsMAT3per(&Cone, Chad)
+	*Conversion = cmsMAT3per(&ChadInv, &Tmp)
 
 	return true
 }
@@ -181,6 +181,7 @@ func cmsAdaptationMatrix(r *cmsMAT3, ConeMatrix *cmsMAT3, FromIll, ToIll *cmsCIE
 
 	return ComputeChromaticAdaptation(r, FromIll, ToIll, ConeMatrix)
 }
+
 // cmsAdaptMatrixToD50 computes the adaptation matrix to the D50 white point.
 // The source white point is provided in the xyY representation.
 
@@ -203,7 +204,7 @@ func cmsAdaptMatrixToD50(r *cmsMAT3, SourceWhitePt *CmsCIExyY) bool {
 	Tmp = *r
 
 	// Apply the adaptation matrix
-	cmsMAT3per(r, &Bradford, &Tmp)
+	*r = cmsMAT3per(&Bradford, &Tmp)
 
 	return true
 }

@@ -6,6 +6,13 @@ import (
 	"unsafe"
 )
 
+// yuliana
+// this is used instead of pointer to void
+// anySlice is a constraint that enforces a type parameter to be a slice of any type.
+type anySlice[T any] interface {
+	~[]T // Ensures the type is a slice of some type `T`
+}
+
 const LCMS_VERSION = 2150
 
 // //////////////////LCMS placeholders////////////////////////

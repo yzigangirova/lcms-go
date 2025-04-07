@@ -65,6 +65,10 @@ func allocateMemory(size uintptr) unsafe.Pointer {
 	return unsafe.Pointer(&mem[0])
 }
 
+func allocateStruct[T any]() *T {
+	return new(T) // Allocates and returns a pointer to type T
+}
+
 // freeMemory frees manually allocated memory. (No-op in Go)
 func freeMemory(ptr unsafe.Pointer, size uintptr) {
 	// Memory will be garbage collected, but this function can be used for compatibility.
@@ -586,3 +590,59 @@ func cmsstrcasecmp(s1, s2 *byte) int {
 
 	return 0
 }
+
+
+// Convert []float32 to []byte
+func float32SliceToBytes(floats []float32) []byte {
+	size := len(floats) * 4
+	return unsafe.Slice((*byte)(unsafe.Pointer(&floats[0])), size)
+}
+
+// Convert []float64 to []byte
+func float64SliceToBytes(floats []float64) []byte {
+	size := len(floats) * 8
+	return unsafe.Slice((*byte)(unsafe.Pointer(&floats[0])), size)
+}
+
+// Convert []uint16 to []byte
+func uint16SliceToBytes(ints []uint16) []byte {
+	size := len(ints) * 2
+	return unsafe.Slice((*byte)(unsafe.Pointer(&ints[0])), size)
+}
+
+/*import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+)
+
+// Convert []float32 to []byte
+func float32SliceToBytes(floats []float32) []byte {
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.LittleEndian, floats) // Change to binary.BigEndian if needed
+	if err != nil {
+		panic("Error converting float32 slice to bytes: " + err.Error())
+	}
+	return buf.Bytes()
+}
+
+// Convert []float64 to []byte
+func float64SliceToBytes(floats []float64) []byte {
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.LittleEndian, floats)
+	if err != nil {
+		panic("Error converting float64 slice to bytes: " + err.Error())
+	}
+	return buf.Bytes()
+}
+
+// Convert []uint16 to []byte
+func uint16SliceToBytes(ints []uint16) []byte {
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.LittleEndian, ints)
+	if err != nil {
+		panic("Error converting uint16 slice to bytes: " + err.Error())
+	}
+	return buf.Bytes()
+}
+*/
