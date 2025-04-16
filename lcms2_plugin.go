@@ -76,7 +76,7 @@ type cmsInterpParams struct {
 	nSamples      [MAX_INPUT_DIMENSIONS]uint32 // Valid samples for each dimension
 	Domain        [MAX_INPUT_DIMENSIONS]uint32 // Domain = nSamples - 1
 	opta          [MAX_INPUT_DIMENSIONS]uint32 // Optimization values for 3D CLUT
-	Table         any                     // Pointer to the actual interpolation table
+	Table         any                          // Pointer to the actual interpolation table
 	Interpolation cmsInterpFunction            // Interpolation functions
 }
 
@@ -248,10 +248,7 @@ type cmsStageMatrixData struct {
 
 // StageCLutData represents data for a color lookup table (CLUT).
 type cmsStageCLutData struct {
-	Tab struct {
-		T      []uint16  // 16-bit table
-		TFloat []float32 // Float table
-	} // Union-like structure for CLUT representation
+	Tab            any
 	Params         *cmsInterpParams // Interpolation parameters
 	NEntries       uint32           // Number of entries in the table
 	HasFloatValues bool             // Indicates if the table uses float values

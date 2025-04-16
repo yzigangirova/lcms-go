@@ -85,7 +85,7 @@ func cmsComputeInterpParamsEx(
 	}
 
 	// Create an empty object
-	p := (*cmsInterpParams)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsInterpParams{}))))
+	p := allocateStruct[cmsInterpParams]()
 	if p == nil {
 		return nil
 	}
@@ -149,8 +149,8 @@ func cmsFreeInterpParams(p *cmsInterpParams) {
 
 // LinearInterp performs inline fixed-point interpolation.
 func LinearInterp(a, l, h int32) uint16 {
-	dif := uint32(h-l)*uint32(a) + 0x8000
-	dif = (dif >> 16) + uint32(l)
+	dif := uint32(uint32(h-l)*uint32(a) + 0x8000)
+	dif = uint32(int32(dif>>16) + l)
 	return uint16(dif)
 }
 
@@ -186,9 +186,8 @@ func LinLerp1D(Value, Output []uint16, p *cmsInterpParams) {
 		cell0 = FIXED_TO_INT(cmsS15Fixed16Number(val3))            // Extract integer part (MSB)
 		rest = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(val3))) // Extract fractional part (LSB)
 
-		fmt.Printf("LinLerp1D %d %p\n", cell0, &LutTable[0])
 		if cell0 < 0 || cell0+1 >= int32(len(LutTable)) {
-			fmt.Printf("Error: Interpolation index out of range in LinLerp1D (cell0=%d, LUT size=%d)", cell0, len(LutTable))
+			fmt.Printf("Error: Interpolation index out of range in LinLerp1D (cell0=%d, LUT size=%d)\n", cell0, len(LutTable))
 			return
 		}
 
@@ -548,7 +547,7 @@ func TrilinearInterpFloat(Input []float32, Output []float32, p *cmsInterpParams)
 
 // TrilinearInterp16 performs trilinear interpolation for 16-bit values.
 func TrilinearInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
-	fmt.Println("start TrilinearInterp16")
+	//fmt.Println("start TrilinearInterp16")
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input and Output have enough elements
@@ -620,7 +619,7 @@ func TrilinearInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 
 		Output[outChan] = LERP(int(rz), int(dxy0), int(dxy1))
 	}
-	fmt.Println("end TrilinearInterp16")
+	//fmt.Println("end TrilinearInterp16")
 
 }
 
@@ -778,7 +777,15 @@ func TetrahedralInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 // Eval4Inputs performs tetrahedral interpolation with 4 input channels for 16-bit values.
 // Eval4Inputs performs tetrahedral interpolation with 4 input channels for 16-bit values.
 func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
-	fmt.Println("Start Eval4Inputs Input ", Input[0], Input[1], Input[2], Input[3])
+	//fmt.Println("Start Eval4Inputs Input", Input[0], Input[1], Input[2], Input[3])
+	var fk int32
+	var k0, rk int32
+	var K0, K1 int32
+	var fx, fy, fz int32
+	var rx, ry, rz int32
+	var x0, y0, z0 int32
+	var X0, X1, Y0, Y1, Z0, Z1 int32
+
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input, Output, and Table have enough elements
@@ -788,57 +795,56 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 
 	// Ensure p.Table is a []uint16
 	LutTable, ok := p.Table.([]uint16)
-	//fmt.Printf("len(LutTable) ", len(LutTable))
 	if !ok {
-		fmt.Printf("Error: p.Table is not of type []uint16 in Eval4Inputs")
+		fmt.Printf("Error: p.Table is not of type []uint16 in Eval4Inputs\n")
 		return
 	}
 
 	// Inline function for LUT lookup
-	DENS := func(i, j, k, outChan int) int {
-		return int(LutTable[i+j+k+outChan])
+	DENS := func(i, j, k int32, outChan uint32) int32 {
+		return int32(LutTable[i+j+k+int32(outChan)])
 	}
 
 	// Convert input values to fixed-point representation
-	fk := cmsToFixedDomain(int(Input[0]) * int(p.Domain[0]))
-	fx := cmsToFixedDomain(int(Input[1]) * int(p.Domain[1]))
-	fy := cmsToFixedDomain(int(Input[2]) * int(p.Domain[2]))
-	fz := cmsToFixedDomain(int(Input[3]) * int(p.Domain[3]))
+	fk = int32(cmsToFixedDomain(int(Input[0]) * int(p.Domain[0])))
+	fx = int32(cmsToFixedDomain(int(Input[1]) * int(p.Domain[1])))
+	fy = int32(cmsToFixedDomain(int(Input[2]) * int(p.Domain[2])))
+	fz = int32(cmsToFixedDomain(int(Input[3]) * int(p.Domain[3])))
 
 	// Compute integer indices and fractional parts
-	k0 := FIXED_TO_INT(fk)
-	x0 := FIXED_TO_INT(fx)
-	y0 := FIXED_TO_INT(fy)
-	z0 := FIXED_TO_INT(fz)
+	k0 = FIXED_TO_INT(cmsS15Fixed16Number(fk))
+	x0 = FIXED_TO_INT(cmsS15Fixed16Number(fx))
+	y0 = FIXED_TO_INT(cmsS15Fixed16Number(fy))
+	z0 = FIXED_TO_INT(cmsS15Fixed16Number(fz))
 
-	rk := FIXED_REST_TO_INT(fk)
-	rx := FIXED_REST_TO_INT(fx)
-	ry := FIXED_REST_TO_INT(fy)
-	rz := FIXED_REST_TO_INT(fz)
+	rk = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fk)))
+	rx = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fx)))
+	ry = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fy)))
+	rz = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fz)))
 
 	// Compute LUT table indices
-	K0 := int(p.opta[3]) * int(k0)
-	K1 := K0
+	K0 = int32(p.opta[3]) * int32(k0)
+	K1 = K0
 	if Input[0] != 0xFFFF {
-		K1 += int(p.opta[3])
+		K1 += int32(p.opta[3])
 	}
 
-	X0 := int(p.opta[2]) * int(x0)
-	X1 := X0
+	X0 = int32(p.opta[2]) * int32(x0)
+	X1 = X0
 	if Input[1] != 0xFFFF {
-		X1 += int(p.opta[2])
+		X1 += int32(p.opta[2])
 	}
 
-	Y0 := int(p.opta[1]) * int(y0)
-	Y1 := Y0
+	Y0 = int32(p.opta[1]) * int32(y0)
+	Y1 = Y0
 	if Input[2] != 0xFFFF {
-		Y1 += int(p.opta[1])
+		Y1 += int32(p.opta[1])
 	}
 
-	Z0 := int(p.opta[0]) * int(z0)
-	Z1 := Z0
+	Z0 = int32(p.opta[0]) * int32(z0)
+	Z1 = Z0
 	if Input[3] != 0xFFFF {
-		Z1 += int(p.opta[0])
+		Z1 += int32(p.opta[0])
 	}
 
 	// Temporary storage for interpolation results
@@ -846,63 +852,135 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 
 	// Process K0
 
-	fmt.Println("got K0", K0)
+	/*fmt.Println("got K0", K0)
 	fmt.Println("got X0", X0)
 	fmt.Println("got Y0", Y0)
 	fmt.Println("got Z0", Z0)
 	fmt.Println("got X1", X1)
 	fmt.Println("got Y1", Y1)
-	fmt.Println("got Z1", Z1)
+	fmt.Println("got Z1", Z1)*/
+
+	/*if Input[0] == 23130 && Input[1] == 56283 && Input[2] == 33153 && Input[3] == 11565 {
+		fmt.Println("stop")
+
+	}*/
 
 	LutTable, _ = p.Table.([]uint16) // Reset to original LUT
-	fmt.Println("len(LutTable)", len(LutTable))
-	LutTable = LutTable[K0:] // Shift by K0
-	if X0 > 127 || Y0 > 127 || Z0 > 127 || X1 > 127 || Y1 > 127 || Z1 > 127 {
-		fmt.Println("DENS value too big")
-	}
+	LutTable = LutTable[K0:]         // Shift by K0
 
-	for outChan := 0; outChan < TotalOut; outChan++ {
+	for outChan := uint32(0); outChan < uint32(TotalOut); outChan++ {
 		c0 := DENS(X0, Y0, Z0, outChan)
-		fmt.Println("got c0", c0)
-		var c1, c2, c3 int
+		var c1, c2, c3 cmsS15Fixed16Number
 
 		if rx >= ry && ry >= rz {
-			c1 = DENS(X1, Y0, Z0, outChan) - c0
-			c2 = DENS(X1, Y1, Z0, outChan) - DENS(X1, Y0, Z0, outChan)
-			c3 = DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan)
+			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z0, outChan) - c0)
+			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z0, outChan) - DENS(X1, Y0, Z0, outChan))
+			c3 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan))
+		} else if rx >= rz && rz >= ry {
+
+			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z0, outChan) - c0)
+			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan))
+			c3 = cmsS15Fixed16Number(DENS(X1, Y0, Z1, outChan) - DENS(X1, Y0, Z0, outChan))
+
+		} else if rz >= rx && rx >= ry {
+
+			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z1, outChan) - DENS(X0, Y0, Z1, outChan))
+			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan))
+			c3 = cmsS15Fixed16Number(DENS(X0, Y0, Z1, outChan) - c0)
+
+		} else if ry >= rx && rx >= rz {
+
+			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z0, outChan) - DENS(X0, Y1, Z0, outChan))
+			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z0, outChan) - c0)
+			c3 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan))
+
+		} else if ry >= rz && rz >= rx {
+
+			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan))
+			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z0, outChan) - c0)
+			c3 = cmsS15Fixed16Number(DENS(X0, Y1, Z1, outChan) - DENS(X0, Y1, Z0, outChan))
+
+		} else if rz >= ry && ry >= rx {
+
+			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan))
+			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z1, outChan) - DENS(X0, Y0, Z1, outChan))
+			c3 = cmsS15Fixed16Number(DENS(X0, Y0, Z1, outChan) - c0)
+
 		} else {
 			c1, c2, c3 = 0, 0, 0
 		}
 
-		Rest := c1*int(rx) + c2*int(ry) + c3*int(rz)
-		Tmp1[outChan] = uint16(c0 + ((Rest + 0x8001) >> 16))
+		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
+	/*	fmt.Println("c0", c0)
+		fmt.Println("c1", c1)
+		fmt.Println("c2", c2)
+		fmt.Println("c3", c3)
+		fmt.Println("rx", rx)
+		fmt.Println("ry", ry)
+		fmt.Println("rz", rz)
+		fmt.Println("Rest", Rest)*/
+
+		Tmp1[outChan] = uint16(c0 + ((int32(cmsToFixedDomain(int(Rest))) + 0x8000) >> 16))
 	}
 
 	// Process K1
 	LutTable, _ = p.Table.([]uint16) // Reset to original LUT
 	LutTable = LutTable[K1:]         // Shift by K1
 
-	for outChan := 0; outChan < TotalOut; outChan++ {
+	for outChan := uint32(0); outChan < uint32(TotalOut); outChan++ {
 		c0 := DENS(X0, Y0, Z0, outChan)
-		var c1, c2, c3 int
+		var c1, c2, c3 cmsS15Fixed16Number
 
 		if rx >= ry && ry >= rz {
-			c1 = DENS(X1, Y0, Z0, outChan) - c0
-			c2 = DENS(X1, Y1, Z0, outChan) - DENS(X1, Y0, Z0, outChan)
-			c3 = DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan)
+			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z0, outChan) - c0)
+			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z0, outChan) - DENS(X1, Y0, Z0, outChan))
+			c3 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan))
+		} else if rx >= rz && rz >= ry {
+
+			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z0, outChan) - c0)
+			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan))
+			c3 = cmsS15Fixed16Number(DENS(X1, Y0, Z1, outChan) - DENS(X1, Y0, Z0, outChan))
+
+		} else if rz >= rx && rx >= ry {
+
+			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z1, outChan) - DENS(X0, Y0, Z1, outChan))
+			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan))
+			c3 = cmsS15Fixed16Number(DENS(X0, Y0, Z1, outChan) - c0)
+
+		} else if ry >= rx && rx >= rz {
+
+			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z0, outChan) - DENS(X0, Y1, Z0, outChan))
+			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z0, outChan) - c0)
+			c3 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan))
+
+		} else if ry >= rz && rz >= rx {
+
+			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan))
+			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z0, outChan) - c0)
+			c3 = cmsS15Fixed16Number(DENS(X0, Y1, Z1, outChan) - DENS(X0, Y1, Z0, outChan))
+
+		} else if rz >= ry && ry >= rx {
+
+			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan))
+			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z1, outChan) - DENS(X0, Y0, Z1, outChan))
+			c3 = cmsS15Fixed16Number(DENS(X0, Y0, Z1, outChan) - c0)
+
 		} else {
 			c1, c2, c3 = 0, 0, 0
 		}
 
-		Rest := c1*int(rx) + c2*int(ry) + c3*int(rz)
-		Tmp2[outChan] = uint16(c0 + ((Rest + 0x8001) >> 16))
+		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
+		Tmp2[outChan] = uint16(c0 + (int32(cmsToFixedDomain(int(Rest))+0x8000) >> 16))
 	}
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
-		Output[i] = LinearInterp(int32(rk), int32(Tmp1[i]), int32(Tmp2[i]))
+		/*fmt.Println("rk", rk)
+		fmt.Println("Tmp1[i]", Tmp1[i])
+		fmt.Println("Tmp2[i]", Tmp2[i])*/
+		Output[i] = LinearInterp(rk, int32(Tmp1[i]), int32(Tmp2[i]))
+		//fmt.Println("Output[i]", Output[i])
 	}
-	fmt.Println("END Eval4Inputs Output ", Output[0], Output[1], Output[2])
 
 }
 

@@ -12,7 +12,7 @@ func cmsMLUalloc(ContextID CmsContext, nItems uint32) *cmsMLU {
 		nItems = 2
 	}
 
-	mlu := (*cmsMLU)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsMLU{}))))
+	mlu := allocateStruct[cmsMLU]()
 	if mlu == nil {
 		return nil
 	}
@@ -483,7 +483,7 @@ func cmsAllocNamedColorList(ContextID CmsContext, n, ColorantCount uint32, Prefi
 		return nil
 	}
 
-	v := (*cmsNAMEDCOLORLIST)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsNAMEDCOLORLIST{}))))
+	v := allocateStruct[cmsNAMEDCOLORLIST]()
 	if v == nil {
 		return nil
 	}
@@ -742,7 +742,7 @@ func cmsAllocProfileSequenceDescription(ContextID CmsContext, n uint32) *cmsSEQ 
 		return nil // Invalid input
 	}
 
-	seq := (*cmsSEQ)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsSEQ{}))))
+	seq := allocateStruct[cmsSEQ]()
 	if seq == nil {
 		return nil
 	}
@@ -838,7 +838,7 @@ type cmsDICT struct {
 
 // Allocate an empty dictionary
 func cmsDictAlloc(contextID CmsContext) cmsHANDLE {
-	dict := (*cmsDICT)(cmsMallocZero(contextID, uint32(unsafe.Sizeof(cmsDICT{}))))
+	dict := allocateStruct[cmsDICT]()
 	return cmsHANDLE(unsafe.Pointer(dict))
 }
 
@@ -882,7 +882,7 @@ func cmsDictAddEntry(hDict cmsHANDLE, name string, value string, displayName *cm
 		return false
 	}
 
-	entry := (*cmsDICTentry)(cmsMallocZero(dict.ContextID, uint32(unsafe.Sizeof(cmsDICTentry{}))))
+	entry := allocateStruct[cmsDICTentry]()
 	if entry == nil {
 		return false
 	}

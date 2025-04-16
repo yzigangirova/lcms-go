@@ -4,7 +4,7 @@ package golcms
 // and black preservation.
 
 import (
-	"fmt"
+	//"fmt"
 	"math"
 	"unsafe"
 )
@@ -38,7 +38,7 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 	var nChannels uint32
 	var Space cmsColorSpaceSignature
 	ContextID := cmsGetProfileContextID(hInput)
-	fmt.Println("START BlackPointAsDarkerColorant")
+	//fmt.Println("START BlackPointAsDarkerColorant")
 
 	// If the profile does not support input direction, assume Black point 0.
 	if !cmsIsIntentSupported(hInput, Intent, LCMS_USED_AS_INPUT) {
@@ -80,13 +80,10 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 	}
 
 	// Create the transform.
-
-	fmt.Println("start: xform = cmsCreateTransformTHR")
 	xform = cmsCreateTransformTHR(
 		ContextID, hInput, dwFormat, hLab, TYPE_Lab_DBL,
 		Intent, cmsFLAGS_NOOPTIMIZE|cmsFLAGS_NOCACHE,
 	)
-	fmt.Println("end: xform = cmsCreateTransformTHR")
 
 	CmsCloseProfile(hLab)
 
@@ -118,7 +115,7 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 	if BlackPoint != nil {
 		*BlackPoint = BlackXYZ
 	}
-	fmt.Println("END BlackPointAsDarkerColorant BlackPoint.X, BlackPoint.Y, BlackPoint.Z ", (*BlackPoint).X, (*BlackPoint).Y, (*BlackPoint).Z)
+	//fmt.Println("END BlackPointAsDarkerColorant BlackPoint.X, BlackPoint.Y, BlackPoint.Z ", (*BlackPoint).X, (*BlackPoint).Y, (*BlackPoint).Z)
 
 	return true
 }
@@ -128,7 +125,7 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 // The process involves a roundtrip transformation using perceptual intent:
 // Lab (0, 0, 0) -> [Perceptual] Profile -> CMYK -> [Rel. Colorimetric] Profile -> Lab.
 func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE) bool {
-	fmt.Println("START BlackPointUsingPerceptualBlack")
+	//fmt.Println("START BlackPointUsingPerceptualBlack")
 	var LabIn, LabOut cmsCIELab
 	var BlackXYZ cmsCIEXYZ
 
@@ -169,7 +166,7 @@ func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE)
 	if BlackPoint != nil {
 		*BlackPoint = BlackXYZ
 	}
-	fmt.Println("END BlackPointUsingPerceptualBlack  BlackPoint.X, BlackPoint.Y, BlackPoint.Z ", (*BlackPoint).X, (*BlackPoint).Y, (*BlackPoint).Z)
+	//fmt.Println("END BlackPointUsingPerceptualBlack  BlackPoint.X, BlackPoint.Y, BlackPoint.Z ", (*BlackPoint).X, (*BlackPoint).Y, (*BlackPoint).Z)
 
 	return true
 }
@@ -178,7 +175,7 @@ func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE)
 // This function attempts to address the issues with broken black point tags in profiles.
 // It ensures the chromaticity of the black point is neutral to avoid tints during compensation.
 func cmsDetectBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE, Intent, dwFlags uint32) bool {
-	fmt.Println("START cmsDetectBlackPoint")
+	//fmt.Println("START cmsDetectBlackPoint")
 
 	// Ensure the device class is adequate
 	devClass := cmsGetDeviceClass(hProfile)

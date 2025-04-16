@@ -139,7 +139,7 @@ func cmsDupDefaultFn(ContextID CmsContext, Org unsafe.Pointer, size uint32) unsa
 	return mem
 }
 
-// DupMem duplicates a single struct or value CAN NOT USE THIS!  generic function 
+// DupMem duplicates a single struct or value CAN NOT USE THIS!  generic function
 //can not be assigned
 /*func cmsDupDefaultFn[T any](src *T) *T {
 	if src == nil {
@@ -154,7 +154,6 @@ func cmsDupDefaultFn(ContextID CmsContext, Org unsafe.Pointer, size uint32) unsa
 
 	return dst
 }*/
-
 
 // Pointers to memory manager functions in Context0
 var cmsMemPluginChunk = cmsMemPluginChunkType{cmsMallocDefaultFn, cmsMallocZeroDefaultFn, cmsFreeDefaultFn,
@@ -204,13 +203,10 @@ func cmsMalloc(contextID CmsContext, size uint32) unsafe.Pointer {
 }
 
 // Generic allocate & zero
-func cmsMallocZero(contextID CmsContext, size uint32) unsafe.Pointer {
+/*func cmsMallocZero(contextID CmsContext, size uint32) unsafe.Pointer {
 	ptr := (*cmsMemPluginChunkType)(CmsContextGetClientChunk(contextID, MemPlugin))
-	/*	if ptr == nil || ptr.MallocZeroPtr == nil {
-		return nil
-	}*/
 	return ptr.MallocZeroPtr(contextID, size)
-}
+}*/
 
 // Generic calloc
 func cmsCalloc(contextID CmsContext, num, size uint32) unsafe.Pointer {
@@ -249,7 +245,7 @@ func cmsDupMem(contextID CmsContext, org unsafe.Pointer, size uint32) unsafe.Poi
 	return ptr.DupPtr(contextID, org, size)
 }
 
-//for slices
+// for slices
 // DupMemSlice duplicates a slice of any type
 func cmsDupMemSlice[T any](src []T) []T {
 	if len(src) == 0 {
@@ -265,7 +261,6 @@ func cmsDupMemSlice[T any](src []T) []T {
 	return dst
 }
 
-
 // ********************************************************************************************
 
 // Sub allocation takes care of many pointers of small size. The memory allocated in
@@ -278,7 +273,7 @@ func cmsCreateSubAllocChunk(contextID CmsContext, initial uint32) *cmsSubAllocat
 		initial = 20 * 1024 // Default to 20KB
 	}
 
-	chunk := (*cmsSubAllocatorChunk)(cmsMallocZero(contextID, uint32(unsafe.Sizeof(cmsSubAllocatorChunk{}))))
+	chunk := allocateStruct[cmsSubAllocatorChunk]()
 	if chunk == nil {
 		return nil
 	}
@@ -298,7 +293,7 @@ func cmsCreateSubAllocChunk(contextID CmsContext, initial uint32) *cmsSubAllocat
 
 // Create a new suballocator
 func cmsCreateSubAlloc(contextID CmsContext, initial uint32) *cmsSubAllocator {
-	sub := (*cmsSubAllocator)(cmsMallocZero(contextID, uint32(unsafe.Sizeof(cmsSubAllocator{}))))
+	sub := allocateStruct[cmsSubAllocator]()
 	if sub == nil {
 		return nil
 	}
@@ -590,7 +585,6 @@ func cmsstrcasecmp(s1, s2 *byte) int {
 
 	return 0
 }
-
 
 // Convert []float32 to []byte
 func float32SliceToBytes(floats []float32) []byte {

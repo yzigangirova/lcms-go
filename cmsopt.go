@@ -269,8 +269,8 @@ func Prelin16dup(ContextID CmsContext, ptr unsafe.Pointer) unsafe.Pointer {
 // PrelinOpt16alloc allocates and initializes Prelin16Data
 // PrelinOpt16alloc allocates and initializes Prelin16Data
 func PrelinOpt16alloc(ContextID CmsContext, ColorMap *cmsInterpParams, nInputs uint32, In []*CmsToneCurve, nOutputs uint32, Out []*CmsToneCurve) *Prelin16Data {
-	fmt.Println(" PrelinOpt16alloc")
-	p16 := (*Prelin16Data)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(Prelin16Data{}))))
+	//fmt.Println(" PrelinOpt16alloc")
+	p16 := allocateStruct[Prelin16Data]()
 	if p16 == nil {
 		return nil
 	}
@@ -324,7 +324,7 @@ const PRELINEARIZATION_POINTS = 4096
 
 func XFormSampler16(In []uint16, Out []uint16, Cargo unsafe.Pointer) int32 {
 	Lut := (*cmsPipeline)(Cargo)
-	fmt.Printf("XFormSampler16 %p\n", (*cmsStageToneCurvesData)(Lut.Elements.Data).TheCurves[0].InterpParams.Table)
+	//	fmt.Printf("XFormSampler16 %p\n", (*cmsStageToneCurvesData)(Lut.Elements.Data).TheCurves[0].InterpParams.Table)
 	var InFloat [cmsMAXCHANNELS]float32
 	var OutFloat [cmsMAXCHANNELS]float32
 	var i uint32
@@ -431,7 +431,7 @@ func PatchLUT(CLUT *cmsStage, At []uint16, Value []uint16, nChannelsOut, nChanne
 	}
 
 	for i := 0; i < int(nChannelsOut); i++ {
-		Grid.Tab.T[index+i] = Value[i]
+		Grid.Tab.([]uint16)[index+i] = Value[i]
 	}
 
 	return true
@@ -717,7 +717,7 @@ func SlopeLimiting(g *CmsToneCurve) {
 }
 
 func PrelinOpt8alloc(ContextID CmsContext, p *cmsInterpParams, G [3]*CmsToneCurve) *Prelin8Data {
-	p8 := (*Prelin8Data)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(Prelin8Data{}))))
+	p8 := allocateStruct[Prelin8Data]()
 	if p8 == nil {
 		return nil
 	}
@@ -1086,7 +1086,6 @@ func CurvesDup(ContextID CmsContext, ptr unsafe.Pointer) unsafe.Pointer {
 	for i := uint32(0); i < srcData.NCurves; i++ {
 		if srcData.Curves[i] != nil {
 			// Allocate new slice for each curve
-			fmt.Println("333 make([]uint16", srcData.NElements)
 			data.Curves[i] = make([]uint16, srcData.NElements)
 
 			// Copy the curve data
@@ -1107,7 +1106,6 @@ func CurvesAlloc(ContextID CmsContext, nCurves, nElements uint32, G []*CmsToneCu
 
 	// Step 2: Allocate memory for each curve (each row in 2D array)
 	for i := uint32(0); i < nCurves; i++ {
-		fmt.Println("444 make([]uint16", nElements)
 		c16.Curves[i] = make([]uint16, nElements) // Allocate slice for each row
 
 		// Step 3: Fill the curve with evaluated values

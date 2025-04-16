@@ -4,7 +4,7 @@ import (
 	//"errors"
 	"unsafe"
 	//"sync"
-	"fmt"
+
 	"reflect"
 )
 
@@ -886,7 +886,7 @@ func AllocEmptyTransform(
 	var plugin *cmsTransformCollection
 
 	// Allocate memory for the transform structure
-	p := (*cmsTRANSFORM)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsTRANSFORM{}))))
+	p := allocateStruct[cmsTRANSFORM]()
 	if p == nil {
 		cmsPipelineFree(lut)
 		return nil
@@ -1112,7 +1112,7 @@ func cmsCreateExtendedTransform(
 	OutputFormat uint32,
 	dwFlags uint32,
 ) *cmsTRANSFORM {
-	fmt.Println("cmsCreateExtendedTransform")
+	//fmt.Println("cmsCreateExtendedTransform")
 	// Check if it's a fake transform
 	if dwFlags&cmsFLAGS_NULLTRANSFORM != 0 {
 		return AllocEmptyTransform(ContextID, nil, INTENT_PERCEPTUAL, &InputFormat, &OutputFormat, &dwFlags)
@@ -1242,7 +1242,7 @@ func cmsCreateMultiprofileTransformTHR(
 	Intent uint32,
 	dwFlags uint32,
 ) CmsHTRANSFORM {
-	fmt.Println("cmsCreateMultiprofileTransformTHR")
+	//fmt.Println("cmsCreateMultiprofileTransformTHR")
 	var BPC [256]bool
 	var Intents [256]uint32
 	var AdaptationStates [256]float64
@@ -1304,7 +1304,7 @@ func cmsCreateTransformTHR(
 	Intent uint32,
 	dwFlags uint32,
 ) CmsHTRANSFORM {
-	fmt.Println("CmsCreateTransformTHR")
+	//fmt.Println("CmsCreateTransformTHR")
 
 	hProfiles := []CmsHPROFILE{Input, Output}
 	nProfiles := uint32(1)
@@ -1323,7 +1323,7 @@ func CmsCreateTransform(
 	Intent uint32,
 	dwFlags uint32,
 ) CmsHTRANSFORM {
-	fmt.Println("CmsCreateTransform")
+	//fmt.Println("CmsCreateTransform")
 	return cmsCreateTransformTHR(cmsGetProfileContextID(Input), Input, InputFormat, Output, OutputFormat, Intent, dwFlags)
 }
 
@@ -1338,7 +1338,7 @@ func cmsCreateProofingTransformTHR(
 	ProofingIntent uint32,
 	dwFlags uint32,
 ) CmsHTRANSFORM {
-	fmt.Println("cmsCreateProofingTransformTHR")
+	//fmt.Println("cmsCreateProofingTransformTHR")
 
 	hArray := []CmsHPROFILE{InputProfile, ProofingProfile, ProofingProfile, OutputProfile}
 	Intents := []uint32{nIntent, nIntent, INTENT_RELATIVE_COLORIMETRIC, ProofingIntent}

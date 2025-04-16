@@ -1,7 +1,7 @@
 package golcms
 
 import (
-	"fmt"
+	//"fmt"
 	"unsafe"
 )
 
@@ -335,7 +335,7 @@ Error:
 	return nil
 }
 func BuildRGBInputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
-	fmt.Println("START BuildRGBInputMatrixShaper")
+	//fmt.Println("START BuildRGBInputMatrixShaper")
 
 	ContextID := cmsGetProfileContextID(hProfile)
 	var Mat cmsMAT3
@@ -349,12 +349,6 @@ func BuildRGBInputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
 		for j := 0; j < 3; j++ {
 			Mat.V[i].N[j] *= InpAdj
 		}
-	}
-
-	// Debug: Print adjusted matrix
-	fmt.Println("Adjusted Matrix:")
-	for i := 0; i < 3; i++ {
-		fmt.Printf("Row %d: %f %f %f\n", i, Mat.V[i].N[0], Mat.V[i].N[1], Mat.V[i].N[2])
 	}
 
 	// Load tone curves
@@ -440,7 +434,7 @@ func BuildRGBInputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
 			}
 		}
 	}
-	fmt.Println("END BuildRGBInputMatrixShaper")
+	//fmt.Println("END BuildRGBInputMatrixShaper")
 	return Lut
 
 Error:
@@ -611,7 +605,7 @@ func BuildGrayOutputPipeline(hProfile CmsHPROFILE) *cmsPipeline {
 
 // BuildRGBOutputMatrixShaper translates the given function
 func BuildRGBOutputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
-	fmt.Println("BuildRGBOutputMatrixShaper")
+	//fmt.Println("BuildRGBOutputMatrixShaper")
 	ContextID := cmsGetProfileContextID(hProfile)
 	var Mat, Inv cmsMAT3
 	var Shapes, InvShapes [3]*CmsToneCurve

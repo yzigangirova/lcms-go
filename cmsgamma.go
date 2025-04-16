@@ -173,7 +173,7 @@ func AllocateToneCurveStruct(
 	} else {
 		p.Table16 = nil
 	}
-	fmt.Printf("222 make([]uint16 %d %p %p\n", nEntries, &p.Table16[0], p)
+	//fmt.Printf("222 make([]uint16 nEntries: %d  &p.Table16[0]: %p  len(p.Table16) %d p(cmsToneCurve):  %p\n", nEntries, &p.Table16[0], len(p.Table16), p)
 
 	// Copy values to Table16 if provided
 	if Values != nil && nEntries > 0 {
@@ -414,7 +414,6 @@ func cmsEvalToneCurveFloat(curve *CmsToneCurve, v float32) float32 {
 	}
 
 	// Check if this is a limited-precision tone curve with 16-bit table.
-	fmt.Printf("cmsEvalToneCurveFloat %.6f %d %d %d\n", v, curve.nSegments, curve.InterpParams.Interpolation.Lerp16, curve.InterpParams.Interpolation.LerpFloat)
 	if curve.nSegments == 0 {
 		inValue := uint16(cmsQuickSaturateWord(float64(v) * 65535.0))
 		outValue := cmsEvalToneCurve16(curve, inValue)
@@ -426,14 +425,12 @@ func cmsEvalToneCurveFloat(curve *CmsToneCurve, v float32) float32 {
 
 // cmsEvalToneCurve16 evaluates a tone curve at a specific point (16-bit input and output).
 func cmsEvalToneCurve16(Curve *CmsToneCurve, v uint16) uint16 {
-	fmt.Printf("start cmsEvalToneCurve16 %p\n", Curve)
 	var out uint16
 
 	cmsAssert(Curve != nil, "curve is nil")
 	outSlice := []uint16{0} // Create a slice with an actual mutable value
 	Curve.InterpParams.Interpolation.Lerp16([]uint16{v}, outSlice, Curve.InterpParams)
 	out = outSlice[0] // Extract the modified value from the slice
-	fmt.Println("end cmsEvalToneCurve16", out)
 	return out
 }
 
@@ -825,12 +822,10 @@ func EvalSegmentedFn(g *CmsToneCurve, R float64) float64 {
 			return Out
 		}
 	}
-	//	fmt.Println("end EvalSegmentedFn")
 	return math.Inf(-1) // MINUS_INF
 }
 
 func cmsReverseToneCurveEx(nResultSamples uint32, inCurve *CmsToneCurve) *CmsToneCurve {
-	fmt.Println("got inCurve InCurve->nEntries ", inCurve.nEntries)
 	var a, b, y, x1, y1, x2, y2 float64
 	var i, j int
 	var ascending bool

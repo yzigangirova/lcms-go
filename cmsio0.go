@@ -76,17 +76,15 @@ func NULLClose(iohandler *cms_io_handler) bool {
 
 // cmsOpenIOhandlerFromNULL creates a null IOHandler for tracking space usage.
 func cmsOpenIOhandlerFromNULL(ContextID CmsContext) *cmsIOHANDLER {
-	var iohandler *cmsIOHANDLER
-	var fm *FILENULL
 
 	// Allocate memory for the IOHandler
-	iohandler = (*cmsIOHANDLER)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsIOHANDLER{}))))
+	 iohandler := allocateStruct[cmsIOHANDLER]()
 	if iohandler == nil {
 		return nil
 	}
 
 	// Allocate memory for the FILENULL structure
-	fm = (*FILENULL)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(FILENULL{}))))
+	 fm := allocateStruct[FILENULL]()
 	if fm == nil {
 		cmsFree(ContextID, unsafe.Pointer(iohandler))
 		return nil
@@ -131,7 +129,7 @@ func cmsOpenIOhandlerFromStream(ContextID CmsContext, stream *os.File) *cmsIOHAN
 	}
 
 	// Allocate memory for cmsIOHANDLER
-	iohandler := (*cmsIOHANDLER)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsIOHANDLER{}))))
+	iohandler := allocateStruct[cmsIOHANDLER]()
 	if iohandler == nil {
 		return nil
 	}
@@ -563,7 +561,7 @@ func cmsReadTag(hProfile CmsHPROFILE, sig cmsTagSignature) unsafe.Pointer {
 	var BaseType cmsTagTypeSignature
 	var Offset, TagSize, ElemCount uint32
 	var n int
-	fmt.Println("start cmsReadTag")
+	//fmt.Println("start cmsReadTag")
 	// Lock the mutex
 	if !cmsLockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex)) {
 		return nil
@@ -694,7 +692,8 @@ Error:
 
 // Creates an empty structure holding all required parameters
 func cmsCreateProfilePlaceholder(ContextID CmsContext) CmsHPROFILE {
-	Icc := (*cmsICCPROFILE)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsICCPROFILE{}))))
+	Icc := allocateStruct[cmsICCPROFILE]()
+
 	if Icc == nil {
 		return nil
 	}
@@ -1420,7 +1419,7 @@ func cmsOpenIOhandlerFromMem(ContextID CmsContext, Buffer unsafe.Pointer, size u
 	}
 
 	// Allocate memory for cmsIOHANDLER
-	iohandler := (*cmsIOHANDLER)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsIOHANDLER{}))))
+	iohandler := allocateStruct[cmsIOHANDLER]()
 	if iohandler == nil {
 		return nil
 	}
@@ -1429,7 +1428,7 @@ func cmsOpenIOhandlerFromMem(ContextID CmsContext, Buffer unsafe.Pointer, size u
 
 	switch AccessMode[0] {
 	case 'r': // Read mode
-		fm = (*FILEMEM)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(FILEMEM{}))))
+		fm = allocateStruct[FILEMEM]()
 		if fm == nil {
 			goto Error
 		}
@@ -1456,7 +1455,7 @@ func cmsOpenIOhandlerFromMem(ContextID CmsContext, Buffer unsafe.Pointer, size u
 		iohandler.ReportedSize = size
 
 	case 'w': // Write mode
-		fm = (*FILEMEM)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(FILEMEM{}))))
+		fm = allocateStruct[FILEMEM]()
 		if fm == nil {
 			goto Error
 		}
@@ -1512,7 +1511,7 @@ func cmsOpenIOhandlerFromFile(ContextID CmsContext, FileName string, AccessMode 
 		return nil
 	}
 
-	iohandler := (*cmsIOHANDLER)(cmsMallocZero(ContextID, uint32(unsafe.Sizeof(cmsIOHANDLER{}))))
+	iohandler := allocateStruct[cmsIOHANDLER]()
 	if iohandler == nil {
 		return nil
 	}

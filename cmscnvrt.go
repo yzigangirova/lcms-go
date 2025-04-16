@@ -248,7 +248,7 @@ func DefaultICCintents(
 	AdaptationStates []float64,
 	dwFlags uint32,
 ) *cmsPipeline {
-	fmt.Println("START DefaultICCintents")
+	//fmt.Println("START DefaultICCintents")
 	var (
 		Lut               *cmsPipeline
 		Result            *cmsPipeline
@@ -275,7 +275,6 @@ func DefaultICCintents(
 	CurrentColorSpace = CmsGetColorSpace(hProfiles[0])
 
 	for i := uint32(0); i < nProfiles; i++ {
-		fmt.Println("start for")
 		var lIsDeviceLink, lIsInput bool
 
 		hProfile = hProfiles[i]
@@ -304,7 +303,6 @@ func DefaultICCintents(
 			cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_COLORSPACE_CHECK, "ColorSpace mismatch")
 			goto Error
 		}
-		fmt.Println("ddd")
 
 		// If devicelink or named color class
 		if lIsDeviceLink || (ClassSig == cmsSigNamedColorClass && nProfiles == 1) {
@@ -327,16 +325,12 @@ func DefaultICCintents(
 			}
 		} else {
 			if lIsInput {
-				fmt.Println("before cmsReadInputLUT ")
 				Lut = cmsReadInputLUT(hProfile, Intent)
-				fmt.Println("after cmsReadInputLUT ")
 				if Lut == nil {
 					goto Error
 				}
 			} else {
-				fmt.Println("before cmsReadOutputLUT ")
 				Lut = cmsReadOutputLUT(hProfile, Intent)
-				fmt.Println("after cmsReadOutputLUT ")
 				if Lut == nil {
 					goto Error
 				}
@@ -349,7 +343,6 @@ func DefaultICCintents(
 				}
 			}
 		}
-		fmt.Println("eee")
 
 		// Concatenate LUT
 		if !cmsPipelineCat(Result, Lut) {
@@ -360,7 +353,6 @@ func DefaultICCintents(
 		Lut = nil
 		// Update current space
 		CurrentColorSpace = ColorSpaceOut
-		fmt.Println("end for")
 	}
 
 	// Handle non-negatives clip
@@ -376,12 +368,11 @@ func DefaultICCintents(
 			}
 		}
 	}
-	fmt.Println("END DefaultICCintents")
+	//fmt.Println("END DefaultICCintents")
 
 	return Result
 
 Error:
-	fmt.Println("END ERROR DefaultICCintents")
 
 	if Lut != nil {
 		cmsPipelineFree(Lut)
@@ -437,7 +428,7 @@ func IsEmptyLayer(m *cmsMAT3, off *cmsVEC3) bool {
 }
 
 func ComputeConversion(i uint32, hProfiles []CmsHPROFILE, Intent uint32, BPC bool, AdaptationState float64, m *cmsMAT3, off *cmsVEC3) bool {
-	fmt.Println("START ComputeConversion")
+	//fmt.Println("START ComputeConversion")
 	// Initialize m and off to identity
 	cmsMAT3identity(m)
 	cmsVEC3init(off, 0, 0, 0)
@@ -464,12 +455,6 @@ func ComputeConversion(i uint32, hProfiles []CmsHPROFILE, Intent uint32, BPC boo
 
 			cmsDetectBlackPoint(&BlackPointIn, hProfiles[i-1], Intent, 0)
 			cmsDetectDestinationBlackPoint(&BlackPointOut, hProfiles[i], Intent, 0)
-			fmt.Printf("BlackPointIn.X %f\n", BlackPointIn.X)
-			fmt.Printf("BlackPointIn.Y %f\n", BlackPointIn.Y)
-			fmt.Printf("BlackPointIn.Z %f\n", BlackPointIn.Z)
-			fmt.Printf("BlackPointOut.X %f\n", BlackPointOut.X)
-			fmt.Printf("BlackPointOut.Y %f\n", BlackPointOut.Y)
-			fmt.Printf("BlackPointOut.Z %f\n", BlackPointOut.Z)
 
 			// Skip if black points are equal
 
@@ -491,7 +476,7 @@ func ComputeConversion(i uint32, hProfiles []CmsHPROFILE, Intent uint32, BPC boo
 	for k := 0; k < 3; k++ {
 		off.N[k] /= MAX_ENCODEABLE_XYZ
 	}
-	fmt.Println("END ComputeConversion")
+	//("END ComputeConversion")
 
 	return true
 }
