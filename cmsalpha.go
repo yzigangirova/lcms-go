@@ -65,19 +65,7 @@ func from8to16(dst, src any) {
 	dstSlice[0] = uint16(FROM_8_TO_16(n)) // Convert and store in first uint16
 }
 
-// Dummy implementations for external functions
-/*func changeEndian(n uint16) uint16 {
-	return (n>>8)&0x00FF | (n<<8)&0xFF00
-}
 
-func FROM_8_TO_16(n uint8) uint16 {
-	return uint16(n) * 257 // Expands 8-bit range [0-255] to 16-bit range [0-65535]
-}
-
-func cmsFloat2Half(f float32) uint16 {
-	// Simulates conversion from float32 to half-precision float
-	return uint16(math.Float32bits(f) >> 16) // Basic approximation
-}*/
 
 // Converts from 8-bit to 16-bit with endian swap
 func from8to16SE(dst, src any) {
