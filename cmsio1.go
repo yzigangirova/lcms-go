@@ -442,8 +442,6 @@ Error:
 	return nil
 }
 
-
-
 // cmsReadFloatInputTag translates the first function
 func cmsReadFloatInputTag(hProfile CmsHPROFILE, tagFloat cmsTagSignature) *cmsPipeline {
 	ContextID := cmsGetProfileContextID(hProfile)

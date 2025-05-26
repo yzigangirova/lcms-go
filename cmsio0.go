@@ -31,7 +31,7 @@ type FILENULL struct {
 }
 
 // NULLRead simulates reading from a null IOHandler.
-func NULLRead(iohandler *cms_io_handler, buffer unsafe.Pointer, size, count uint32) uint32 {
+func NULLRead(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32 {
 	resData := (*FILENULL)(iohandler.Stream)
 
 	length := size * count
@@ -78,13 +78,13 @@ func NULLClose(iohandler *cms_io_handler) bool {
 func cmsOpenIOhandlerFromNULL(ContextID CmsContext) *cmsIOHANDLER {
 
 	// Allocate memory for the IOHandler
-	 iohandler := allocateStruct[cmsIOHANDLER]()
+	iohandler := allocateStruct[cmsIOHANDLER]()
 	if iohandler == nil {
 		return nil
 	}
 
 	// Allocate memory for the FILENULL structure
-	 fm := allocateStruct[FILENULL]()
+	fm := allocateStruct[FILENULL]()
 	if fm == nil {
 		cmsFree(ContextID, unsafe.Pointer(iohandler))
 		return nil
@@ -680,7 +680,7 @@ func cmsReadTag(hProfile CmsHPROFILE, sig cmsTagSignature) unsafe.Pointer {
 
 	// Unlock and return
 	cmsUnlockMutex(Icc.ContextID, unsafe.Pointer(Icc.UsrMutex))
-	fmt.Println("end cmsReadTag")
+	//	fmt.Println("end cmsReadTag")
 	return Icc.TagPtrs[n]
 
 Error:
@@ -1584,7 +1584,7 @@ func cmsOpenIOhandlerFromFile(ContextID CmsContext, FileName string, AccessMode 
 }
 
 // FileRead reads count elements of size bytes each from the file stream. Returns the number of elements read.
-func FileRead(iohandler *cms_io_handler, buffer unsafe.Pointer, size, count uint32) uint32 {
+func FileRead(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32 {
 	file := (*os.File)(iohandler.Stream)
 	totalBytes := int(size * count)
 	readBuffer := make([]byte, totalBytes)
@@ -1596,7 +1596,7 @@ func FileRead(iohandler *cms_io_handler, buffer unsafe.Pointer, size, count uint
 	}
 
 	// Copy the read data into the provided buffer
-	memmove(buffer, unsafe.Pointer(&readBuffer[0]), uintptr(nRead))
+	MemmoveSlice(buffer, readBuffer, nRead)
 
 	if nRead < totalBytes {
 		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_FILE, "Read error. Got  bytes, block should be of  bytes")

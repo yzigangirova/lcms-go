@@ -1,6 +1,7 @@
 package golcms
 
 import (
+	"fmt"
 	"math"
 	"unsafe"
 )
@@ -290,7 +291,7 @@ func cmsStageAllocIdentityCurves(ContextID CmsContext, nChannels uint32) *cmsSta
 }*/
 
 func EvaluateMatrix(in []float32, out []float32, mpe *cmsStage) {
-	//fmt.Println("start EVALUATE MATRIX")
+	fmt.Println("start EVALUATE MATRIX")
 
 	data := (*cmsStageMatrixData)(mpe.Data)
 	// Print matrix coefficients
@@ -343,7 +344,6 @@ func EvaluateMatrix(in []float32, out []float32, mpe *cmsStage) {
 
 // MatrixElemDup duplicates the matrix stage data.
 func MatrixElemDup(mpe *cmsStage) unsafe.Pointer {
-	//fmt.Println("MatrixElemDup")
 	if mpe == nil || mpe.Data == nil {
 		return nil
 	}
@@ -377,8 +377,10 @@ func cmsStageAllocMatrix(
 	Rows, Cols uint32,
 	Matrix, Offset []float64,
 ) *cmsStage {
-	//fmt.Println("start cmsStageAllocMatrix")
-
+	fmt.Println("start cmsStageAllocMatrix")
+	for i, row := range Matrix {
+		fmt.Printf("Matrix %d %v\n", i, row)
+	}
 	var i, n uint32
 	var NewElem *cmsStageMatrixData
 	var NewMPE *cmsStage
@@ -413,6 +415,8 @@ func cmsStageAllocMatrix(
 	NewElem.Double = make([]float64, n)
 	copy(NewElem.Double, Matrix)
 
+	
+
 	if Offset != nil {
 		NewElem.Offset = make([]float64, Rows)
 		for i = 0; i < Rows; i++ {
@@ -421,7 +425,7 @@ func cmsStageAllocMatrix(
 
 	}
 
-	//fmt.Println("end cmsStageAllocMatrix")
+	fmt.Println("end cmsStageAllocMatrix")
 	return NewMPE
 
 Error:

@@ -1537,11 +1537,18 @@ func PackALabV2_8(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint
 
 	return output[4:]
 }
-func PackLabV2_16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+/*func PackLabV2_16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	*(*uint16)(unsafe.Pointer(&output[0])) = FromLabV4ToLabV2(wOut[0])
 	*(*uint16)(unsafe.Pointer(&output[2])) = FromLabV4ToLabV2(wOut[1])
 	*(*uint16)(unsafe.Pointer(&output[4])) = FromLabV4ToLabV2(wOut[2])
 
+	return output[6:]
+}*/
+
+func PackLabV2_16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+	binary.LittleEndian.PutUint16(output[0:2], FromLabV4ToLabV2(wOut[0]))
+	binary.LittleEndian.PutUint16(output[2:4], FromLabV4ToLabV2(wOut[1]))
+	binary.LittleEndian.PutUint16(output[4:6], FromLabV4ToLabV2(wOut[2]))
 	return output[6:]
 }
 func Pack3Bytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {

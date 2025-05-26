@@ -168,7 +168,6 @@ func _MultiplyMatrix(Lut *cmsPipeline) bool {
 			}
 
 			res = cmsMAT3perFromSlices(m2.Double[:], m1.Double[:])
-
 			chain := (*pt2).Next
 			RemoveElement(pt2)
 			RemoveElement(pt1)
@@ -1333,6 +1332,10 @@ func MatShaperEval16(In []uint16, Out []uint16, D unsafe.Pointer) {
 	if len(In) < 3 || len(Out) < 3 {
 		return
 	}
+	fmt.Printf("MATRIX:\n")
+	for i := 0; i < 3; i++ {
+		fmt.Printf("Row %d: %d %d %d\n", i, p.Mat[i][0], p.Mat[i][1], p.Mat[i][2])
+	}
 
 	//  Extract indices from input using slice indexing
 	ri := uint32(In[0] & 0xFF)
@@ -1449,7 +1452,7 @@ func SetMatShaper(Dest *cmsPipeline, Curve1 [3]*CmsToneCurve, Mat *cmsMAT3, Off 
 	return true
 }
 func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) bool {
-	//	fmt.Println("OptimizeMatrixShaper")
+	fmt.Println("OptimizeMatrixShaper")
 	var Curve1, Curve2 *cmsStage
 	var Matrix1, Matrix2 *cmsStage
 	var res cmsMAT3
@@ -1499,26 +1502,40 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		if cmsMAT3isIdentity(&res) && Offset == nil {
 			IdentityMat = true // Can optimize further
 		}
-	} else if cmsPipelineCheckAndRetrieveStages(Src, 3, []cmsStageSignature{cmsSigCurveSetElemType, cmsSigMatrixElemType, cmsSigCurveSetElemType},
-		&Curve1, &Matrix1, &Curve2) {
-		// Single matrix case
-		Data := (*cmsStageMatrixData)(cmsStageData(Matrix1))
-
-		// Copy the matrix to the result
-		ressl := MatToSlice(res)
-		MemcpySlice(ressl, Data.Double, len(Data.Double))
-		res = SliceToMat(ressl)
-
-		// Preserve the offset (may be nil for zero offset)
-		Offset = Data.Offset
-
-		// Check if the matrix is an identity matrix
-		if cmsMAT3isIdentity(&res) && Offset == nil {
-			IdentityMat = true // Can optimize further
-		}
 	} else {
-		// Not optimizable
-		return false
+		if cmsPipelineCheckAndRetrieveStages(Src, 3, []cmsStageSignature{cmsSigCurveSetElemType, cmsSigMatrixElemType, cmsSigCurveSetElemType},
+			&Curve1, &Matrix1, &Curve2) {
+			// Single matrix case
+			fmt.Println("matrix after cmsPipelineCheckAndRetrieveStages")
+			Data := (*cmsStageMatrixData)(cmsStageData(Matrix1))
+			for i, row := range Data.Double {
+				fmt.Printf("Data.Double %d %v\n", i, row)
+			}
+
+			// Copy the matrix to the result
+			res = SliceToMat(Data.Double)
+			ressl := MatToSlice(res)
+			fmt.Println("Matrix res:")
+			for _, row := range res.V {
+				fmt.Printf("[ %8.4f %8.4f %8.4f ]\n", row.N[0], row.N[1], row.N[2])
+			}
+
+			for i, row := range ressl {
+				fmt.Printf("ressl %d %v\n", i, row)
+			}
+			
+
+			// Preserve the offset (may be nil for zero offset)
+			Offset = Data.Offset
+
+			// Check if the matrix is an identity matrix
+			if cmsMAT3isIdentity(&res) && Offset == nil {
+				IdentityMat = true // Can optimize further
+			}
+		} else {
+			// Not optimizable
+			return false
+		}
 	}
 
 	// Allocate an empty LUT
@@ -1526,18 +1543,19 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	if Dest == nil {
 		return false
 	}
-	var ressl []float64
+	//var ressl []float64
 	// Assemble the new LUT
 	if !cmsPipelineInsertStage(Dest, cmsAT_BEGIN, cmsStageDup(Curve1)) {
 		goto Error
 	}
-	ressl = MatToSlice(res)
+	//ressl =
+
 	if !IdentityMat {
-		if !cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageAllocMatrix(Dest.ContextID, 3, 3, ressl, Offset)) {
+		if !cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageAllocMatrix(Dest.ContextID, 3, 3, MatToSlice(res), Offset)) {
 			goto Error
 		}
 	}
-	res = SliceToMat(ressl)
+	//res = SliceToMat(ressl)
 	if !cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageDup(Curve2)) {
 		goto Error
 	}
@@ -1552,8 +1570,11 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		// Disable cache for this optimization
 		*dwFlags |= cmsFLAGS_NOCACHE
 
+		var vec cmsVEC3
 		// Set up optimization routines
-		vec := SliceToVec(Offset[:])
+		if Offset != nil {
+			vec = SliceToVec(Offset[:])
+		}
 		SetMatShaper(Dest, ConvertToToneCurveArray(mpeC1.TheCurves), &res, &vec, ConvertToToneCurveArray(mpeC2.TheCurves), OutputFormat)
 	}
 

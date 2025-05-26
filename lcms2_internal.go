@@ -1,8 +1,8 @@
 package golcms
 
 import (
+	"fmt"
 	"math"
-	"reflect"
 	"sync"
 	"time"
 	"unsafe"
@@ -532,15 +532,10 @@ type cmsParallelizationPluginChunkType struct {
 //var cmsParallelizationPluginChunk cmsParallelizationPluginChunkType
 
 func MemcpySlice[T any](dst, src []T, length int) {
-	if length > len(src)*int(unsafe.Sizeof(src[0])) || length > len(dst)*int(unsafe.Sizeof(dst[0])) {
+	if length > len(src) || length > len(dst) {
 		panic("Memcpy: length exceeds slice bounds") // Mimic segmentation fault in C
 	}
-
-	// Convert slices to raw byte slices for true memory copying
-	dstBytes := unsafe.Slice((*byte)(unsafe.Pointer(&dst[0])), length)
-	srcBytes := unsafe.Slice((*byte)(unsafe.Pointer(&src[0])), length)
-
-	copy(dstBytes, srcBytes) // Copy raw memory bytes
+	copy(dst, src) // Copy raw memory bytes
 }
 
 func MemmoveSlice[T any](dest, src []T, count int) {
@@ -554,15 +549,8 @@ func MemsetSlice[T any](slice []T, value T, length int) {
 	if length > len(slice) {
 		panic("Memset: length exceeds slice bounds")
 	}
-
-	// Convert slice to byte slice for raw memory manipulation
-	byteSize := int(unsafe.Sizeof(slice[0])) * length
-	byteSlice := unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), byteSize)
-
-	// Fill memory byte by byte
-	valBytes := unsafe.Slice((*byte)(unsafe.Pointer(&value)), byteSize)
-	for i := 0; i < byteSize; i++ {
-		byteSlice[i] = valBytes[0] // Repeat first byte of value
+	for i := 0; i < length; i++ {
+		slice[i] = value // Repeat first byte of value
 	}
 }
 func LabToSlice(lab cmsCIELab) []float64 {
@@ -598,6 +586,7 @@ func VecToSlice(vec cmsVEC3) []float64 {
 }
 
 func SliceToVec(s []float64) cmsVEC3 {
+	fmt.Println("SliceToVec")
 	if len(s) != 3 {
 		panic("SliceToVec: slice must have 3 elements")
 	}
@@ -622,7 +611,7 @@ func memset(ptr unsafe.Pointer, value int, num uintptr) {
 	}
 }
 
-func memmove(dst, src unsafe.Pointer, n uintptr) {
+/*func memmove(dst, src unsafe.Pointer, n uintptr) {
 	// Create byte slices from the pointers
 	dstSlice := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: uintptr(dst),
@@ -654,7 +643,7 @@ func memcpy(dst, src unsafe.Pointer, size uintptr) {
 	}))
 
 	copy(dstSlice, srcSlice)
-}
+}*/
 
 // strncpy copies up to `n` characters from `src` to a new `dst`.
 // It returns the resulting string, null-padded to `n` if `src` is shorter.
