@@ -1,7 +1,7 @@
 package golcms
 
 import (
-	"fmt"
+	//"fmt"
 	"math"
 	"sync"
 	"time"
@@ -586,7 +586,7 @@ func VecToSlice(vec cmsVEC3) []float64 {
 }
 
 func SliceToVec(s []float64) cmsVEC3 {
-	fmt.Println("SliceToVec")
+	//fmt.Println("SliceToVec")
 	if len(s) != 3 {
 		panic("SliceToVec: slice must have 3 elements")
 	}
@@ -611,86 +611,84 @@ func memset(ptr unsafe.Pointer, value int, num uintptr) {
 	}
 }
 
-/*func memmove(dst, src unsafe.Pointer, n uintptr) {
-	// Create byte slices from the pointers
-	dstSlice := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(dst),
-		Len:  int(n),
-		Cap:  int(n),
-	}))
+// memmove copies n bytes from src to dst, handling overlapping regions correctly.
+// This is a direct implementation without slice conversion overhead.
+func memmove(dst, src unsafe.Pointer, n uintptr) {
+	if dst == src || n == 0 {
+		return
+	}
 
-	srcSlice := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(src),
-		Len:  int(n),
-		Cap:  int(n),
-	}))
-
-	// Use Go's copy function which handles overlapping memory safely
-	copy(dstSlice, srcSlice)
+	// Determine copy direction for overlapping regions
+	if uintptr(dst) < uintptr(src) {
+		// Forward copy
+		for i := uintptr(0); i < n; i++ {
+			*(*byte)(unsafe.Pointer(uintptr(dst) + i)) = *(*byte)(unsafe.Pointer(uintptr(src) + i))
+		}
+	} else {
+		// Backward copy for overlapping regions
+		for i := n; i > 0; i-- {
+			*(*byte)(unsafe.Pointer(uintptr(dst) + i - 1)) = *(*byte)(unsafe.Pointer(uintptr(src) + i - 1))
+		}
+	}
 }
 
-func memcpy(dst, src unsafe.Pointer, size uintptr) {
-	dstSlice := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(dst),
-		Len:  int(size),
-		Cap:  int(size),
-	}))
+// memcpy copies n bytes from src to dst.
+// Unlike memmove, memcpy doesn't handle overlapping regions (undefined behavior if they overlap)
+func memcpy(dst, src unsafe.Pointer, n uintptr) {
+	if dst == src || n == 0 {
+		return
+	}
 
-	srcSlice := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(src),
-		Len:  int(size),
-		Cap:  int(size),
-	}))
-
-	copy(dstSlice, srcSlice)
-}*/
+	// Copy byte by byte
+	for i := uintptr(0); i < n; i++ {
+		*(*byte)(unsafe.Pointer(uintptr(dst) + i)) = *(*byte)(unsafe.Pointer(uintptr(src) + i))
+	}
+}
 
 // strncpy copies up to `n` characters from `src` to a new `dst`.
 // It returns the resulting string, null-padded to `n` if `src` is shorter.
+// strncpy copies up to n bytes from src to a new string.
+// If src is shorter than n, the remaining bytes are null ('\x00') padded.
 func strncpy(src string, n int) string {
 	if n <= 0 {
 		return ""
 	}
 
-	// Convert src to a slice of bytes
-	srcBytes := []byte(src)
-
-	// Create a destination buffer of size `n`
-	dst := make([]byte, n)
-
-	// Determine how many characters to copy
-	copyLen := n
-	if len(srcBytes) < n {
-		copyLen = len(srcBytes)
+	// Fast path: if src is exactly n bytes, we can use it directly
+	if len(src) == n {
+		return src
 	}
 
-	// Copy bytes from src to dst
-	copy(dst, srcBytes[:copyLen])
+	// Create destination buffer (automatically zero-initialized)
+	dst := make([]byte, n)
 
-	// Remaining bytes in `dst` are already initialized to '\x00' by `make`
+	// Copy only the available bytes (min of src length or n)
+	copy(dst, src)
 
+	// Convert to string (this makes an immutable copy)
 	return string(dst)
 }
 
-// strlen calculates the length of a null-terminated byte string.
+/*
+	func strlen(s string) int {
+	    return strings.IndexByte(s, 0) // Returns -1 if no null byte
+	}
+*/
 func strlen(str *byte) int {
 	if str == nil {
 		return 0
 	}
 
+	ptr := unsafe.Pointer(str)
 	length := 0
-	ptr := uintptr(unsafe.Pointer(str))
 
 	for {
-		// Dereference the pointer to get the current byte
-		currentByte := *(*byte)(unsafe.Pointer(ptr))
-		if currentByte == 0 {
+		current := *(*byte)(ptr)
+		if current == 0 {
 			break
 		}
-
-		// Move to the next byte
-		ptr++
 		length++
+		ptr = unsafe.Pointer(uintptr(ptr) + 1) // Safe: conversion in same expression
 	}
 
 	return length

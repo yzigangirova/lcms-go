@@ -31,7 +31,8 @@ type FILENULL struct {
 }
 
 // NULLRead simulates reading from a null IOHandler.
-func NULLRead(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32 {
+// func NULLRead(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32 {
+func NULLRead(iohandler *cms_io_handler, buffer unsafe.Pointer, size, count uint32) uint32 {
 	resData := (*FILENULL)(iohandler.Stream)
 
 	length := size * count
@@ -54,6 +55,7 @@ func NULLTell(iohandler *cms_io_handler) uint32 {
 }
 
 // NULLWrite simulates writing to a null IOHandler.
+// func NULLWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 func NULLWrite(iohandler *cms_io_handler, size uint32, ptr unsafe.Pointer) bool {
 	resData := (*FILENULL)(iohandler.Stream)
 
@@ -1331,6 +1333,7 @@ type FILEMEM struct {
 	FreeBlockOnClose bool   // Indicates if the block should be freed on close
 }
 
+// func MemoryRead(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32 {
 func MemoryRead(iohandler *cms_io_handler, buffer unsafe.Pointer, size, count uint32) uint32 {
 	resData := (*FILEMEM)(iohandler.Stream)
 	length := size * count
@@ -1584,7 +1587,7 @@ func cmsOpenIOhandlerFromFile(ContextID CmsContext, FileName string, AccessMode 
 }
 
 // FileRead reads count elements of size bytes each from the file stream. Returns the number of elements read.
-func FileRead(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32 {
+/*func FileRead(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32 {
 	file := (*os.File)(iohandler.Stream)
 	totalBytes := int(size * count)
 	readBuffer := make([]byte, totalBytes)
@@ -1597,6 +1600,29 @@ func FileRead(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint
 
 	// Copy the read data into the provided buffer
 	MemmoveSlice(buffer, readBuffer, nRead)
+
+	if nRead < totalBytes {
+		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_FILE, "Read error. Got  bytes, block should be of  bytes")
+		return 0
+	}
+
+	return uint32(nRead / int(size))
+}*/
+
+// FileRead reads count elements of size bytes each from the file stream. Returns the number of elements read.
+func FileRead(iohandler *cms_io_handler, buffer unsafe.Pointer, size, count uint32) uint32 {
+	file := (*os.File)(iohandler.Stream)
+	totalBytes := int(size * count)
+	readBuffer := make([]byte, totalBytes)
+
+	nRead, err := file.Read(readBuffer)
+	if err != nil {
+		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_FILE, "Read error. Got  bytes, block should be of  bytes")
+		return 0
+	}
+
+	// Copy the read data into the provided buffer
+	memmove(buffer, unsafe.Pointer(&readBuffer[0]), uintptr(nRead))
 
 	if nRead < totalBytes {
 		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_FILE, "Read error. Got  bytes, block should be of  bytes")
@@ -1631,6 +1657,23 @@ func FileTell(iohandler *cms_io_handler) uint32 {
 
 	return uint32(pos)
 }
+
+// FileWrite writes data to the stream. Returns true on success, false otherwise.
+/*func FileWrite(iohandler *cms_io_handler, size uint32, buffer []byte) bool {
+	if size == 0 {
+		return true // We allow writing 0 bytes, but nothing is written
+	}
+
+	file := (*os.File)(iohandler.Stream)
+	nWritten, err := file.Write(buffer)
+	if err != nil || uint32(nWritten) != size {
+		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_FILE, "Write error; expected to write  bytes")
+		return false
+	}
+
+	iohandler.UsedSpace += size
+	return true
+}*/
 
 // FileWrite writes data to the stream. Returns true on success, false otherwise.
 func FileWrite(iohandler *cms_io_handler, size uint32, buffer unsafe.Pointer) bool {

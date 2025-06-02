@@ -4,7 +4,7 @@ import (
 	//"errors"
 	"unsafe"
 	//"sync"
-"fmt"
+//"fmt"
 	"reflect"
 )
 
@@ -212,7 +212,6 @@ func CmsDoTransform(Transform CmsHTRANSFORM, InputBuffer, OutputBuffer any, Size
 
 	// Perform the transformation
 	p.Xform(p, InputBuffer, OutputBuffer, Size, 1, &stride)
-	fmt.Println("return")
 }
 
 func CmsDoTransformStride(
@@ -461,7 +460,6 @@ func PrecalculatedXFORM(
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
-	fmt.Println("return")
 }
 
 // Auxiliary: Handle precalculated gamut check. The retrieval of context may be alittle bit slow, but this function is not critical.

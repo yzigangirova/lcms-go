@@ -140,11 +140,13 @@ type cms_io_handler struct {
 	UsedSpace    uint32         // Used space in the stream
 	ReportedSize uint32         // Reported size of the stream
 	PhysicalFile string         // Physical file path
-	Read         func(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32
+//	Read         func(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32
+	Read         func(iohandler *cms_io_handler, buffer unsafe.Pointer, size, count uint32) uint32
 	Seek         func(iohandler *cms_io_handler, offset uint32) bool
 	Close        func(iohandler *cms_io_handler) bool
 	Tell         func(iohandler *cms_io_handler) uint32
-	Write        func(iohandler *cms_io_handler, size uint32, buffer byte) bool
+//	Write        func(iohandler *cms_io_handler, size uint32, buffer []byte) bool
+	Write        func(iohandler *cms_io_handler, size uint32, buffer unsafe.Pointer) bool
 }
 
 //----------------------------------------------------------------------------------------------------------

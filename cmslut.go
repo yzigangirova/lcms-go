@@ -1,7 +1,7 @@
 package golcms
 
 import (
-	"fmt"
+	//"fmt"
 	"math"
 	"unsafe"
 )
@@ -291,7 +291,7 @@ func cmsStageAllocIdentityCurves(ContextID CmsContext, nChannels uint32) *cmsSta
 }*/
 
 func EvaluateMatrix(in []float32, out []float32, mpe *cmsStage) {
-	fmt.Println("start EVALUATE MATRIX")
+	//fmt.Println("start EVALUATE MATRIX")
 
 	data := (*cmsStageMatrixData)(mpe.Data)
 	// Print matrix coefficients
@@ -377,10 +377,10 @@ func cmsStageAllocMatrix(
 	Rows, Cols uint32,
 	Matrix, Offset []float64,
 ) *cmsStage {
-	fmt.Println("start cmsStageAllocMatrix")
+	/*fmt.Println("start cmsStageAllocMatrix")
 	for i, row := range Matrix {
 		fmt.Printf("Matrix %d %v\n", i, row)
-	}
+	}*/
 	var i, n uint32
 	var NewElem *cmsStageMatrixData
 	var NewMPE *cmsStage
@@ -425,7 +425,7 @@ func cmsStageAllocMatrix(
 
 	}
 
-	fmt.Println("end cmsStageAllocMatrix")
+	//fmt.Println("end cmsStageAllocMatrix")
 	return NewMPE
 
 Error:
