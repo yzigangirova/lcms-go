@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	//"fmt"
+	"fmt"
 	"math"
 	"unsafe"
 )
@@ -73,7 +73,7 @@ func cmsAdjustEndianess64(qword uint64) uint64 {
 func cmsReadUInt8Number(io *cmsIOHANDLER, n *uint8) bool {
 	var tmp uint8
 
-	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&tmp), uint32(unsafe.Sizeof(tmp)), 1) != 1 {
+	if io.Read((*cms_io_handler)(io), tmp, uint32(unsafe.Sizeof(tmp)), 1) != 1 {
 		return false
 	}
 
@@ -87,7 +87,7 @@ func cmsReadUInt8Number(io *cmsIOHANDLER, n *uint8) bool {
 func cmsReadUInt16Number(io *cmsIOHANDLER, n *uint16) bool {
 	var tmp uint16
 
-	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&tmp), uint32(unsafe.Sizeof(tmp)), 1) != 1 {
+	if io.Read((*cms_io_handler)(io), tmp, uint32(unsafe.Sizeof(tmp)), 1) != 1 {
 		return false
 	}
 
@@ -117,7 +117,7 @@ func cmsReadUInt16Array(io *cmsIOHANDLER, n uint32, array []uint16) bool {
 func cmsReadUInt32Number(io *cmsIOHANDLER, n *uint32) bool {
 	var tmp uint32
 
-	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&tmp), uint32(unsafe.Sizeof(tmp)), 1) != 1 {
+	if io.Read((*cms_io_handler)(io), &tmp, uint32(unsafe.Sizeof(tmp)), 1) != 1 {
 		return false
 	}
 
@@ -133,7 +133,7 @@ func cmsReadFloat32Number(io *cmsIOHANDLER, n *float32) bool {
 		Integer uint32
 	}
 
-	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&tmp.Integer), uint32(unsafe.Sizeof(tmp.Integer)), 1) != 1 {
+	if io.Read((*cms_io_handler)(io), tmp.Integer, uint32(unsafe.Sizeof(tmp.Integer)), 1) != 1 {
 		return false
 	}
 
@@ -159,7 +159,7 @@ func cmsReadFloat32Number(io *cmsIOHANDLER, n *float32) bool {
 func cmsReadUInt64Number(io *cmsIOHANDLER, n *uint64) bool {
 	var tmp uint64
 
-	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&tmp), uint32(unsafe.Sizeof(tmp)), 1) != 1 {
+	if io.Read((*cms_io_handler)(io), &tmp, uint32(unsafe.Sizeof(tmp)), 1) != 1 {
 		return false
 	}
 
@@ -174,7 +174,7 @@ func cmsReadUInt64Number(io *cmsIOHANDLER, n *uint64) bool {
 func cmsRead15Fixed16Number(io *cmsIOHANDLER, n *float64) bool {
 	var tmp uint32
 
-	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&tmp), uint32(unsafe.Sizeof(tmp)), 1) != 1 {
+	if io.Read((*cms_io_handler)(io), &tmp, uint32(unsafe.Sizeof(tmp)), 1) != 1 {
 		return false
 	}
 
@@ -189,7 +189,7 @@ func cmsRead15Fixed16Number(io *cmsIOHANDLER, n *float64) bool {
 func cmsReadXYZNumber(io *cmsIOHANDLER, XYZ *cmsCIEXYZ) bool {
 	var xyz cmsEncodedXYZNumber
 
-	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&xyz), uint32(unsafe.Sizeof(xyz)), 1) != 1 {
+	if io.Read((*cms_io_handler)(io), &xyz, uint32(unsafe.Sizeof(xyz)), 1) != 1 {
 		return false
 	}
 
@@ -208,7 +208,7 @@ func cmsWriteUInt8Number(io *cmsIOHANDLER, n uint8) bool {
 		panic("nil pointer in cmsWriteUInt8Number")
 	}
 
-	if !io.Write((*cms_io_handler)(io), 1, unsafe.Pointer(&n)) {
+	if !io.Write((*cms_io_handler)(io), 1, &n) {
 		return false
 	}
 	return true
@@ -220,7 +220,7 @@ func cmsWriteUInt16Number(io *cmsIOHANDLER, n uint16) bool {
 	}
 
 	tmp := cmsAdjustEndianess16(n)
-	if !io.Write((*cms_io_handler)(io), 2, unsafe.Pointer(&tmp)) {
+	if !io.Write((*cms_io_handler)(io), 2, &tmp) {
 		return false
 	}
 	return true
@@ -245,7 +245,7 @@ func cmsWriteUInt32Number(io *cmsIOHANDLER, n uint32) bool {
 	}
 
 	tmp := cmsAdjustEndianess32(n)
-	if io.Write((*cms_io_handler)(io), 4, unsafe.Pointer(&tmp)) != true {
+	if io.Write((*cms_io_handler)(io), 4, &tmp) != true {
 		return false
 	}
 	return true
@@ -258,7 +258,7 @@ func cmsWriteFloat32Number(io *cmsIOHANDLER, n float32) bool {
 
 	tmp := math.Float32bits(n)
 	tmp = cmsAdjustEndianess32(tmp)
-	if !io.Write((*cms_io_handler)(io), 4, unsafe.Pointer(&tmp)) {
+	if !io.Write((*cms_io_handler)(io), 4, &tmp) {
 		return false
 	}
 	return true
@@ -270,7 +270,7 @@ func cmsWriteUInt64Number(io *cmsIOHANDLER, n uint64) bool {
 	}
 
 	tmp := cmsAdjustEndianess64(n)
-	if !io.Write((*cms_io_handler)(io), 8, unsafe.Pointer(&tmp)) {
+	if !io.Write((*cms_io_handler)(io), 8, &tmp) {
 		return false
 	}
 	return true
@@ -282,7 +282,7 @@ func cmsWrite15Fixed16Number(io *cmsIOHANDLER, n float64) bool {
 	}
 
 	tmp := cmsAdjustEndianess32(uint32(cmsDoubleTo15Fixed16(n)))
-	if !io.Write((*cms_io_handler)(io), 4, unsafe.Pointer(&tmp)) {
+	if !io.Write((*cms_io_handler)(io), 4, &tmp) {
 		return false
 	}
 	return true
@@ -298,7 +298,7 @@ func cmsWriteXYZNumber(io *cmsIOHANDLER, xyz *cmsCIEXYZ) bool {
 	encodedXYZ.Y = cmsS15Fixed16Number(cmsAdjustEndianess32(uint32(cmsDoubleTo15Fixed16(xyz.Y))))
 	encodedXYZ.Z = cmsS15Fixed16Number(cmsAdjustEndianess32(uint32(cmsDoubleTo15Fixed16(xyz.Z))))
 
-	if !io.Write((*cms_io_handler)(io), uint32(binary.Size(encodedXYZ)), unsafe.Pointer(&encodedXYZ)) {
+	if !io.Write((*cms_io_handler)(io), uint32(binary.Size(encodedXYZ)), &encodedXYZ) {
 		return false
 	}
 	return true
@@ -366,7 +366,7 @@ func cmsEncodeDateTimeNumber(dest *cmsDateTimeNumber, t time.Time) {
 
 func cmsReadTypeBase(io *cmsIOHANDLER) cmsTagTypeSignature {
 	var base cmsTagBase
-	if io.Read((*cms_io_handler)(io), unsafe.Pointer(&base), uint32(unsafe.Sizeof(base)), 1) != 1 {
+	if io.Read((*cms_io_handler)(io), &base, uint32(unsafe.Sizeof(base)), 1) != 1 {
 		return 0
 	}
 	return cmsTagTypeSignature(cmsAdjustEndianess32(uint32(base.Sig)))
@@ -396,7 +396,7 @@ func cmsReadAlignment(io *cmsIOHANDLER) bool {
 		return false
 	}
 
-	return io.Read((*cms_io_handler)(io), unsafe.Pointer(&buffer), uint32(unsafe.Sizeof(buffer)), 1) == 1
+	return io.Read((*cms_io_handler)(io), &buffer, uint32(unsafe.Sizeof(buffer)), 1) == 1
 }
 
 func cmsWriteAlignment(io *cmsIOHANDLER) bool {
@@ -411,13 +411,13 @@ func cmsWriteAlignment(io *cmsIOHANDLER) bool {
 	if bytesToNextAlignedPos > 4 {
 		return false
 	}
-	return io.Write((*cms_io_handler)(io), uint32(len(buffer)), unsafe.Pointer(&buffer))
+	return io.Write((*cms_io_handler)(io), uint32(len(buffer)), &buffer)
 }
 
 // Plugin memory management -------------------------------------------------------------------------------------------------
 
 // Specialized malloc for plugins, freed upon exit
-func cmsPluginMalloc(contextID CmsContext, size uint32) unsafe.Pointer {
+/*func cmsPluginMalloc(contextID CmsContext, size uint32) unsafe.Pointer {
 	ctx := cmsGetContext(contextID)
 
 	if ctx.MemPool == nil {
@@ -427,31 +427,34 @@ func cmsPluginMalloc(contextID CmsContext, size uint32) unsafe.Pointer {
 				return nil
 			}
 		} else {
-			cmsSignalError(unsafe.Pointer(contextID), cmsERROR_CORRUPTION_DETECTED, "nil memory pool on context")
+			cmsSignalError(ContextID, cmsERROR_CORRUPTION_DETECTED, "nil memory pool on context")
 			return nil
 		}
 	}
 
 	return cmsSubAlloc(ctx.MemPool, size)
-}
+}*/
 
 // Main plugin dispatcher
-func cmsPlugin(plugin unsafe.Pointer) bool {
+func cmsPlugin(plugin PluginIntrfc) bool {
 	return cmsPluginTHR(nil, plugin)
 }
 
 // Plugin dispatcher for a specific thread
-func cmsPluginTHR(contextID CmsContext, plugin unsafe.Pointer) bool {
-	currentPlugin := (*cmsPluginBase)(plugin)
-
+func cmsPluginTHR(contextID CmsContext, plugin PluginIntrfc) bool {
+	currentPlugin, ok := plugin.(*cmsPluginBase)
+	if !ok {
+		fmt.Printf("Error: Plugin is not of the type cmsPluginBase\n")
+		return false
+	}
 	for currentPlugin != nil {
 		if currentPlugin.Magic != cmsPluginMagicNumber {
-			cmsSignalError(unsafe.Pointer(contextID), cmsERROR_UNKNOWN_EXTENSION, "Unrecognized plugin")
+			cmsSignalError(contextID, cmsERROR_UNKNOWN_EXTENSION, "Unrecognized plugin")
 			return false
 		}
 
 		if currentPlugin.ExpectedVersion > LCMS_VERSION {
-			cmsSignalError(unsafe.Pointer(contextID), cmsERROR_UNKNOWN_EXTENSION, "Unrecognized plugin")
+			cmsSignalError(contextID, cmsERROR_UNKNOWN_EXTENSION, "Unrecognized plugin")
 			return false
 		}
 
@@ -501,11 +504,11 @@ func cmsPluginTHR(contextID CmsContext, plugin unsafe.Pointer) bool {
 				return false
 			}
 		case cmsPluginParallelizationSig:
-			if !cmsRegisterParallelizationPlugin(contextID, unsafe.Pointer(currentPlugin)) {
+			if !cmsRegisterParallelizationPlugin(contextID, currentPlugin) {
 				return false
 			}
 		default:
-			cmsSignalError(unsafe.Pointer(contextID), cmsERROR_UNKNOWN_EXTENSION, "Unrecognized plugin type")
+			cmsSignalError(contextID, cmsERROR_UNKNOWN_EXTENSION, "Unrecognized plugin type")
 			return false
 		}
 
@@ -556,27 +559,29 @@ func InitContextMutex() bool {
 	return true
 }
 
+type cmsContextChunk interface{}
+
 // Global storage for system context
 var globalContext = CmsContextStruct{
 	Next:    nil, // Not in the linked list
 	MemPool: nil, // No suballocator
-	chunks: [MemoryClientMax]unsafe.Pointer{
-		nil,                                            // UserPtr
-		unsafe.Pointer(&cmsLogErrorChunk),              // Logger
-		unsafe.Pointer(&cmsAlarmCodesChunk),            // AlarmCodes
-		unsafe.Pointer(&cmsAdaptationStateChunk),       // AdaptationState
-		unsafe.Pointer(&cmsMemPluginChunk),             // MemPlugin
-		unsafe.Pointer(&cmsInterpPluginChunk),          // InterpPlugin
-		unsafe.Pointer(&cmsCurvesPluginChunk),          // CurvesPlugin
-		unsafe.Pointer(&cmsFormattersPluginChunk),      // FormattersPlugin
-		unsafe.Pointer(&cmsTagTypePluginChunk),         // TagTypePlugin
-		unsafe.Pointer(&cmsTagPluginChunk),             // TagPlugin
-		unsafe.Pointer(&cmsIntentsPluginChunk),         // IntentPlugin
-		unsafe.Pointer(&cmsMPETypePluginChunk),         // MPEPlugin
-		unsafe.Pointer(&cmsOptimizationPluginChunk),    // OptimizationPlugin
-		unsafe.Pointer(&cmsTransformPluginChunk),       // TransformPlugin
-		unsafe.Pointer(&cmsMutexPluginChunk),           // MutexPlugin
-		unsafe.Pointer(&cmsParallelizationPluginChunk), // ParallelizationPlugin
+	chunks: [MemoryClientMax]cmsContextChunk{
+		nil,                            // UserPtr
+		&cmsLogErrorChunk,              // Logger
+		&cmsAlarmCodesChunk,            // AlarmCodes
+		&cmsAdaptationStateChunk,       // AdaptationState
+		&cmsMemPluginChunk,             // MemPlugin
+		&cmsInterpPluginChunk,          // InterpPlugin
+		&cmsCurvesPluginChunk,          // CurvesPlugin
+		&cmsFormattersPluginChunk,      // FormattersPlugin
+		&cmsTagTypePluginChunk,         // TagTypePlugin
+		&cmsTagPluginChunk,             // TagPlugin
+		&cmsIntentsPluginChunk,         // IntentPlugin
+		&cmsMPETypePluginChunk,         // MPEPlugin
+		&cmsOptimizationPluginChunk,    // OptimizationPlugin
+		&cmsTransformPluginChunk,       // TransformPlugin
+		&cmsMutexPluginChunk,           // MutexPlugin
+		&cmsParallelizationPluginChunk, // ParallelizationPlugin
 	}, // The default memory allocator is not used for context 0
 }
 
@@ -592,19 +597,25 @@ func cmsGetContext(ContextID CmsContext) CmsContext {
 	InitContextMutex()
 
 	// Enter critical section
-	cmsEnterCriticalSectionPrimitive(&cmsMutex{mutex: &CmsContextPoolHeadMutex})
+	mm1 := &CmsContextPoolHeadMutex
+	cm1 := cmsMutex(mm1)
+	cmsEnterCriticalSectionPrimitive(&cm1)
 
 	// Search through the context pool
 	for ctx := CmsContextPoolHead; ctx != nil; ctx = ctx.Next {
 		if id == ctx {
 			// Leave critical section and return the context
-			cmsLeaveCriticalSectionPrimitive(&cmsMutex{mutex: &CmsContextPoolHeadMutex})
+			mm2 := &CmsContextPoolHeadMutex
+			cm2 := cmsMutex(mm2)
+			cmsLeaveCriticalSectionPrimitive(&cm2)
 			return ctx
 		}
 	}
 
 	// Leave critical section if not found
-	cmsLeaveCriticalSectionPrimitive(&cmsMutex{mutex: &CmsContextPoolHeadMutex})
+	mm3 := &CmsContextPoolHeadMutex
+	cm3 := cmsMutex(mm3)
+	cmsLeaveCriticalSectionPrimitive(&cm3)
 	return &globalContext
 }
 
@@ -632,9 +643,9 @@ func cmsUnregisterPluginsTHR(ContextID CmsContext) {
 // CmsContextGetClientChunk retrieves the memory area associated with each context client
 // Internal: get the memory area associanted with each context client
 // Returns the block assigned to the specific zone. Never return nil.
-func CmsContextGetClientChunk(ContextID CmsContext, mc cmsMemoryClient) unsafe.Pointer {
+func CmsContextGetClientChunk(ContextID CmsContext, mc cmsMemoryClient) interface{} {
 	if mc < 0 || mc >= MemoryClientMax {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_INTERNAL, "Bad context client -- possible corruption")
+		cmsSignalError(ContextID, cmsERROR_INTERNAL, "Bad context client -- possible corruption")
 
 		// This is catastrophic. Should never reach here
 		cmsAssert(false, "Bad context client -- possible corruption")
@@ -663,12 +674,13 @@ func cmsGetTime(ptrTime *time.Time) bool {
 	if !InitContextMutex() {
 		return false
 	}
-    mtx := &cmsMutex{mutex: &CmsContextPoolHeadMutex}
-	cmsEnterCriticalSectionPrimitive(mtx)
+	mm := &CmsContextPoolHeadMutex
+	cm := (cmsMutex(mm))
+	cmsEnterCriticalSectionPrimitive(&cm)
 
 	// Convert to UTC
 	utcTime := now.UTC()
-	cmsLeaveCriticalSectionPrimitive(mtx)
+	cmsLeaveCriticalSectionPrimitive(&cm)
 
 	if ptrTime == nil {
 		return false

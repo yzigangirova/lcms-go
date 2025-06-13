@@ -3,7 +3,7 @@ package golcms
 import (
 	//"math"
 	//"reflect"
-	"unsafe"
+	//"unsafe"
 )
 
 // yuliana
@@ -98,10 +98,9 @@ type cmsTagEntry struct {
 
 }
 
-// Define CmsHPROFILE as unsafe.Pointer to represent a void pointer
-type CmsHPROFILE unsafe.Pointer
-type cmsHANDLE unsafe.Pointer // Generic handle
-type CmsHTRANSFORM unsafe.Pointer
+type CmsHPROFILE interface{}
+type CmsHANDLE interface{} // Generic handle
+type CmsHTRANSFORM interface{}
 type CmsToneCurve cms_curve_struct
 
 // Where to place/locate the stages in the pipeline chain
@@ -766,10 +765,11 @@ type cmsCIEXYZ struct {
 // CmsCIExyY represents a color in the CIE xyY color space
 
 type CmsCIExyY struct {
-	x float64
-	y float64
-	Y float64 //
+	X_small float64
+	Y_small float64
+	Y_large float64 //
 }
+
 
 // cmsCIELab represents a color in the CIE Lab color space
 type cmsCIELab struct {
@@ -991,9 +991,9 @@ type cmsCurveSegment struct {
 	SampledPoints []float32
 }
 
-type cmsSAMPLER16 func(In []uint16, Out []uint16, Cargo unsafe.Pointer) int32
+type cmsSAMPLER16 func(In []uint16, Out []uint16, cargo interface{}) int32
 
-type cmsSAMPLERFLOAT func(In []float32, Out []float32, Cargo unsafe.Pointer) int32
+type cmsSAMPLERFLOAT func(In []float32, Out []float32, cargo interface{}) int32
 
 // Use this flag to prevent changes being written to destination
 const SAMPLER_INSPECT = 0x01000000

@@ -45,9 +45,9 @@ func cmsWhitePointFromTemp(WhitePoint *CmsCIExyY, TempK float64) error {
 
 	y = -3.000*(x*x) + 2.870*x - 0.275
 
-	WhitePoint.x = x
-	WhitePoint.y = y
-	WhitePoint.Y = 1.0
+	WhitePoint.X_small = x
+	WhitePoint.Y_small = y
+	WhitePoint.Y_large = 1.0
 
 	return nil
 }
@@ -107,7 +107,7 @@ func cmsTempFromWhitePoint(TempK *float64, WhitePoint *CmsCIExyY) bool {
 	}
 
 	var us, vs, uj, vj, tj, di, dj, mi, mj float64
-	xs, ys := WhitePoint.x, WhitePoint.y
+	xs, ys := WhitePoint.X_small, WhitePoint.Y_small
 
 	us = (2 * xs) / (-xs + 6*ys + 1.5)
 	vs = (3 * ys) / (-xs + 6*ys + 1.5)
@@ -241,14 +241,14 @@ func cmsBuildRGB2XYZtransferMatrix(r *cmsMAT3, WhitePt *CmsCIExyY, Primrs *CmsCI
 		xb, yb            float64
 	)
 
-	xn = WhitePt.x
-	yn = WhitePt.y
-	xr = Primrs.Red.x
-	yr = Primrs.Red.y
-	xg = Primrs.Green.x
-	yg = Primrs.Green.y
-	xb = Primrs.Blue.x
-	yb = Primrs.Blue.y
+	xn = WhitePt.X_small
+	yn = WhitePt.Y_small
+	xr = Primrs.Red.X_small
+	yr = Primrs.Red.Y_small
+	xg = Primrs.Green.X_small
+	yg = Primrs.Green.Y_small
+	xb = Primrs.Blue.X_small
+	yb = Primrs.Blue.Y_small
 
 	// Build Primaries matrix
 	cmsVEC3init(&Primaries.V[0], xr, xg, xb)

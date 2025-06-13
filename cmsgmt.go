@@ -1,7 +1,7 @@
 package golcms
 
 import (
-	"unsafe"
+	//"unsafe"
 )
 
 // Append a Lab identity after the given sequence of profiles and return the transform.
@@ -157,8 +157,8 @@ type cmsTACestimator struct {
 }
 
 // EstimateTAC is the callback function to calculate maximum TAC.
-func EstimateTAC(in []uint16, out []uint16, cargo unsafe.Pointer) int32 {
-	bp := (*cmsTACestimator)(cargo)
+func EstimateTAC(in []uint16, out []uint16, cargo interface{}) int32 {
+	bp := cargo.(*cmsTACestimator)
 	var roundTrip [cmsMAXCHANNELS]float32
 	var sum float32
 
@@ -236,7 +236,7 @@ func cmsDetectTAC(hProfile CmsHPROFILE) float64 {
 	gridPoints[1] = 74
 	gridPoints[2] = 74
 
-	if !cmsSliceSpace16(3, gridPoints[:], EstimateTAC, unsafe.Pointer(&bp)) {
+	if !cmsSliceSpace16(3, gridPoints[:], EstimateTAC, &bp) {
 		bp.MaxTAC = 0
 	}
 
@@ -264,8 +264,8 @@ const ERR_THRESHOLD = 5
 
 // GamutSampler computes gamut boundaries by comparing original values with a transform
 // going back and forth. Values above ERR_THRESHOLD are considered out of gamut.
-func GamutSampler(In []uint16, Out []uint16, Cargo unsafe.Pointer) int32 {
-	t := (*GAMUTCHAIN)(Cargo)
+func GamutSampler(In []uint16, Out []uint16, cargo interface{}) int32 {
+	t := cargo.(*GAMUTCHAIN)
 	var LabIn1, LabOut1 cmsCIELab
 	var LabIn2, LabOut2 cmsCIELab
 	var Proof [cmsMAXCHANNELS]uint16
@@ -363,7 +363,7 @@ func cmsCreateGamutCheckPipeline(
 
 	// Validate PCS position
 	if nGamutPCSposition <= 0 || nGamutPCSposition > 255 {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Wrong position of PCS. 1..255 expected")
+		cmsSignalError(ContextID, cmsERROR_RANGE, "Wrong position of PCS. 1..255 expected")
 		return nil
 	}
 
@@ -441,7 +441,7 @@ func cmsCreateGamutCheckPipeline(
 				cmsPipelineFree(Gamut)
 				Gamut = nil
 			} else {
-				cmsStageSampleCLut16bit(CLUT, GamutSampler, unsafe.Pointer(&Chain), 0)
+				cmsStageSampleCLut16bit(CLUT, GamutSampler, &Chain, 0)
 			}
 		}
 	} else {

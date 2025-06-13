@@ -136,14 +136,15 @@ Translating LCMS's Mutex Behavior to Go
 While Go's sync.Mutex is not a one-to-one match for CRITICAL_SECTION, it provides equivalent functionality for the vast majority of use cases without exposing the low-level control that LCMS uses. */
 
 // Define a type for the mutex
-type cmsMutex struct {
+/*type cmsMutex struct {
 	mutex *sync.Mutex
-}
+}*/
+
+type cmsMutex *sync.Mutex
 
 func NewCmsMutex() *cmsMutex {
-	return &cmsMutex{
-		mutex: new(sync.Mutex), // Allocates a Mutex and assigns its pointer
-	}
+	m := new(sync.Mutex)
+	return (*cmsMutex)(&m) // Allocates a Mutex and assigns its pointer
 }
 
 // Lock the mutex
@@ -172,13 +173,15 @@ func cmsDestroyMutexPrimitive(m *cmsMutex) int {
 
 // Enter a critical section (equivalent to Lock)
 func cmsEnterCriticalSectionPrimitive(m *cmsMutex) int {
-	m.mutex.Lock()
+	mm := *m
+	((*sync.Mutex)(mm)).Lock()
 	return 0
 }
 
 // Leave a critical section (equivalent to Unlock)
 func cmsLeaveCriticalSectionPrimitive(m *cmsMutex) int {
-	m.mutex.Unlock()
+	mm := *m
+	((*sync.Mutex)(mm)).Unlock()
 	return 0
 }
 
@@ -207,7 +210,7 @@ type cmsTRANSFORM struct {
 	AdaptationState float64                // float64
 	RenderingIntent uint32                 // uint32
 	ContextID       CmsContext             // CmsContext
-	UserData        unsafe.Pointer         // void*
+	UserData        interface{}         // void*
 	FreeUserData    cmsFreeUserDataFn      // cmsFreeUserDataFn (function pointer, requires C interop)
 	OldXform        cmsTransformFn         // cmsTransformFn (function pointer, requires C interop)
 	Worker          cmsTransform2Fn        // cmsTransform2Fn (function pointer, requires C interop)
@@ -239,7 +242,7 @@ type cmsNAMEDCOLORLIST struct {
 type CmsContextStruct struct {
 	Next    CmsContext                      // Points to next context in the new style
 	MemPool *cmsSubAllocator                // The memory pool that stores context data
-	chunks  [MemoryClientMax]unsafe.Pointer // array of pointers to client chunks. Memory itself is hold in the suballocator.
+	chunks  [MemoryClientMax]cmsContextChunk // array of pointers to client chunks. Memory itself is hold in the suballocator.
 	// If NULL, then it reverts to global Context0
 	DefaultMemoryManager cmsMemPluginChunkType // The allocators used for creating the context itself. Cannot be overridden
 }
@@ -260,7 +263,7 @@ type cmsStage struct {
 	EvalPtr        cmsStageEvalFn     // Points to fn that evaluates the stage (always in floating point)
 	DupElemPtr     cmsStageDupElemFn  // Points to a fn that duplicates the *data* of the stage
 	FreePtr        cmsStageFreeElemFn // Points to a fn that sets the *data* of the stage free
-	Data           unsafe.Pointer     // A generic pointer to whatever memory needed by the stage
+	Data           interface{}    // A generic pointer to whatever memory needed by the stage
 	Next           *cmsStage          // Pointer to the next stage in the linked list
 }
 
@@ -269,14 +272,9 @@ type cmsStage struct {
 // Pipelines, Multi Process Elements.
 // Define function pointer types
 type cmsStageEvalFn func(In []float32, Out []float32, mpe *cmsStage)
-type cmsStageDupElemFn func(mpe *cmsStage) unsafe.Pointer
+type cmsStageDupElemFn func(mpe *cmsStage) interface{}
 type cmsStageFreeElemFn func(mpe *cmsStage)
 
-// cmsPluginMultiProcessElement struct definition
-type cmsPluginMultiProcessElement struct {
-	Base    cmsPluginBase
-	Handler cmsTagTypeHandler
-}
 
 type cmsPipeline struct {
 	Elements       *cmsStage // Points to elements chain
@@ -284,7 +282,7 @@ type cmsPipeline struct {
 	OutputChannels uint32
 
 	// Data & evaluators
-	Data unsafe.Pointer
+	Data interface{}
 
 	Eval16Fn    cmsPipelineEval16Fn
 	EvalFloatFn cmsPipelineEvalFloatFn
@@ -316,7 +314,7 @@ type cmsMLU struct {
 
 	PoolSize uint32         // Maximum allocated size of the pool
 	PoolUsed uint32         // Currently used size of the pool
-	MemPool  unsafe.Pointer // Pointer to the beginning of the memory pool
+	MemPool  interface{} // Pointer to the beginning of the memory pool
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -504,7 +502,7 @@ type cmsICCPROFILE struct {
 	TagSizes        [MAX_TABLE_TAG]uint32             // Sizes of tags on disk
 	TagOffsets      [MAX_TABLE_TAG]uint32             // Offsets of tags on disk
 	TagSaveAsRaw    [MAX_TABLE_TAG]bool               // Whether to write the tag as raw data
-	TagPtrs         [MAX_TABLE_TAG]unsafe.Pointer     // Pointers to tag data
+	TagPtrs         [MAX_TABLE_TAG] interface{}   // Pointers to tag data
 	TagTypeHandlers [MAX_TABLE_TAG]*cmsTagTypeHandler // Handlers for each tag type
 	IsWrite         bool                              // Whether the profile is being written
 	UsrMutex        *sync.Mutex                       // Mutex for thread-safe access
@@ -598,12 +596,12 @@ func SliceToVec(s []float64) cmsVEC3 {
 
 // memset sets a block of memory to a specified value.
 // Equivalent to C's memset function.
-func memset(ptr unsafe.Pointer, value int, num uintptr) {
+func memset(ptr interface{}, value int, num uintptr) {
 	// Convert value to byte (0-255).
 	byteValue := byte(value)
 
 	// Get a slice pointing to the memory location.
-	mem := (*[1 << 30]byte)(ptr)[:num:num]
+	mem := ptr.([]byte)
 
 	// Fill the slice with the given value.
 	for i := uintptr(0); i < num; i++ {

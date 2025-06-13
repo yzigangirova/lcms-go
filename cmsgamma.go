@@ -3,7 +3,7 @@ package golcms
 import (
 	"fmt"
 	"math"
-	"unsafe"
+	//"unsafe"
 )
 
 // ----------------------------------------------------------------- Implementation
@@ -35,9 +35,9 @@ var DefaultCurves = cmsParametricCurvesCollection{
 // The linked list head
 var cmsCurvesPluginChunk = cmsCurvesPluginChunkType{ParametricCurves: nil}
 
-func cmsRegisterParametricCurvesPlugin(ContextID CmsContext, Data *cmsPluginBase) bool {
-	ctx := (*cmsCurvesPluginChunkType)(CmsContextGetClientChunk(ContextID, CurvesPlugin))
-	Plugin := (*cmsPluginParametricCurves)(unsafe.Pointer(Data))
+func cmsRegisterParametricCurvesPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
+	ctx := CmsContextGetClientChunk(ContextID, CurvesPlugin).(*cmsCurvesPluginChunkType)
+	//Plugin := (*cmsPluginParametricCurves)(unsafe.Pointer(Data))
 	var fl *cmsParametricCurvesCollection
 
 	// Reset parametric curves if Data is nil.
@@ -45,16 +45,22 @@ func cmsRegisterParametricCurvesPlugin(ContextID CmsContext, Data *cmsPluginBase
 		ctx.ParametricCurves = nil
 		return true
 	}
-
+	plugin, ok := Data.(*cmsPluginParametricCurves)
+	if !ok {
+		fmt.Printf("Error: Plugin is not of the type cmsPluginParametricCurves\n")
+		return false
+	}
 	// Allocate memory for a new parametric curves collection.
-	fl = (*cmsParametricCurvesCollection)(cmsPluginMalloc(ContextID, uint32(unsafe.Sizeof(cmsParametricCurvesCollection{}))))
+	//fl = (*cmsParametricCurvesCollection)(cmsPluginMalloc(ContextID, uint32(unsafe.Sizeof(cmsParametricCurvesCollection{}))))
+	fl = allocateStruct[cmsParametricCurvesCollection]()
+
 	if fl == nil {
 		return false
 	}
 
 	// Copy the parameters.[]
-	fl.Evaluator = Plugin.Evaluator
-	fl.NFunctions = Plugin.NFunctions
+	fl.Evaluator = plugin.Evaluator
+	fl.NFunctions = plugin.NFunctions
 
 	// Ensure the number of functions does not exceed the maximum allowed.
 	if fl.NFunctions > MAX_TYPES_IN_LCMS_PLUGIN {
@@ -62,8 +68,8 @@ func cmsRegisterParametricCurvesPlugin(ContextID CmsContext, Data *cmsPluginBase
 	}
 
 	// Copy function types and parameter counts.
-	MemmoveSlice(fl.FunctionTypes[:], Plugin.FunctionTypes[:], int(fl.NFunctions))
-	MemmoveSlice(fl.ParameterCount[:], Plugin.ParameterCount[:], int(fl.NFunctions))
+	MemmoveSlice(fl.FunctionTypes[:], plugin.FunctionTypes[:], int(fl.NFunctions))
+	MemmoveSlice(fl.ParameterCount[:], plugin.ParameterCount[:], int(fl.NFunctions))
 
 	// Update the linked list.
 	fl.Next = ctx.ParametricCurves
@@ -95,7 +101,7 @@ func GetParametricCurveByType(ContextID CmsContext, Type int, index *int) *cmsPa
 	var Position int
 
 	// Retrieve the plugin chunk associated with curves
-	ctx := (*cmsCurvesPluginChunkType)(CmsContextGetClientChunk(ContextID, CurvesPlugin))
+	ctx := CmsContextGetClientChunk(ContextID, CurvesPlugin).(*cmsCurvesPluginChunkType)
 
 	// Search in the context's parametric curves
 	for c = ctx.ParametricCurves; c != nil; c = c.Next {
@@ -140,12 +146,12 @@ func AllocateToneCurveStruct(
 ) *CmsToneCurve {
 	//fmt.Println("start AllocateToneCurveStruct")
 	if nEntries > 65530 {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Couldn't create tone curve of more than 65530 entries")
+		cmsSignalError(ContextID, cmsERROR_RANGE, "Couldn't create tone curve of more than 65530 entries")
 		return nil
 	}
 
 	if nEntries == 0 && nSegments == 0 {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Couldn't create tone curve with zero segments and no table")
+		cmsSignalError(ContextID, cmsERROR_RANGE, "Couldn't create tone curve with zero segments and no table")
 		return nil
 	}
 
@@ -250,7 +256,7 @@ func CmsFreeToneCurve(Curve *CmsToneCurve) {
 		//cmsFree(ContextID, unsafe.Pointer(Curve.Evals))
 	}
 
-	cmsFree(ContextID, unsafe.Pointer(Curve))
+	cmsFree(ContextID, Curve)
 }
 
 // Utility function, free 3 gamma tables
@@ -556,7 +562,7 @@ func cmsBuildParametricToneCurve(ContextID CmsContext, Type int, Params []float6
 	c := GetParametricCurveByType(ContextID, Type, &Pos)
 
 	if c == nil {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_UNKNOWN_EXTENSION, "Invalid parametric curve type")
+		cmsSignalError(ContextID, cmsERROR_UNKNOWN_EXTENSION, "Invalid parametric curve type")
 		return nil
 	}
 

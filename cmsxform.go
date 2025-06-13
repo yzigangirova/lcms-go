@@ -4,7 +4,7 @@ import (
 	//"errors"
 	"unsafe"
 	//"sync"
-//"fmt"
+	"fmt"
 	"reflect"
 )
 
@@ -26,11 +26,11 @@ func cmsAllocAdaptationStateChunk(ctx CmsContext, src CmsContext) {
 		AdaptationState: DEFAULT_OBSERVER_ADAPTATION_STATE,
 	}
 
-	var from unsafe.Pointer
+	var from interface{}
 	if src != nil {
 		from = src.chunks[AdaptationStateContext]
 	} else {
-		from = unsafe.Pointer(&defaultAdaptationStateChunk)
+		from = &defaultAdaptationStateChunk
 	}
 
 	ctx.chunks[AdaptationStateContext] = cmsSubAllocDup(ctx.MemPool, from, uint32(unsafe.Sizeof(cmsAdaptationStateChunkType{})))
@@ -40,7 +40,7 @@ func cmsAllocAdaptationStateChunk(ctx CmsContext, src CmsContext) {
 // but cmsCreateExtendedTransformTHR().  Little CMS can handle incomplete adaptation states.
 func cmsSetAdaptationStateTHR(ContextID CmsContext, d float64) float64 {
 
-	ptr := (*cmsAdaptationStateChunkType)(CmsContextGetClientChunk(ContextID, AdaptationStateContext))
+	ptr := CmsContextGetClientChunk(ContextID, AdaptationStateContext).(*cmsAdaptationStateChunkType)
 
 	// Get previous value for return
 	prev := ptr.AdaptationState
@@ -80,7 +80,7 @@ func cmsSetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP [cmsMAXCHANNELS]uint1
 	//alarmCodeMutex.Lock()
 	//defer alarmCodeMutex.Unlock()
 
-	ContextAlarmCodes := (*cmsAlarmCodesChunkType)(CmsContextGetClientChunk(ContextID, AlarmCodesContext))
+	ContextAlarmCodes := CmsContextGetClientChunk(ContextID, AlarmCodesContext).(*cmsAlarmCodesChunkType)
 	if ContextAlarmCodes == nil {
 		panic("ContextAlarmCodes is nil")
 	}
@@ -93,7 +93,7 @@ func cmsGetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP [cmsMAXCHANNELS]uint1
 	//alarmCodeMutex.Lock()
 	//defer alarmCodeMutex.Unlock()
 
-	ContextAlarmCodes := (*cmsAlarmCodesChunkType)(CmsContextGetClientChunk(ContextID, AlarmCodesContext))
+	ContextAlarmCodes := CmsContextGetClientChunk(ContextID, AlarmCodesContext).(*cmsAlarmCodesChunkType)
 	if ContextAlarmCodes == nil {
 		panic("ContextAlarmCodes is nil")
 	}
@@ -126,7 +126,7 @@ func cmsAllocAlarmCodesChunk(ctx CmsContext, src CmsContext) {
 		AlarmCodes: DEFAULT_ALARM_CODES_VALUE,
 	}
 
-	var from unsafe.Pointer
+	var from interface{}
 
 	// Check if src is not nil
 	if src != nil {
@@ -134,7 +134,7 @@ func cmsAllocAlarmCodesChunk(ctx CmsContext, src CmsContext) {
 		from = src.chunks[AlarmCodesContext]
 	} else {
 		// Use the static default chunk
-		from = unsafe.Pointer(AlarmCodesChunk)
+		from = AlarmCodesChunk
 	}
 
 	// Allocate and duplicate the chunk in the context's memory pool
@@ -145,7 +145,7 @@ func cmsAllocAlarmCodesChunk(ctx CmsContext, src CmsContext) {
 
 // cmsDeleteTransform releases the resources associated with a transform.
 func cmsDeleteTransform(hTransform CmsHTRANSFORM) {
-	p := (*cmsTRANSFORM)(hTransform)
+	p := hTransform.(*cmsTRANSFORM)
 
 	if p == nil {
 		return
@@ -182,7 +182,7 @@ func cmsDeleteTransform(hTransform CmsHTRANSFORM) {
 	}
 
 	// Finally, free the transform object itself
-	cmsFree(p.ContextID, unsafe.Pointer(p))
+	cmsFree(p.ContextID, p)
 }
 
 // PixelSize calculates the size of a pixel in bytes based on its format.
@@ -201,7 +201,7 @@ func PixelSize(Format uint32) uint32 {
 
 // cmsDoTransform applies a transformation to the input buffer and writes the result to the output buffer.
 func CmsDoTransform(Transform CmsHTRANSFORM, InputBuffer, OutputBuffer any, Size uint32) {
-	p := (*cmsTRANSFORM)(Transform) // Cast the generic Transform to the specific type cmsTRANSFORM
+	p := Transform.(*cmsTRANSFORM) // Cast the generic Transform to the specific type cmsTRANSFORM
 	var stride cmsStride
 
 	// Initialize stride parameters
@@ -220,7 +220,7 @@ func CmsDoTransformStride(
 	Size uint32,
 	Stride uint32) {
 
-	p := (*cmsTRANSFORM)(Transform)
+	p := Transform.(*cmsTRANSFORM)
 	var stride cmsStride
 
 	stride.BytesPerLineIn = 0
@@ -242,7 +242,7 @@ func CmsDoTransformLineStride(
 	BytesPerPlaneIn uint32,
 	BytesPerPlaneOut uint32) {
 
-	p := (*cmsTRANSFORM)(Transform)
+	p := Transform.(*cmsTRANSFORM)
 	var stride cmsStride
 
 	stride.BytesPerLineIn = BytesPerLineIn
@@ -472,7 +472,7 @@ func TransformOnePixelWithGamutCheck(p *cmsTRANSFORM, wIn, wOut []uint16) {
 
 	if woutOfGamutSlice[0] >= 1 {
 		// If out of gamut, use alarm codes
-		contextAlarmCodes := (*cmsAlarmCodesChunkType)(CmsContextGetClientChunk(p.ContextID, AlarmCodesContext))
+		contextAlarmCodes := CmsContextGetClientChunk(p.ContextID, AlarmCodesContext).(*cmsAlarmCodesChunkType)
 		for i := uint32(0); i < p.Lut.OutputChannels; i++ {
 			wOut[i] = contextAlarmCodes.AlarmCodes[i]
 		}
@@ -648,7 +648,7 @@ var cmsTransformPluginChunk = cmsTransformPluginChunkType{TransformCollection: n
 func DupPluginTransformList(ctx CmsContext, src CmsContext) {
 	var newHead cmsTransformPluginChunkType
 	var entry, prev *cmsTransformCollection
-	head := (*cmsTransformPluginChunkType)(src.chunks[TransformPlugin])
+	head := src.chunks[TransformPlugin].(*cmsTransformPluginChunkType)
 
 	if head == nil {
 		return
@@ -656,7 +656,7 @@ func DupPluginTransformList(ctx CmsContext, src CmsContext) {
 
 	// Walk the list and copy each node.
 	for entry = head.TransformCollection; entry != nil; entry = entry.Next {
-		newEntry := (*cmsTransformCollection)(cmsSubAllocDup(ctx.MemPool, unsafe.Pointer(entry), uint32(unsafe.Sizeof(*entry))))
+		newEntry := cmsSubAllocDup(ctx.MemPool, entry, uint32(unsafe.Sizeof(*entry))).(*cmsTransformCollection)
 		if newEntry == nil {
 			return
 		}
@@ -674,7 +674,7 @@ func DupPluginTransformList(ctx CmsContext, src CmsContext) {
 		}
 	}
 
-	ctx.chunks[TransformPlugin] = cmsSubAllocDup(ctx.MemPool, unsafe.Pointer(&newHead), uint32(unsafe.Sizeof(newHead)))
+	ctx.chunks[TransformPlugin] = cmsSubAllocDup(ctx.MemPool, &newHead, uint32(unsafe.Sizeof(newHead)))
 }
 
 // cmsAllocTransformPluginChunk allocates the transform plugin chunk.
@@ -683,7 +683,7 @@ func cmsAllocTransformPluginChunk(ctx CmsContext, src CmsContext) {
 		DupPluginTransformList(ctx, src)
 	} else {
 		var defaultChunk cmsTransformPluginChunkType
-		ctx.chunks[TransformPlugin] = cmsSubAllocDup(ctx.MemPool, unsafe.Pointer(&defaultChunk), uint32(unsafe.Sizeof(defaultChunk)))
+		ctx.chunks[TransformPlugin] = cmsSubAllocDup(ctx.MemPool, &defaultChunk, uint32(unsafe.Sizeof(defaultChunk)))
 	}
 }
 
@@ -731,29 +731,34 @@ func cmsTransform2toTransformConverter(
 }
 
 // cmsRegisterTransformPlugin registers a new transform plugin.
-func cmsRegisterTransformPlugin(ContextID CmsContext, Data *cmsPluginBase) bool {
-	plugin := (*cmsPluginTransform)(unsafe.Pointer(Data))
-	ctx := (*cmsTransformPluginChunkType)(ContextID.chunks[TransformPlugin])
+func cmsRegisterTransformPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
+	//plugin := (*cmsPluginTransform)(unsafe.Pointer(Data))
+	ctx := ContextID.chunks[TransformPlugin].(*cmsTransformPluginChunkType)
 
 	if Data == nil {
 		// Free the chain. Memory is safely freed at exit.
 		ctx.TransformCollection = nil
 		return true
 	}
-
+	plugin, ok := Data.(*cmsPluginTransform)
+	if !ok {
+		fmt.Printf("Error: Plugin is not of the type cmsPluginTransform\n")
+		return false
+	}
 	// Ensure the factory callback is present.
 	if plugin.Factories.Xform == nil {
 		return false
 	}
 
 	// Allocate memory for the transform collection.
-	fl := (*cmsTransformCollection)(cmsPluginMalloc(ContextID, uint32(unsafe.Sizeof(cmsTransformCollection{}))))
+	//fl := (*cmsTransformCollection)(cmsPluginMalloc(ContextID, uint32(unsafe.Sizeof(cmsTransformCollection{}))))
+	fl := allocateStruct[cmsTransformCollection]()
 	if fl == nil {
 		return false
 	}
 
 	// Check for old-style transform plugins (pre-version 2.8).
-	if plugin.Base.ExpectedVersion < 2080 {
+	if plugin.GetBase().ExpectedVersion < 2080 {
 		fl.OldXform = true
 	} else {
 		fl.OldXform = false
@@ -780,7 +785,7 @@ func SetTransformUserData(cmmCargo *cmsTRANSFORM, ptr unsafe.Pointer, freePrivat
 }
 
 // GetTransformUserData retrieves the user-defined data.
-func GetTransformUserData(cmmCargo *cmsTRANSFORM) unsafe.Pointer {
+func GetTransformUserData(cmmCargo *cmsTRANSFORM) interface{} {
 	if cmmCargo == nil {
 		panic("CMMcargo cannot be nil")
 	}
@@ -847,7 +852,7 @@ func ParallelizeIfSuitable(p *cmsTRANSFORM) {
 		panic("cmsTRANSFORM pointer is nil")
 	}
 
-	ctx := (*cmsParallelizationPluginChunkType)(CmsContextGetClientChunk(p.ContextID, ParallelizationPlugin))
+	ctx := CmsContextGetClientChunk(p.ContextID, ParallelizationPlugin).(*cmsParallelizationPluginChunkType)
 
 	if ctx != nil && ctx.SchedulerFn != nil {
 		p.Worker = p.Xform
@@ -882,7 +887,7 @@ func AllocEmptyTransform(
 	InputFormat, OutputFormat, dwFlags *uint32,
 ) *cmsTRANSFORM {
 	// Get the transform plugin chunk
-	ctx := (*cmsTransformPluginChunkType)(CmsContextGetClientChunk(ContextID, TransformPlugin))
+	ctx := CmsContextGetClientChunk(ContextID, TransformPlugin).(*cmsTransformPluginChunkType)
 	var plugin *cmsTransformCollection
 
 	// Allocate memory for the transform structure
@@ -942,7 +947,7 @@ func AllocEmptyTransform(
 		*dwFlags |= cmsFLAGS_CAN_CHANGE_FORMATTER
 
 		if p.FromInputFloat == nil || p.ToOutputFloat == nil {
-			cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported raster format")
+			cmsSignalError(ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unsupported raster format")
 			cmsDeleteTransform(CmsHTRANSFORM(p))
 			return nil
 		}
@@ -963,7 +968,7 @@ func AllocEmptyTransform(
 			p.ToOutput = cmsGetFormatter(ContextID, *OutputFormat, cmsFormatterOutput, CMS_PACK_FLAGS_16BITS).Fmt16
 
 			if p.FromInput == nil || p.ToOutput == nil {
-				cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported raster format")
+				cmsSignalError(ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unsupported raster format")
 				cmsDeleteTransform(CmsHTRANSFORM(p))
 				return nil
 			}
@@ -1131,17 +1136,17 @@ func cmsCreateExtendedTransform(
 	// Retrieve entry and exit color spaces
 	var EntryColorSpace, ExitColorSpace cmsColorSpaceSignature
 	if !GetXFormColorSpaces(nProfiles, hProfiles, &EntryColorSpace, &ExitColorSpace) {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_NULL, "NULL input profiles on transform")
+		cmsSignalError(ContextID, cmsERROR_NULL, "NULL input profiles on transform")
 		return nil
 	}
 
 	// Validate color spaces
 	if !IsProperColorSpace(EntryColorSpace, InputFormat) {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_COLORSPACE_CHECK, "Wrong input color space on transform")
+		cmsSignalError(ContextID, cmsERROR_COLORSPACE_CHECK, "Wrong input color space on transform")
 		return nil
 	}
 	if !IsProperColorSpace(ExitColorSpace, OutputFormat) {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_COLORSPACE_CHECK, "Wrong output color space on transform")
+		cmsSignalError(ContextID, cmsERROR_COLORSPACE_CHECK, "Wrong output color space on transform")
 		return nil
 	}
 	// Check whatever the transform is 16 bits and involves linear RGB in first profile. If so, disable optimizations
@@ -1156,7 +1161,7 @@ func cmsCreateExtendedTransform(
 	// Build transformation pipeline
 	Lut := cmsLinkProfiles(ContextID, nProfiles, Intents, hProfiles, BPC, AdaptationStates, dwFlags)
 	if Lut == nil {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_NOT_SUITABLE, "Couldn't link the profiles")
+		cmsSignalError(ContextID, cmsERROR_NOT_SUITABLE, "Couldn't link the profiles")
 		return nil
 	}
 
@@ -1165,7 +1170,7 @@ func cmsCreateExtendedTransform(
 	if (cmsChannelsOfColorSpace(EntryColorSpace) != int32(cmsPipelineInputChannels(Lut))) ||
 		(cmsChannelsOfColorSpace(ExitColorSpace) != int32(cmsPipelineOutputChannels(Lut))) {
 		cmsPipelineFree(Lut)
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_NOT_SUITABLE, "Channel count doesn't match. Profile is corrupted")
+		cmsSignalError(ContextID, cmsERROR_NOT_SUITABLE, "Channel count doesn't match. Profile is corrupted")
 		return nil
 	}
 
@@ -1180,8 +1185,8 @@ func cmsCreateExtendedTransform(
 	xform.ExitColorSpace = ExitColorSpace
 	xform.RenderingIntent = Intents[nProfiles-1]
 	// Take white points
-	SetWhitePoint(&xform.EntryWhitePoint, (*cmsCIEXYZ)(cmsReadTag(hProfiles[0], cmsSigMediaWhitePointTag)))
-	SetWhitePoint(&xform.ExitWhitePoint, (*cmsCIEXYZ)(cmsReadTag(hProfiles[nProfiles-1], cmsSigMediaWhitePointTag)))
+	SetWhitePoint(&xform.EntryWhitePoint, (cmsReadTag(hProfiles[0], cmsSigMediaWhitePointTag).(*cmsCIEXYZ)))
+	SetWhitePoint(&xform.ExitWhitePoint, (cmsReadTag(hProfiles[nProfiles-1], cmsSigMediaWhitePointTag).(*cmsCIEXYZ)))
 
 	// Add optional gamut check
 	if hGamutProfile != nil && (dwFlags&cmsFLAGS_GAMUTCHECK != 0) {
@@ -1191,7 +1196,7 @@ func cmsCreateExtendedTransform(
 	if cmsIsTag(hProfiles[0], cmsSigColorantTableTag) {
 
 		// Input table can only come in this way.
-		xform.InputColorant = cmsDupNamedColorList((*cmsNAMEDCOLORLIST)(cmsReadTag(hProfiles[0], cmsSigColorantTableTag)))
+		xform.InputColorant = cmsDupNamedColorList((cmsReadTag(hProfiles[0], cmsSigColorantTableTag).(*cmsNAMEDCOLORLIST)))
 	}
 
 	// Output is a little bit more complex.
@@ -1201,14 +1206,14 @@ func cmsCreateExtendedTransform(
 		if cmsIsTag(hProfiles[nProfiles-1], cmsSigColorantTableOutTag) {
 
 			// It may be NULL if error
-			xform.OutputColorant = cmsDupNamedColorList((*cmsNAMEDCOLORLIST)(cmsReadTag(hProfiles[nProfiles-1], cmsSigColorantTableOutTag)))
+			xform.OutputColorant = cmsDupNamedColorList((cmsReadTag(hProfiles[nProfiles-1], cmsSigColorantTableOutTag).(*cmsNAMEDCOLORLIST)))
 		}
 
 	} else {
 
 		if cmsIsTag(hProfiles[nProfiles-1], cmsSigColorantTableTag) {
 
-			xform.OutputColorant = cmsDupNamedColorList((*cmsNAMEDCOLORLIST)(cmsReadTag(hProfiles[nProfiles-1], cmsSigColorantTableTag)))
+			xform.OutputColorant = cmsDupNamedColorList((cmsReadTag(hProfiles[nProfiles-1], cmsSigColorantTableTag)).(*cmsNAMEDCOLORLIST))
 		}
 	}
 
@@ -1249,7 +1254,7 @@ func cmsCreateMultiprofileTransformTHR(
 
 	// Check the number of profiles
 	if nProfiles <= 0 || nProfiles > 255 {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Wrong number of profiles. 1..255 expected")
+		cmsSignalError(ContextID, cmsERROR_RANGE, "Wrong number of profiles. 1..255 expected")
 		return nil
 	}
 
@@ -1386,7 +1391,7 @@ func cmsCreateProofingTransform(
 }
 
 func cmsGetTransformContextID(hTransform CmsHTRANSFORM) CmsContext {
-	xform := (*cmsTRANSFORM)(hTransform)
+	xform := hTransform.(*cmsTRANSFORM)
 	if xform == nil {
 		return nil
 	}
@@ -1394,7 +1399,7 @@ func cmsGetTransformContextID(hTransform CmsHTRANSFORM) CmsContext {
 }
 
 func cmsGetTransformInputFormat(hTransform CmsHTRANSFORM) uint32 {
-	xform := (*cmsTRANSFORM)(hTransform)
+	xform := hTransform.(*cmsTRANSFORM)
 	if xform == nil {
 		return 0
 	}
@@ -1402,7 +1407,7 @@ func cmsGetTransformInputFormat(hTransform CmsHTRANSFORM) uint32 {
 }
 
 func cmsGetTransformOutputFormat(hTransform CmsHTRANSFORM) uint32 {
-	xform := (*cmsTRANSFORM)(hTransform)
+	xform := hTransform.(*cmsTRANSFORM)
 	if xform == nil {
 		return 0
 	}
@@ -1414,11 +1419,11 @@ func cmsChangeBuffersFormat(
 	InputFormat uint32,
 	OutputFormat uint32,
 ) bool {
-	xform := (*cmsTRANSFORM)(hTransform)
+	xform := hTransform.(*cmsTRANSFORM)
 
 	// Ensure the transform supports format change
 	if xform.DwOriginalFlags&cmsFLAGS_CAN_CHANGE_FORMATTER == 0 {
-		cmsSignalError(unsafe.Pointer(xform.ContextID), cmsERROR_NOT_SUITABLE, "cmsChangeBuffersFormat works only on transforms created originally with at least 16 bits of precision")
+		cmsSignalError(xform.ContextID, cmsERROR_NOT_SUITABLE, "cmsChangeBuffersFormat works only on transforms created originally with at least 16 bits of precision")
 		return false
 	}
 
@@ -1426,7 +1431,7 @@ func cmsChangeBuffersFormat(
 	ToOutput := cmsGetFormatter(xform.ContextID, OutputFormat, cmsFormatterOutput, CMS_PACK_FLAGS_16BITS).Fmt16
 
 	if FromInput == nil || ToOutput == nil {
-		cmsSignalError(unsafe.Pointer(xform.ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported raster format")
+		cmsSignalError(xform.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unsupported raster format")
 		return false
 	}
 

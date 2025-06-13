@@ -1,7 +1,7 @@
 package golcms
 
 import (
-	"unsafe"
+	//"unsafe"
 )
 
 // Constants
@@ -39,9 +39,9 @@ const (
 )
 
 // Tag Base
-type cmsTagTypeSignature uint32
+type cmsTagTypeSignature = uint32
 
-type cmsTagSignature uint32
+type cmsTagSignature = uint32
 
 // Constants for interpolation flags
 const (
@@ -85,11 +85,40 @@ type cmsInterpParams struct {
 type cmsInterpFnFactory func(nInputChannels, nOutputChannels, dwFlags uint32) cmsInterpFunction
 
 // cmsPluginBase represents the base structure for plugins.
+type PluginIntrfc interface {
+	// Common methods all plugins must implement
+	GetBase() *cmsPluginBase
+	PluginType() uint32
+	GetNext() PluginIntrfc
+}
+
 type cmsPluginBase struct {
 	Magic           uint32         // Magic number for validation
 	ExpectedVersion uint32         // Expected version of the library
 	Type            uint32         // Plugin type
 	Next            *cmsPluginBase // Pointer to the next plugin in the chain
+}
+
+// Implement Plugin interface for cmsPluginBase
+func (p *cmsPluginBase) GetBase() *cmsPluginBase {
+	return p
+}
+
+func (p *cmsPluginBase) PluginType() uint32 {
+	return p.Type
+}
+
+func (p *cmsPluginBase) GetNext() PluginIntrfc {
+
+	// This will need to return the proper concrete type
+	// You'll need a way to map plugin types to their implementations
+	return p.Next
+}
+
+// cmsPluginMultiProcessElement struct definition
+type cmsPluginMultiProcessElement struct {
+	cmsPluginBase
+	Handler cmsTagTypeHandler
 }
 
 // cmsIntentFn defines the function type for custom intents.
@@ -105,15 +134,15 @@ type cmsIntentFn func(
 
 // cmsPluginRenderingIntent represents a plug-in that defines a single rendering intent.
 type cmsPluginRenderingIntent struct {
-	Base        cmsPluginBase // Base structure for plugins
-	Intent      uint32        // Intent number
-	Link        cmsIntentFn   // Function link to handle the intent
-	Description string        // Description of the intent
+	cmsPluginBase             // Base structure for plugins
+	Intent        uint32      // Intent number
+	Link          cmsIntentFn // Function link to handle the intent
+	Description   string      // Description of the intent
 }
 
 // cmsPluginInterpolation represents the plugin structure for interpolators.
 type cmsPluginInterpolation struct {
-	base                 cmsPluginBase
+	cmsPluginBase
 	InterpolatorsFactory cmsInterpFnFactory // Factory function for interpolators
 }
 
@@ -124,7 +153,7 @@ type cmsPluginInterpolation struct {
 type cmsParametricCurveEvaluator func(int32, []float64, float64) float64
 
 type cmsPluginParametricCurves struct {
-	Base           cmsPluginBase
+	cmsPluginBase
 	NFunctions     uint32
 	FunctionTypes  [20]uint32
 	ParameterCount [20]uint32
@@ -135,18 +164,18 @@ type cmsPluginParametricCurves struct {
 
 // _cmsIOHandler represents the internal structure.
 type cms_io_handler struct {
-	Stream       unsafe.Pointer // Associated stream, implemented differently based on media
+	Stream       interface{} // Associated stream, implemented differently based on media
 	ContextID    CmsContext     // Context ID
 	UsedSpace    uint32         // Used space in the stream
 	ReportedSize uint32         // Reported size of the stream
 	PhysicalFile string         // Physical file path
-//	Read         func(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32
-	Read         func(iohandler *cms_io_handler, buffer unsafe.Pointer, size, count uint32) uint32
-	Seek         func(iohandler *cms_io_handler, offset uint32) bool
-	Close        func(iohandler *cms_io_handler) bool
-	Tell         func(iohandler *cms_io_handler) uint32
-//	Write        func(iohandler *cms_io_handler, size uint32, buffer []byte) bool
-	Write        func(iohandler *cms_io_handler, size uint32, buffer unsafe.Pointer) bool
+	//	Read         func(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32
+	Read  func(iohandler *cms_io_handler, buffer interface{}, size, count uint32) uint32
+	Seek  func(iohandler *cms_io_handler, offset uint32) bool
+	Close func(iohandler *cms_io_handler) bool
+	Tell  func(iohandler *cms_io_handler) uint32
+	//	Write        func(iohandler *cms_io_handler, size uint32, buffer []byte) bool
+	Write func(iohandler *cms_io_handler, size uint32, buffer interface{}) bool
 }
 
 //----------------------------------------------------------------------------------------------------------
@@ -162,18 +191,18 @@ type cmsTagDescriptor struct {
 	SupportedTypes  [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature // Array of supported types
 
 	// Function for determining the type for writing, based on profile version and data.
-	DecideType func(iccVersion float64, data unsafe.Pointer) cmsTagTypeSignature
+	DecideType func(iccVersion float64, data interface{}) cmsTagTypeSignature
 }
 
 // cmsPluginTag represents a plugin that implements a single tag.
 type cmsPluginTag struct {
-	Base       cmsPluginBase    // Base plugin structure
-	Signature  cmsTagSignature  // Tag signature
-	Descriptor cmsTagDescriptor // Descriptor defining the tag's behavior
+	cmsPluginBase                  // Base plugin structure
+	Signature     cmsTagSignature  // Tag signature
+	Descriptor    cmsTagDescriptor // Descriptor defining the tag's behavior
 }
 
 type cmsPluginTagType struct {
-	Base    cmsPluginBase
+	cmsPluginBase
 	Handler cmsTagTypeHandler
 }
 
@@ -188,7 +217,7 @@ const (
 type cmsFormatterFactory func(uint32, cmsFormatterDirection, uint32) cmsFormatter
 
 type cmsPluginFormatters struct {
-	Base              cmsPluginBase
+	cmsPluginBase
 	FormattersFactory cmsFormatterFactory
 }
 
@@ -202,7 +231,7 @@ type cmsStride struct {
 
 // cmsPluginTransform represents the plugin transform structure.
 type cmsPluginTransform struct {
-	Base cmsPluginBase // Base plugin information
+	cmsPluginBase // Base plugin information
 
 	// Transform entry points
 	Factories struct {
@@ -212,8 +241,8 @@ type cmsPluginTransform struct {
 }
 
 // Shared callbacks for user data //YULIANA: i can not find implemenation for this functions, only declarations!  investigate further
-type cmsFreeUserDataFn func(ContextID CmsContext, Data unsafe.Pointer)
-type cmsDupUserDataFn func(ContextID CmsContext, Data unsafe.Pointer) unsafe.Pointer
+type cmsFreeUserDataFn func(ContextID CmsContext, Data interface{})
+type cmsDupUserDataFn func(ContextID CmsContext, Data interface{}) interface{}
 type cmsFormatter16 func(CMMcargo *cmsTRANSFORM, Values []uint16, Buffer []uint8, Stride uint32) []uint8
 type cmsFormatterFloat func(CMMcargo *cmsTRANSFORM, Values []float32, Buffer []uint8, Stride uint32) []uint8
 type cmsTransformFn func(CMMcargo *cmsTRANSFORM, InputBuffer,
@@ -222,10 +251,10 @@ type cmsTransformFn func(CMMcargo *cmsTRANSFORM, InputBuffer,
 type cmsTransform2Fn func(CMMcargo *cmsTRANSFORM, InputBuffer,
 	OutputBuffer any, PixelsPerLine uint32, LineCount uint32, Stride *cmsStride)
 
-type cmsTransformFactory func(xform *cmsTransformFn, UserData *unsafe.Pointer,
+type cmsTransformFactory func(xform *cmsTransformFn, UserData *interface{},
 	FreePrivateDataFn *cmsFreeUserDataFn, Lut **cmsPipeline, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) bool
 
-type cmsTransform2Factory func(xform *cmsTransform2Fn, UserData *unsafe.Pointer,
+type cmsTransform2Factory func(xform *cmsTransform2Fn, UserData *interface{},
 	FreePrivateDataFn *cmsFreeUserDataFn, Lut **cmsPipeline, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) bool
 
 type cmsFormatter struct {
@@ -276,21 +305,21 @@ type cmsOPToptimizeFn func(
 type cmsPipelineEval16Fn func(
 	In []uint16, // Input array
 	Out []uint16, // Output array
-	Data unsafe.Pointer, // Arbitrary data
+	Data interface{}, // Arbitrary data
 )
 
 // _cmsPipelineEvalFloatFn is a function type for evaluating the pipeline in floating-point precision.
 type cmsPipelineEvalFloatFn func(
 	In []float32, // Input array
 	Out []float32, // Output array
-	Data unsafe.Pointer, // Arbitrary data
+	Data interface{}, // Arbitrary data
 )
 
 // Optimize entry point
 // cmsPluginOptimization represents a plugin that implements optimization strategies.
 type cmsPluginOptimization struct {
-	Base        cmsPluginBase    // Base plugin structure
-	OptimizePtr cmsOPToptimizeFn // Optimization entry point
+	cmsPluginBase                  // Base plugin structure
+	OptimizePtr   cmsOPToptimizeFn // Optimization entry point
 }
 
 // ----------------------------------------------------------------------------------------------------------
@@ -302,26 +331,26 @@ const MAX_TYPES_IN_LCMS_PLUGIN = 20
 // Function type definitions for memory handler plug-ins.
 
 // _cmsMallocFnPtrType defines a function that allocates memory.
-type cmsMallocFnPtrType func(contextID CmsContext, size uint32) unsafe.Pointer
+type cmsMallocFnPtrType func(contextID CmsContext, size uint32) interface{}
 
 // _cmsFreeFnPtrType defines a function that frees allocated memory.
-type cmsFreeFnPtrType func(contextID CmsContext, ptr unsafe.Pointer, size uint32)
+type cmsFreeFnPtrType func(contextID CmsContext, ptr interface{}, size uint32)
 
 // _cmsReallocFnPtrType defines a function that reallocates memory.
-type cmsReallocFnPtrType func(contextID CmsContext, ptr unsafe.Pointer, oldSize uint32, newSize uint32) unsafe.Pointer
+type cmsReallocFnPtrType func(contextID CmsContext, ptr interface{}, oldSize uint32, newSize uint32) interface{}
 
 // _cmsMalloZerocFnPtrType defines a function that allocates zero-initialized memory.
-type cmsMalloZerocFnPtrType func(contextID CmsContext, size uint32) unsafe.Pointer
+type cmsMalloZerocFnPtrType func(contextID CmsContext, size uint32) interface{}
 
 // _cmsCallocFnPtrType defines a function that allocates zero-initialized memory for an array.
-type cmsCallocFnPtrType func(contextID CmsContext, num uint32, size uint32) unsafe.Pointer
+type cmsCallocFnPtrType func(contextID CmsContext, num uint32, size uint32) interface{}
 
 // _cmsDupFnPtrType defines a function that duplicates a memory block.
-type cmsDupFnPtrType func(contextID CmsContext, org unsafe.Pointer, size uint32) unsafe.Pointer
+type cmsDupFnPtrType func(contextID CmsContext, org interface{}, size uint32) interface{}
 
 // cmsPluginMemHandler represents the memory handler plug-in structure.
 type cmsPluginMemHandler struct {
-	Base          cmsPluginBase          // Base structure for plug-in
+	cmsPluginBase                        // Base structure for plug-in
 	MallocPtr     cmsMallocFnPtrType     // Required: Function to allocate memory
 	FreePtr       cmsFreeFnPtrType       // Required: Function to free memory
 	ReallocPtr    cmsReallocFnPtrType    // Required: Function to reallocate memory
@@ -331,14 +360,14 @@ type cmsPluginMemHandler struct {
 }
 
 // Type aliases for function pointer types.
-type cmsCreateMutexFnPtrType func() unsafe.Pointer
-type cmsDestroyMutexFnPtrType func(mtx unsafe.Pointer)
-type cmsLockMutexFnPtrType func(mtx unsafe.Pointer) bool
-type cmsUnlockMutexFnPtrType func(mtx unsafe.Pointer)
+type cmsCreateMutexFnPtrType func() *cmsMutex
+type cmsDestroyMutexFnPtrType func(mtx *cmsMutex)
+type cmsLockMutexFnPtrType func(mtx *cmsMutex) bool
+type cmsUnlockMutexFnPtrType func(mtx *cmsMutex)
 
 // Mutex plugin structure.
 type cmsPluginMutex struct {
-	base            cmsPluginBase
+	cmsPluginBase
 	CreateMutexPtr  cmsCreateMutexFnPtrType
 	DestroyMutexPtr cmsDestroyMutexFnPtrType
 	LockMutexPtr    cmsLockMutexFnPtrType
@@ -348,7 +377,7 @@ type cmsPluginMutex struct {
 // CMSAPI equivalent functions.
 
 type cmsPluginParalellization struct {
-	base        cmsPluginBase
+	cmsPluginBase
 	MaxWorkers  int32           // Number of starts to do as maximum
 	WorkerFlags uint32          // Reserved
 	SchedulerFn cmsTransform2Fn // callback to setup functions

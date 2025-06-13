@@ -12,29 +12,33 @@ var cmsInterpPluginChunk = cmsInterpPluginChunkType{Interpolators: nil}
 
 // cmsAllocInterpPluginChunk allocates and duplicates the interpolation plug-in memory chunk.
 func cmsAllocInterpPluginChunk(ctx, src *CmsContextStruct) {
-	var from unsafe.Pointer
+	var from cmsContextChunk
 
 	if src != nil {
 		from = src.chunks[InterpPlugin]
 	} else {
 		// Default interpolation chunk
 		staticInterpPluginChunk := cmsInterpPluginChunkType{Interpolators: nil}
-		from = unsafe.Pointer(&staticInterpPluginChunk)
+		from = &staticInterpPluginChunk
 	}
 
 	ctx.chunks[InterpPlugin] = cmsSubAllocDup(ctx.MemPool, from, uint32(unsafe.Sizeof(cmsInterpPluginChunkType{})))
 }
 
 // cmsRegisterInterpPlugin is the main entry for interpolation plug-in registration.
-func cmsRegisterInterpPlugin(ContextID CmsContext, Data *cmsPluginBase) bool {
-	plugin := (*cmsPluginInterpolation)(unsafe.Pointer(Data))
-	ptr := (*cmsInterpPluginChunkType)(CmsContextGetClientChunk(ContextID, InterpPlugin))
+func cmsRegisterInterpPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
+	//plugin := (*cmsPluginInterpolation)(unsafe.Pointer(Data))
+	ptr := CmsContextGetClientChunk(ContextID, InterpPlugin).(*cmsInterpPluginChunkType)
 
 	if Data == nil {
 		ptr.Interpolators = nil
 		return true
 	}
-
+	plugin, ok := Data.(*cmsPluginInterpolation)
+	if !ok {
+		fmt.Printf("Error: Plugin is not of the type cmsPluginInterpolation\n")
+		return false
+	}
 	// Set replacement functions
 	ptr.Interpolators = plugin.InterpolatorsFactory
 	return true
@@ -42,7 +46,7 @@ func cmsRegisterInterpPlugin(ContextID CmsContext, Data *cmsPluginBase) bool {
 
 // cmsSetInterpolationRoutine sets the interpolation method.
 func cmsSetInterpolationRoutine(ContextID CmsContext, p *cmsInterpParams) bool {
-	ptr := (*cmsInterpPluginChunkType)(CmsContextGetClientChunk(ContextID, InterpPlugin))
+	ptr := CmsContextGetClientChunk(ContextID, InterpPlugin).(*cmsInterpPluginChunkType)
 
 	// Reset the interpolation function
 	p.Interpolation.Lerp16 = nil
@@ -80,7 +84,7 @@ func cmsComputeInterpParamsEx(
 
 	// Check for maximum inputs
 	if InputChan > MAX_INPUT_DIMENSIONS {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Too many input channels ")
+		cmsSignalError(ContextID, cmsERROR_RANGE, "Too many input channels ")
 		return nil
 	}
 
@@ -111,8 +115,8 @@ func cmsComputeInterpParamsEx(
 
 	// Set the interpolation routine
 	if !cmsSetInterpolationRoutine(ContextID, p) {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported interpolation")
-		cmsFree(ContextID, unsafe.Pointer(p))
+		cmsSignalError(ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unsupported interpolation")
+		cmsFree(ContextID, p)
 		return nil
 	}
 
@@ -143,7 +147,7 @@ func cmsComputeInterpParams(
 // cmsFreeInterpParams frees all associated memory.
 func cmsFreeInterpParams(p *cmsInterpParams) {
 	if p != nil {
-		cmsFree(p.ContextID, unsafe.Pointer(p))
+		cmsFree(p.ContextID, p)
 	}
 }
 
@@ -911,14 +915,14 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 		}
 
 		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-	/*	fmt.Println("c0", c0)
-		fmt.Println("c1", c1)
-		fmt.Println("c2", c2)
-		fmt.Println("c3", c3)
-		fmt.Println("rx", rx)
-		fmt.Println("ry", ry)
-		fmt.Println("rz", rz)
-		fmt.Println("Rest", Rest)*/
+		/*	fmt.Println("c0", c0)
+			fmt.Println("c1", c1)
+			fmt.Println("c2", c2)
+			fmt.Println("c3", c3)
+			fmt.Println("rx", rx)
+			fmt.Println("ry", ry)
+			fmt.Println("rz", rz)
+			fmt.Println("Rest", Rest)*/
 
 		Tmp1[outChan] = uint16(c0 + ((int32(cmsToFixedDomain(int(Rest))) + 0x8000) >> 16))
 	}

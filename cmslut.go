@@ -3,7 +3,7 @@ package golcms
 import (
 	//"fmt"
 	"math"
-	"unsafe"
+	//"unsafe"
 )
 
 func cmsStageAllocPlaceholder(
@@ -13,7 +13,7 @@ func cmsStageAllocPlaceholder(
 	EvalPtr cmsStageEvalFn,
 	DupElemPtr cmsStageDupElemFn,
 	FreePtr cmsStageFreeElemFn,
-	Data unsafe.Pointer,
+	Data interface{},
 ) *cmsStage {
 	// Allocate memory for cmsStage and initialize to zero
 	ph := allocateStruct[cmsStage]()
@@ -128,7 +128,7 @@ func cmsStageClipNegatives(ContextID CmsContext, nChannels uint32) *cmsStage {
 }
 
 func cmsStageGetPtrToCurveSet(mpe *cmsStage) []*CmsToneCurve {
-	data := (*cmsStageToneCurvesData)(mpe.Data)
+	data := mpe.Data.(*cmsStageToneCurvesData)
 	return data.TheCurves
 }
 
@@ -145,7 +145,7 @@ func cmsStageGetPtrToCurveSet(mpe *cmsStage) []*CmsToneCurve {
 }*/
 
 func EvaluateCurves(In []float32, Out []float32, mpe *cmsStage) {
-	data := (*cmsStageToneCurvesData)(mpe.Data)
+	data := mpe.Data.(*cmsStageToneCurvesData)
 	if data == nil || data.TheCurves == nil {
 		return
 	}
@@ -163,7 +163,7 @@ func EvaluateCurves(In []float32, Out []float32, mpe *cmsStage) {
 func CurveSetElemTypeFree(mpe *cmsStage) {
 	cmsAssert(mpe != nil, "")
 
-	data := (*cmsStageToneCurvesData)(mpe.Data)
+	data := mpe.Data.(*cmsStageToneCurvesData)
 	if data == nil {
 		return
 	}
@@ -175,12 +175,12 @@ func CurveSetElemTypeFree(mpe *cmsStage) {
 			}
 		}
 	}
-	cmsFree(mpe.ContextID, unsafe.Pointer(data))
+	cmsFree(mpe.ContextID, data)
 }
-func CurveSetDup(mpe *cmsStage) unsafe.Pointer {
+func CurveSetDup(mpe *cmsStage) interface{} {
 	//	fmt.Println("CurveSetDup")
 	// Access the data from the input stage
-	data := (*cmsStageToneCurvesData)(mpe.Data)
+	data := mpe.Data.(*cmsStageToneCurvesData)
 
 	// Allocate memory for the new tone curves data structure
 	newElem := allocateStruct[cmsStageToneCurvesData]()
@@ -202,7 +202,7 @@ func CurveSetDup(mpe *cmsStage) unsafe.Pointer {
 
 	}
 
-	return unsafe.Pointer(newElem)
+	return newElem
 
 Error:
 	// Cleanup allocated memory in case of an error
@@ -211,7 +211,7 @@ Error:
 			CmsFreeToneCurve(newElem.TheCurves[i])
 		}
 	}
-	cmsFree(mpe.ContextID, unsafe.Pointer(newElem))
+	cmsFree(mpe.ContextID, newElem)
 	return nil
 }
 
@@ -230,7 +230,7 @@ func cmsStageAllocToneCurves(ContextID CmsContext, nChannels uint32, Curves []*C
 		return nil
 	}
 
-	newMPE.Data = unsafe.Pointer(newElem)
+	newMPE.Data = newElem
 
 	// Set the number of curves
 	newElem.NCurves = nChannels
@@ -293,7 +293,7 @@ func cmsStageAllocIdentityCurves(ContextID CmsContext, nChannels uint32) *cmsSta
 func EvaluateMatrix(in []float32, out []float32, mpe *cmsStage) {
 	//fmt.Println("start EVALUATE MATRIX")
 
-	data := (*cmsStageMatrixData)(mpe.Data)
+	data := mpe.Data.(*cmsStageMatrixData)
 	// Print matrix coefficients
 	/*fmt.Println("Matrix Coefficients (Double):")
 	for i := uint32(0); i < mpe.OutputChannels; i++ {
@@ -343,12 +343,12 @@ func EvaluateMatrix(in []float32, out []float32, mpe *cmsStage) {
 }
 
 // MatrixElemDup duplicates the matrix stage data.
-func MatrixElemDup(mpe *cmsStage) unsafe.Pointer {
+func MatrixElemDup(mpe *cmsStage) interface{} {
 	if mpe == nil || mpe.Data == nil {
 		return nil
 	}
 
-	Data := (*cmsStageMatrixData)(mpe.Data)
+	Data := mpe.Data.(*cmsStageMatrixData)
 
 	NewElem := allocateStruct[cmsStageMatrixData]()
 
@@ -357,7 +357,7 @@ func MatrixElemDup(mpe *cmsStage) unsafe.Pointer {
 		NewElem.Offset = cmsDupMemSlice(Data.Offset)
 	}
 
-	return unsafe.Pointer(NewElem)
+	return NewElem
 }
 
 // MatrixElemTypeFree frees the matrix stage data.
@@ -366,7 +366,7 @@ func MatrixElemTypeFree(mpe *cmsStage) {
 		return
 	}
 
-	Data := (*cmsStageMatrixData)(mpe.Data)
+	Data := mpe.Data.(*cmsStageMatrixData)
 	if Data == nil {
 		return
 	}
@@ -410,12 +410,10 @@ func cmsStageAllocMatrix(
 	if NewElem == nil {
 		goto Error
 	}
-	NewMPE.Data = unsafe.Pointer(NewElem)
+	NewMPE.Data = NewElem
 
 	NewElem.Double = make([]float64, n)
 	copy(NewElem.Double, Matrix)
-
-	
 
 	if Offset != nil {
 		NewElem.Offset = make([]float64, Rows)
@@ -466,7 +464,7 @@ func cmsStageAllocXYZ2Lab(ContextID CmsContext) *cmsStage {
 // This routine does a sweep on whole input space, and calls its callback
 // function on knots. returns TRUE if all ok, FALSE otherwise.
 
-func cmsSliceSpace16(nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLER16, Cargo unsafe.Pointer) bool {
+func cmsSliceSpace16(nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLER16, cargo interface{}) bool {
 	if nInputs >= cmsMAXCHANNELS {
 		return false
 	}
@@ -487,12 +485,12 @@ func cmsSliceSpace16(nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLER16, 
 	}
 
 	// Call the sampler with the current input
-	if Sampler(In[:], nil, Cargo) != 1 {
+	if Sampler(In[:], nil, cargo) != 1 {
 		return false
 	}
 	return true
 }
-func cmsSliceSpaceFloat(nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLERFLOAT, Cargo unsafe.Pointer) int32 {
+func cmsSliceSpaceFloat(nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLERFLOAT, cargo interface{}) int32 {
 	if nInputs >= cmsMAXCHANNELS {
 		return 0 // FALSE
 	}
@@ -515,7 +513,7 @@ func cmsSliceSpaceFloat(nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLERF
 		}
 
 		// Call the sampler with the current input
-		if Sampler(In[:], nil, Cargo) != 1 {
+		if Sampler(In[:], nil, cargo) != 1 {
 			return 0 // FALSE
 		}
 	}
@@ -735,7 +733,7 @@ func cmsStageFree(mpe *cmsStage) {
 	if mpe.FreePtr != nil {
 		mpe.FreePtr(mpe)
 	}
-	cmsFree(mpe.ContextID, unsafe.Pointer(mpe))
+	cmsFree(mpe.ContextID, mpe)
 }
 func cmsStageInputChannels(mpe *cmsStage) uint32 {
 	return mpe.InputChannels
@@ -746,7 +744,7 @@ func cmsStageOutputChannels(mpe *cmsStage) uint32 {
 func cmsStageType(mpe *cmsStage) cmsStageSignature {
 	return mpe.Type
 }
-func cmsStageData(mpe *cmsStage) unsafe.Pointer {
+func cmsStageData(mpe *cmsStage) interface{} {
 	return mpe.Data
 }
 func cmsGetStageContextID(mpe *cmsStage) CmsContext {
@@ -828,8 +826,11 @@ func BlessLUT(lut *cmsPipeline) bool {
 }
 
 // _LUTeval16 evaluates the LUT on a 16-bit basis
-func LUTeval16(In []uint16, Out []uint16, D unsafe.Pointer) {
-	lut := (*cmsPipeline)(D)
+func LUTeval16(In []uint16, Out []uint16, D interface{}) {
+	lut, ok := D.(*cmsPipeline)
+	if !ok {
+		panic(" D  must be of type *cmsPipeline")
+	}
 	var Storage [2][MAX_STAGE_CHANNELS]float32
 	var Phase, NextPhase int
 
@@ -868,9 +869,12 @@ func LUTevalFloat(In []float32, Out []float32, D unsafe.Pointer) {
 	MemmoveSlice(Out, Storage[Phase][:], int(lut.OutputChannels))
 }
 */
-func LUTevalFloat(In []float32, Out []float32, D unsafe.Pointer) {
+func LUTevalFloat(In []float32, Out []float32, D interface{}) {
 	//fmt.Println("START LUTevalFloat")
-	lut := (*cmsPipeline)(D)
+	lut, ok := D.(*cmsPipeline)
+	if !ok {
+		panic(" D  must be of type *cmsPipeline")
+	}
 	var Storage [2][MAX_STAGE_CHANNELS]float32
 	var Phase, NextPhase int
 
@@ -904,7 +908,7 @@ func cmsPipelineAlloc(contextID CmsContext, inputChannels, outputChannels uint32
 	newLUT.EvalFloatFn = LUTevalFloat
 	newLUT.DupDataFn = nil
 	newLUT.FreeDataFn = nil
-	newLUT.Data = unsafe.Pointer(newLUT)
+	newLUT.Data = newLUT
 	newLUT.ContextID = contextID
 
 	// Validate the LUT
@@ -947,7 +951,7 @@ func cmsPipelineFree(lut *cmsPipeline) {
 		lut.FreeDataFn(lut.ContextID, lut.Data)
 	}
 
-	cmsFree(lut.ContextID, unsafe.Pointer(lut))
+	cmsFree(lut.ContextID, lut)
 }
 func cmsPipelineEval16(In []uint16, Out []uint16, lut *cmsPipeline) {
 	if lut == nil {
@@ -959,7 +963,7 @@ func cmsPipelineEvalFloat(In []float32, Out []float32, lut *cmsPipeline) {
 	if lut == nil {
 		panic("lut is nil")
 	}
-	lut.EvalFloatFn(In, Out, unsafe.Pointer(lut))
+	lut.EvalFloatFn(In, Out, lut)
 }
 func cmsPipelineDup(lut *cmsPipeline) *cmsPipeline {
 	//fmt.Println("cmsPipelineDup")
@@ -1002,7 +1006,7 @@ func cmsPipelineDup(lut *cmsPipeline) *cmsPipeline {
 	}
 
 	if !BlessLUT(NewLUT) {
-		cmsFree(lut.ContextID, unsafe.Pointer(NewLUT))
+		cmsFree(lut.ContextID, NewLUT)
 		return nil
 	}
 
@@ -1118,7 +1122,7 @@ func cmsPipelineGetPtrToLastStage(lut *cmsPipeline) *cmsStage {
 // This function may be used to set the optional evaluator and a block of private data. If private data is being used, an optional
 // duplicator and free functions should also be specified in order to duplicate the LUT construct. Use nil to inhibit such functionality.
 func cmsPipelineSetOptimizationParameters(Lut *cmsPipeline,
-	Eval16 cmsPipelineEval16Fn, PrivateData unsafe.Pointer,
+	Eval16 cmsPipelineEval16Fn, PrivateData interface{},
 	FreePrivateDataFn cmsFreeUserDataFn, DupPrivateDataFn cmsDupUserDataFn) {
 	Lut.Eval16Fn = Eval16
 	Lut.DupDataFn = DupPrivateDataFn
@@ -1290,7 +1294,7 @@ func cmsPipelineEvalReverseFloat(Target, Result, Hint []float32, lut *cmsPipelin
 
 // EvaluateCLUTfloat evaluates a CLUT in true floating point.
 func EvaluateCLUTfloat(In []float32, Out []float32, mpe *cmsStage) {
-	data := (*cmsStageCLutData)(mpe.Data)
+	data := mpe.Data.(*cmsStageCLutData)
 	data.Params.Interpolation.LerpFloat(In, Out, data.Params)
 }
 
@@ -1300,7 +1304,7 @@ func EvaluateCLUTfloatIn16(In []float32, Out []float32, mpe *cmsStage) {
 	var In16 [MAX_STAGE_CHANNELS]uint16
 	var Out16 [MAX_STAGE_CHANNELS]uint16
 
-	data := (*cmsStageCLutData)(mpe.Data)
+	data := mpe.Data.(*cmsStageCLutData)
 
 	if mpe.InputChannels > MAX_STAGE_CHANNELS || mpe.OutputChannels > MAX_STAGE_CHANNELS {
 		panic("Number of channels exceeds MAX_STAGE_CHANNELS")
@@ -1338,8 +1342,8 @@ func CubeSize(Dims []uint32, b uint32) uint32 {
 }
 
 // CLUTElemDup duplicates a CLUT element.
-func CLUTElemDup(mpe *cmsStage) unsafe.Pointer {
-	data := (*cmsStageCLutData)(mpe.Data)
+func CLUTElemDup(mpe *cmsStage) interface{} {
+	data := mpe.Data.(*cmsStageCLutData)
 	newElem := allocateStruct[cmsStageCLutData]()
 	if newElem == nil {
 		return nil
@@ -1366,7 +1370,7 @@ func CLUTElemDup(mpe *cmsStage) unsafe.Pointer {
 	)
 
 	if newElem.Params != nil {
-		return unsafe.Pointer(newElem)
+		return newElem
 	} else {
 		return nil
 	}
@@ -1374,7 +1378,7 @@ func CLUTElemDup(mpe *cmsStage) unsafe.Pointer {
 
 // CLutElemTypeFree frees the resources of a CLUT element.
 func CLutElemTypeFree(mpe *cmsStage) {
-	data := (*cmsStageCLutData)(mpe.Data)
+	data := mpe.Data.(*cmsStageCLutData)
 
 	// Already empty
 	if data == nil {
@@ -1385,7 +1389,7 @@ func CLutElemTypeFree(mpe *cmsStage) {
 	cmsFreeInterpParams(data.Params)
 
 	// Free the data structure
-	cmsFree(mpe.ContextID, unsafe.Pointer(data))
+	cmsFree(mpe.ContextID, data)
 }
 
 // Allocates a 16-bit multidimensional CLUT. This is evaluated at 16-bit precision.
@@ -1401,7 +1405,7 @@ func cmsStageAllocCLut16bitGranular(
 	}
 
 	if inputChan > MAX_INPUT_DIMENSIONS {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Too many input channels (%d channels, max=%d)")
+		cmsSignalError(ContextID, cmsERROR_RANGE, "Too many input channels (%d channels, max=%d)")
 		return nil
 	}
 
@@ -1415,7 +1419,7 @@ func cmsStageAllocCLut16bitGranular(
 		cmsStageFree(NewMPE)
 		return nil
 	}
-	NewMPE.Data = unsafe.Pointer(NewElem)
+	NewMPE.Data = NewElem
 
 	NewElem.NEntries = uint32(outputChan) * CubeSize(clutPoints, inputChan)
 	NewElem.HasFloatValues = false
@@ -1480,7 +1484,7 @@ func cmsStageAllocCLutFloatGranular(
 	}
 
 	if inputChan > MAX_INPUT_DIMENSIONS {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Too many input channels")
+		cmsSignalError(ContextID, cmsERROR_RANGE, "Too many input channels")
 		return nil
 	}
 
@@ -1490,7 +1494,7 @@ func cmsStageAllocCLutFloatGranular(
 	}
 
 	NewElem := allocateStruct[cmsStageCLutData]()
-	NewMPE.Data = unsafe.Pointer(NewElem)
+	NewMPE.Data = NewElem
 
 	NewElem.NEntries = uint32(outputChan) * CubeSize(clutPoints, inputChan)
 	NewElem.HasFloatValues = true
@@ -1516,9 +1520,15 @@ func cmsStageAllocCLutFloatGranular(
 	return NewMPE
 }
 
-func IdentitySampler(In []uint16, Out []uint16, Cargo unsafe.Pointer) int32 {
-	nChan := *(*int)(Cargo)
-	for i := 0; i < nChan; i++ {
+func IdentitySampler(In []uint16, Out []uint16, cargo interface{}) int32 {
+	nChanPtr, ok := cargo.(*int)
+	if !ok || nChanPtr == nil {
+		cmsSignalError(nil, cmsERROR_RANGE, "Invalid cargo: expected *int")
+		return 0
+	}
+	nChan := *nChanPtr
+
+	for i := 0; i < nChan && i < len(In) && i < len(Out); i++ {
 		Out[i] = In[i]
 	}
 	return 1
@@ -1535,7 +1545,7 @@ func cmsStageAllocIdentityCLut(ContextID CmsContext, nChan uint32) *cmsStage {
 		return nil
 	}
 
-	if !cmsStageSampleCLut16bit(mpe, IdentitySampler, unsafe.Pointer(&nChan), 0) {
+	if !cmsStageSampleCLut16bit(mpe, IdentitySampler, &nChan, 0) {
 		cmsStageFree(mpe)
 		return nil
 	}
@@ -1555,14 +1565,14 @@ func cmsQuantizeVal(i float64, MaxSamples uint32) uint16 {
 func cmsStageSampleCLut16bit(
 	mpe *cmsStage,
 	Sampler cmsSAMPLER16,
-	Cargo unsafe.Pointer,
+	cargo interface{},
 	dwFlags uint32,
 ) bool {
 	if mpe == nil {
 		return false
 	}
 
-	clut := (*cmsStageCLutData)(mpe.Data)
+	clut := mpe.Data.(*cmsStageCLutData)
 	if clut == nil {
 		return false
 	}
@@ -1598,7 +1608,7 @@ func cmsStageSampleCLut16bit(
 			}
 		}
 
-		if Sampler(In[:], Out[:], Cargo) == 0 {
+		if Sampler(In[:], Out[:], cargo) == 0 {
 			return false
 		}
 
@@ -1622,14 +1632,14 @@ func cmsStageSampleCLut16bit(
 func cmsStageSampleCLutFloat(
 	mpe *cmsStage,
 	Sampler cmsSAMPLERFLOAT,
-	Cargo unsafe.Pointer,
+	cargo interface{},
 	dwFlags uint32,
 ) bool {
 	if mpe == nil {
 		return false
 	}
 
-	clut := (*cmsStageCLutData)(mpe.Data)
+	clut := mpe.Data.(*cmsStageCLutData)
 	if clut == nil {
 		return false
 	}
@@ -1665,7 +1675,7 @@ func cmsStageSampleCLutFloat(
 			}
 		}
 
-		if Sampler(In[:], Out[:], Cargo) != 0 {
+		if Sampler(In[:], Out[:], cargo) != 0 {
 			return false
 		}
 

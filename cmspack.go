@@ -3,6 +3,8 @@ package golcms
 import (
 	"encoding/binary"
 	//"errors"
+	"bytes"
+	"fmt"
 	"math"
 	"unsafe"
 )
@@ -627,7 +629,8 @@ func Unroll2Words(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32
 	accum = accum[2:]
 	return accum
 }
-func UnrollLabDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+
+/*func UnrollLabDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	if T_PLANAR(info.InputFormat) != 0 {
 		var Lab cmsCIELab
 
@@ -642,12 +645,49 @@ func UnrollLabDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride
 		cmsFloat2LabEncoded(*(*[3]uint16)(wIn), &Lab)
 		return accum[8:] // sizeof(float64)
 	} else {
-		cmsFloat2LabEncoded(*(*[3]uint16)(wIn), (*cmsCIELab)(unsafe.Pointer(&accum[0])))
+		cmsFloat2LabEncoded(*(*[3]uint16)(wIn), (*cmsCIELab)(&accum[0]))
 		extra := T_EXTRA(info.InputFormat)
 		accum = accum[(uint32(unsafe.Sizeof(cmsCIELab{})) + extra*8):] // sizeof(float64)
 		return accum
 	}
+}*/
+
+func UnrollLabDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+	if T_PLANAR(info.InputFormat) != 0 {
+		if len(accum) < int(stride*2+1) {
+			return accum // not enough data
+		}
+
+		Lab := cmsCIELab{
+			L: float64(accum[0]),
+			a: float64(accum[stride]),
+			b: float64(accum[stride*2]),
+		}
+		if len(wIn) < 3 {
+			return accum
+		}
+		cmsFloat2LabEncoded(wIn, &Lab)
+		return accum[8:]
+	} else {
+		// interpret accum[0:24] as cmsCIELab in float64 form
+		if len(accum) < int(unsafe.Sizeof(cmsCIELab{})) {
+			return accum // not enough data
+		}
+
+		var Lab cmsCIELab
+		buf := bytes.NewReader(accum[:24])
+		_ = binary.Read(buf, binary.LittleEndian, &Lab)
+		if len(wIn) < 3 {
+			fmt.Errorf("wIn lenght is less than 3")
+			return accum
+		}
+		cmsFloat2LabEncoded(wIn, &Lab)
+
+		extra := T_EXTRA(info.InputFormat)
+		return accum[24+int(extra)*8:]
+	}
 }
+
 func UnrollLabFloatTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	var Lab cmsCIELab
 
@@ -660,71 +700,150 @@ func UnrollLabFloatTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride 
 		Lab.a = (float64)(posa[0])
 		Lab.b = (float64)(posb[0])
 
-		cmsFloat2LabEncoded(*(*[3]uint16)(wIn), &Lab)
+		if len(wIn) < 3 {
+			fmt.Errorf("wIn lenght is less than 3")
+			return accum
+		}
+		cmsFloat2LabEncoded(wIn, &Lab)
 		return accum[4:] // sizeof(float32)
 	} else {
 		Lab.L = (float64)(accum[0])
 		Lab.a = (float64)(accum[4])
 		Lab.b = (float64)(accum[8])
 
-		cmsFloat2LabEncoded(*(*[3]uint16)(wIn), &Lab)
+		if len(wIn) < 3 {
+			fmt.Errorf("wIn lenght is less than 3")
+			return accum
+		}
+		cmsFloat2LabEncoded(wIn, &Lab)
 		extra := T_EXTRA(info.InputFormat)
 		accum = accum[(3+extra)*4:] // 3 components + extra
 		return accum
 	}
 }
+
+/*
+	func UnrollXYZDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+		if T_PLANAR(info.InputFormat) != 0 {
+			var XYZ cmsCIEXYZ
+
+			posX := accum
+			posY := accum[stride:]
+			posZ := accum[stride*2:]
+
+			XYZ.X = (float64)(posX[0])
+			XYZ.Y = (float64)(posY[0])
+			XYZ.Z = (float64)(posZ[0])
+
+			cmsFloat2XYZEncoded((*[3]uint16)(wIn), &XYZ)
+
+			return accum[8:] // sizeof(float64)
+		} else {
+			cmsFloat2XYZEncoded((*[3]uint16)(wIn), (*cmsCIEXYZ)(unsafe.Pointer(&accum[0])))
+			extra := T_EXTRA(info.InputFormat)
+			accum = accum[(8*3 + extra*8):] // sizeof(cmsCIEXYZ) + T_EXTRA * sizeof(float64)
+			return accum
+		}
+	}
+*/
 func UnrollXYZDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+	var XYZ cmsCIEXYZ
+
 	if T_PLANAR(info.InputFormat) != 0 {
-		var XYZ cmsCIEXYZ
+		readFloat64 := func(b []uint8) float64 {
+			bits := binary.BigEndian.Uint64(b)
+			return math.Float64frombits(bits)
+		}
 
-		posX := accum
-		posY := accum[stride:]
-		posZ := accum[stride*2:]
+		XYZ.X = readFloat64(accum[0:])
+		XYZ.Y = readFloat64(accum[stride:])
+		XYZ.Z = readFloat64(accum[stride*2:])
 
-		XYZ.X = (float64)(posX[0])
-		XYZ.Y = (float64)(posY[0])
-		XYZ.Z = (float64)(posZ[0])
-
-		cmsFloat2XYZEncoded(*(*[3]uint16)(wIn), &XYZ)
-
-		return accum[8:] // sizeof(float64)
+		cmsFloat2XYZEncoded((*[3]uint16)(wIn), &XYZ)
+		return accum[8:]
 	} else {
-		cmsFloat2XYZEncoded(*(*[3]uint16)(wIn), (*cmsCIEXYZ)(unsafe.Pointer(&accum[0])))
+		if len(accum) < 24 {
+			// insufficient data
+			return accum
+		}
+		XYZ.X = math.Float64frombits(binary.BigEndian.Uint64(accum[0:8]))
+		XYZ.Y = math.Float64frombits(binary.BigEndian.Uint64(accum[8:16]))
+		XYZ.Z = math.Float64frombits(binary.BigEndian.Uint64(accum[16:24]))
+
+		cmsFloat2XYZEncoded((*[3]uint16)(wIn), &XYZ)
+
 		extra := T_EXTRA(info.InputFormat)
-		accum = accum[(8*3 + extra*8):] // sizeof(cmsCIEXYZ) + T_EXTRA * sizeof(float64)
-		return accum
+		return accum[24+extra*8:]
 	}
 }
+
+/*
+	func UnrollXYZFloatTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+		if T_PLANAR(info.InputFormat) != 0 {
+			var XYZ cmsCIEXYZ
+
+			posX := accum
+			posY := accum[stride:]
+			posZ := accum[stride*2:]
+
+			XYZ.X = (float64)(posX[0])
+			XYZ.Y = (float64)(posY[0])
+			XYZ.Z = (float64)(posZ[0])
+
+			cmsFloat2XYZEncoded((*[3]uint16)(wIn), &XYZ)
+
+			return accum[4:] // sizeof(float32)
+		} else {
+			Pt := (*[3]float32)(unsafe.Pointer(&accum[0]))
+			var XYZ cmsCIEXYZ
+
+			XYZ.X = float64(Pt[0])
+			XYZ.Y = float64(Pt[1])
+			XYZ.Z = float64(Pt[2])
+
+			cmsFloat2XYZEncoded((*[3]uint16)(wIn), &XYZ)
+
+			extra := T_EXTRA(info.InputFormat)
+			accum = accum[(4*3 + extra*4):] // 3 * sizeof(float32) + T_EXTRA * sizeof(float32)
+			return accum
+		}
+	}
+*/
 func UnrollXYZFloatTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+	var XYZ cmsCIEXYZ
+
 	if T_PLANAR(info.InputFormat) != 0 {
-		var XYZ cmsCIEXYZ
+		readFloat32 := func(b []uint8) float64 {
+			if len(b) < 4 {
+				return 0
+			}
+			bits := binary.BigEndian.Uint32(b)
+			return float64(math.Float32frombits(bits))
+		}
 
-		posX := accum
-		posY := accum[stride:]
-		posZ := accum[stride*2:]
+		XYZ.X = readFloat32(accum[0:])
+		XYZ.Y = readFloat32(accum[stride:])
+		XYZ.Z = readFloat32(accum[stride*2:])
 
-		XYZ.X = (float64)(posX[0])
-		XYZ.Y = (float64)(posY[0])
-		XYZ.Z = (float64)(posZ[0])
-
-		cmsFloat2XYZEncoded(*(*[3]uint16)(wIn), &XYZ)
+		cmsFloat2XYZEncoded((*[3]uint16)(wIn), &XYZ)
 
 		return accum[4:] // sizeof(float32)
 	} else {
-		Pt := (*[3]float32)(unsafe.Pointer(&accum[0]))
-		var XYZ cmsCIEXYZ
+		if len(accum) < 12 {
+			return accum // not enough data
+		}
 
-		XYZ.X = float64(Pt[0])
-		XYZ.Y = float64(Pt[1])
-		XYZ.Z = float64(Pt[2])
+		XYZ.X = float64(math.Float32frombits(binary.BigEndian.Uint32(accum[0:4])))
+		XYZ.Y = float64(math.Float32frombits(binary.BigEndian.Uint32(accum[4:8])))
+		XYZ.Z = float64(math.Float32frombits(binary.BigEndian.Uint32(accum[8:12])))
 
-		cmsFloat2XYZEncoded(*(*[3]uint16)(wIn), &XYZ)
+		cmsFloat2XYZEncoded((*[3]uint16)(wIn), &XYZ)
 
 		extra := T_EXTRA(info.InputFormat)
-		accum = accum[(4*3 + extra*4):] // 3 * sizeof(float32) + T_EXTRA * sizeof(float32)
-		return accum
+		return accum[12+extra*4:]
 	}
 }
+
 func IsInkSpace(Type uint32) bool {
 	switch T_COLORSPACE(Type) {
 	case PT_CMY, PT_CMYK, PT_MCH5, PT_MCH6, PT_MCH7, PT_MCH8, PT_MCH9, PT_MCH10,
@@ -1020,6 +1139,79 @@ func UnrollFloatsToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Strid
 
 	return accum[(nChan+Extra)*4:]
 }
+
+/*
+	func UnrollDoublesToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+		nChan := T_CHANNELS(info.InputFormat)
+		DoSwap := T_DOSWAP(info.InputFormat)
+		Reverse := T_FLAVOR(info.InputFormat)
+		SwapFirst := T_SWAPFIRST(info.InputFormat)
+		Extra := T_EXTRA(info.InputFormat)
+		ExtraFirst := DoSwap ^ SwapFirst
+		Planar := T_PLANAR(info.InputFormat)
+		Premul := T_PREMUL(info.InputFormat)
+		maximum := 1.0
+		if IsInkSpace(info.InputFormat) {
+			maximum = 100.0
+		}
+		alphaFactor := 1.0
+		var start uint32
+
+		Stride /= PixelSize(info.InputFormat)
+
+		ptr := (*[1 << 30]float64)(unsafe.Pointer(&accum[0]))[:len(accum)/8]
+
+		if Premul != 0 && Extra > 0 {
+			if Planar != 0 {
+				if ExtraFirst != 0 {
+					alphaFactor = ptr[0] / maximum
+				} else {
+					alphaFactor = ptr[nChan*Stride] / maximum
+				}
+			} else {
+				if ExtraFirst != 0 {
+					alphaFactor = ptr[0] / maximum
+				} else {
+					alphaFactor = ptr[nChan] / maximum
+				}
+			}
+		}
+
+		if ExtraFirst != 0 {
+			start = uint32(Extra)
+		}
+
+		for i := uint32(0); i < nChan; i++ {
+			index := i
+			if DoSwap != 0 {
+				index = nChan - i - 1
+			}
+
+			var v float64
+			if Planar != 0 {
+				v = ptr[(i+start)*Stride]
+			} else {
+				v = ptr[i+start]
+			}
+
+			if Premul != 0 && alphaFactor > 0 {
+				v /= alphaFactor
+			}
+
+			v /= maximum
+			wIn[index] = float32(ReverseFloat(float32(v), Reverse != 0))
+		}
+
+		if Extra == 0 && SwapFirst != 0 {
+			SwapFirstFloat(wIn, nChan)
+		}
+
+		if Planar != 0 {
+			return accum[8:]
+		}
+		return accum[(nChan+Extra)*8:]
+	}
+*/
 func UnrollDoublesToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
 	nChan := T_CHANNELS(info.InputFormat)
 	DoSwap := T_DOSWAP(info.InputFormat)
@@ -1038,26 +1230,31 @@ func UnrollDoublesToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stri
 
 	Stride /= PixelSize(info.InputFormat)
 
-	ptr := (*[1 << 30]float64)(unsafe.Pointer(&accum[0]))[:len(accum)/8]
+	getF64 := func(offset int) float64 {
+		if offset+8 > len(accum) {
+			return 0
+		}
+		return math.Float64frombits(binary.BigEndian.Uint64(accum[offset : offset+8]))
+	}
 
 	if Premul != 0 && Extra > 0 {
 		if Planar != 0 {
 			if ExtraFirst != 0 {
-				alphaFactor = ptr[0] / maximum
+				alphaFactor = getF64(0) / maximum
 			} else {
-				alphaFactor = ptr[nChan*Stride] / maximum
+				alphaFactor = getF64(int(nChan*Stride*8)) / maximum
 			}
 		} else {
 			if ExtraFirst != 0 {
-				alphaFactor = ptr[0] / maximum
+				alphaFactor = getF64(0) / maximum
 			} else {
-				alphaFactor = ptr[nChan] / maximum
+				alphaFactor = getF64(int(nChan*8)) / maximum
 			}
 		}
 	}
 
 	if ExtraFirst != 0 {
-		start = uint32(Extra)
+		start = Extra
 	}
 
 	for i := uint32(0); i < nChan; i++ {
@@ -1066,19 +1263,19 @@ func UnrollDoublesToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stri
 			index = nChan - i - 1
 		}
 
-		var v float64
+		var val float64
 		if Planar != 0 {
-			v = ptr[(i+start)*Stride]
+			val = getF64(int((i + start) * Stride * 8))
 		} else {
-			v = ptr[i+start]
+			val = getF64(int((i + start) * 8))
 		}
 
 		if Premul != 0 && alphaFactor > 0 {
-			v /= alphaFactor
+			val /= alphaFactor
 		}
 
-		v /= maximum
-		wIn[index] = float32(ReverseFloat(float32(v), Reverse != 0))
+		val /= maximum
+		wIn[index] = float32(ReverseFloat(float32(val), Reverse != 0))
 	}
 
 	if Extra == 0 && SwapFirst != 0 {
@@ -1088,80 +1285,193 @@ func UnrollDoublesToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stri
 	if Planar != 0 {
 		return accum[8:]
 	}
-	return accum[(nChan+Extra)*8:]
+	return accum[int((nChan+Extra)*8):]
 }
-func UnrollLabDoubleToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
-	ptr := (*[1 << 30]float64)(unsafe.Pointer(&accum[0]))[:len(accum)/8]
 
-	if T_PLANAR(info.InputFormat) != 0 {
-		Stride /= PixelSize(info.InputFormat)
-		wIn[0] = float32(ptr[0] / 100.0)                  // L: 0..100 to 0..1
-		wIn[1] = float32((ptr[Stride] + 128.0) / 255.0)   // a: -128..127 to 0..1
-		wIn[2] = float32((ptr[Stride*2] + 128.0) / 255.0) // b: -128..127 to 0..1
-		return accum[8:]
+/*
+	func UnrollLabDoubleToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+		ptr := (*[1 << 30]float64)(unsafe.Pointer(&accum[0]))[:len(accum)/8]
+
+		if T_PLANAR(info.InputFormat) != 0 {
+			Stride /= PixelSize(info.InputFormat)
+			wIn[0] = float32(ptr[0] / 100.0)                  // L: 0..100 to 0..1
+			wIn[1] = float32((ptr[Stride] + 128.0) / 255.0)   // a: -128..127 to 0..1
+			wIn[2] = float32((ptr[Stride*2] + 128.0) / 255.0) // b: -128..127 to 0..1
+			return accum[8:]
+		}
+
+		wIn[0] = float32(ptr[0] / 100.0)           // L: 0..100 to 0..1
+		wIn[1] = float32((ptr[1] + 128.0) / 255.0) // a: -128..127 to 0..1
+		wIn[2] = float32((ptr[2] + 128.0) / 255.0) // b: -128..127 to 0..1
+
+		return accum[(3+T_EXTRA(info.InputFormat))*8:]
+	}
+*/
+func UnrollLabDoubleToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
+	getF64 := func(offset int) float64 {
+		if offset+8 > len(accum) {
+			return 0.0
+		}
+		return math.Float64frombits(binary.BigEndian.Uint64(accum[offset : offset+8]))
 	}
 
-	wIn[0] = float32(ptr[0] / 100.0)           // L: 0..100 to 0..1
-	wIn[1] = float32((ptr[1] + 128.0) / 255.0) // a: -128..127 to 0..1
-	wIn[2] = float32((ptr[2] + 128.0) / 255.0) // b: -128..127 to 0..1
-
-	return accum[(3+T_EXTRA(info.InputFormat))*8:]
-}
-func UnrollLabFloatToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
-	ptr := (*[1 << 30]float32)(unsafe.Pointer(&accum[0]))[:len(accum)/4]
-
 	if T_PLANAR(info.InputFormat) != 0 {
-		Stride /= PixelSize(info.InputFormat)
-		wIn[0] = ptr[0] / 100.0                  // L: 0..100 to 0..1
-		wIn[1] = (ptr[Stride] + 128.0) / 255.0   // a: -128..127 to 0..1
-		wIn[2] = (ptr[Stride*2] + 128.0) / 255.0 // b: -128..127 to 0..1
-		return accum[4:]
-	}
+		stride /= PixelSize(info.InputFormat)
 
-	wIn[0] = ptr[0] / 100.0           // L: 0..100 to 0..1
-	wIn[1] = (ptr[1] + 128.0) / 255.0 // a: -128..127 to 0..1
-	wIn[2] = (ptr[2] + 128.0) / 255.0 // b: -128..127 to 0..1
-
-	return accum[(3+T_EXTRA(info.InputFormat))*4:]
-}
-func UnrollXYZDoubleToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
-	ptr := (*[1 << 30]float64)(unsafe.Pointer(&accum[0]))[:len(accum)/8]
-
-	if T_PLANAR(info.InputFormat) != 0 {
-		Stride /= PixelSize(info.InputFormat)
-
-		wIn[0] = float32(ptr[0] / MAX_ENCODEABLE_XYZ)
-		wIn[1] = float32(ptr[Stride] / MAX_ENCODEABLE_XYZ)
-		wIn[2] = float32(ptr[Stride*2] / MAX_ENCODEABLE_XYZ)
+		wIn[0] = float32(getF64(0) / 100.0)
+		wIn[1] = float32((getF64(int(stride*8)) + 128.0) / 255.0)
+		wIn[2] = float32((getF64(int(stride*2*8)) + 128.0) / 255.0)
 
 		return accum[8:]
 	}
 
-	wIn[0] = float32(ptr[0] / MAX_ENCODEABLE_XYZ)
-	wIn[1] = float32(ptr[1] / MAX_ENCODEABLE_XYZ)
-	wIn[2] = float32(ptr[2] / MAX_ENCODEABLE_XYZ)
+	wIn[0] = float32(getF64(0) / 100.0)
+	wIn[1] = float32((getF64(8) + 128.0) / 255.0)
+	wIn[2] = float32((getF64(16) + 128.0) / 255.0)
 
-	return accum[(3+T_EXTRA(info.InputFormat))*8:]
+	extra := T_EXTRA(info.InputFormat)
+	return accum[int((3+extra)*8):]
 }
-func UnrollXYZFloatToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
-	ptr := (*[1 << 30]float32)(unsafe.Pointer(&accum[0]))[:len(accum)/4]
+
+/*
+	func UnrollLabFloatToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+		ptr := (*[1 << 30]float32)(unsafe.Pointer(&accum[0]))[:len(accum)/4]
+
+		if T_PLANAR(info.InputFormat) != 0 {
+			Stride /= PixelSize(info.InputFormat)
+			wIn[0] = ptr[0] / 100.0                  // L: 0..100 to 0..1
+			wIn[1] = (ptr[Stride] + 128.0) / 255.0   // a: -128..127 to 0..1
+			wIn[2] = (ptr[Stride*2] + 128.0) / 255.0 // b: -128..127 to 0..1
+			return accum[4:]
+		}
+
+		wIn[0] = ptr[0] / 100.0           // L: 0..100 to 0..1
+		wIn[1] = (ptr[1] + 128.0) / 255.0 // a: -128..127 to 0..1
+		wIn[2] = (ptr[2] + 128.0) / 255.0 // b: -128..127 to 0..1
+
+		return accum[(3+T_EXTRA(info.InputFormat))*4:]
+	}
+*/
+func UnrollLabFloatToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
+	getF32 := func(offset int) float32 {
+		if offset+4 > len(accum) {
+			return 0.0
+		}
+		return math.Float32frombits(binary.BigEndian.Uint32(accum[offset : offset+4]))
+	}
 
 	if T_PLANAR(info.InputFormat) != 0 {
-		Stride /= PixelSize(info.InputFormat)
+		stride /= PixelSize(info.InputFormat)
 
-		wIn[0] = float32(ptr[0] / MAX_ENCODEABLE_XYZ)
-		wIn[1] = float32(ptr[Stride] / MAX_ENCODEABLE_XYZ)
-		wIn[2] = float32(ptr[Stride*2] / MAX_ENCODEABLE_XYZ)
+		wIn[0] = getF32(0) / 100.0
+		wIn[1] = (getF32(int(stride*4)) + 128.0) / 255.0
+		wIn[2] = (getF32(int(stride*2*4)) + 128.0) / 255.0
 
 		return accum[4:]
 	}
 
-	wIn[0] = float32(ptr[0] / MAX_ENCODEABLE_XYZ)
-	wIn[1] = float32(ptr[1] / MAX_ENCODEABLE_XYZ)
-	wIn[2] = float32(ptr[2] / MAX_ENCODEABLE_XYZ)
+	wIn[0] = getF32(0) / 100.0
+	wIn[1] = (getF32(4) + 128.0) / 255.0
+	wIn[2] = (getF32(8) + 128.0) / 255.0
 
-	return accum[(3+T_EXTRA(info.InputFormat))*4:]
+	extra := T_EXTRA(info.InputFormat)
+	return accum[int((3+extra)*4):]
 }
+
+/*
+	func UnrollXYZDoubleToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+		ptr := (*[1 << 30]float64)(unsafe.Pointer(&accum[0]))[:len(accum)/8]
+
+		if T_PLANAR(info.InputFormat) != 0 {
+			Stride /= PixelSize(info.InputFormat)
+
+			wIn[0] = float32(ptr[0] / MAX_ENCODEABLE_XYZ)
+			wIn[1] = float32(ptr[Stride] / MAX_ENCODEABLE_XYZ)
+			wIn[2] = float32(ptr[Stride*2] / MAX_ENCODEABLE_XYZ)
+
+			return accum[8:]
+		}
+
+		wIn[0] = float32(ptr[0] / MAX_ENCODEABLE_XYZ)
+		wIn[1] = float32(ptr[1] / MAX_ENCODEABLE_XYZ)
+		wIn[2] = float32(ptr[2] / MAX_ENCODEABLE_XYZ)
+
+		return accum[(3+T_EXTRA(info.InputFormat))*8:]
+	}
+*/
+func UnrollXYZDoubleToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
+	getF64 := func(offset int) float64 {
+		if offset+8 > len(accum) {
+			return 0.0
+		}
+		return math.Float64frombits(binary.BigEndian.Uint64(accum[offset : offset+8]))
+	}
+
+	if T_PLANAR(info.InputFormat) != 0 {
+		stride /= PixelSize(info.InputFormat)
+
+		wIn[0] = float32(getF64(0) / MAX_ENCODEABLE_XYZ)
+		wIn[1] = float32(getF64(int(stride*8)) / MAX_ENCODEABLE_XYZ)
+		wIn[2] = float32(getF64(int(stride*2*8)) / MAX_ENCODEABLE_XYZ)
+
+		return accum[8:]
+	}
+
+	wIn[0] = float32(getF64(0) / MAX_ENCODEABLE_XYZ)
+	wIn[1] = float32(getF64(8) / MAX_ENCODEABLE_XYZ)
+	wIn[2] = float32(getF64(16) / MAX_ENCODEABLE_XYZ)
+
+	extra := T_EXTRA(info.InputFormat)
+	return accum[int((3+extra)*8):]
+}
+
+/*
+	func UnrollXYZFloatToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+		ptr := (*[1 << 30]float32)(unsafe.Pointer(&accum[0]))[:len(accum)/4]
+
+		if T_PLANAR(info.InputFormat) != 0 {
+			Stride /= PixelSize(info.InputFormat)
+
+			wIn[0] = float32(ptr[0] / MAX_ENCODEABLE_XYZ)
+			wIn[1] = float32(ptr[Stride] / MAX_ENCODEABLE_XYZ)
+			wIn[2] = float32(ptr[Stride*2] / MAX_ENCODEABLE_XYZ)
+
+			return accum[4:]
+		}
+
+		wIn[0] = float32(ptr[0] / MAX_ENCODEABLE_XYZ)
+		wIn[1] = float32(ptr[1] / MAX_ENCODEABLE_XYZ)
+		wIn[2] = float32(ptr[2] / MAX_ENCODEABLE_XYZ)
+
+		return accum[(3+T_EXTRA(info.InputFormat))*4:]
+	}
+*/
+func UnrollXYZFloatToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
+	getF32 := func(offset int) float32 {
+		if offset+4 > len(accum) {
+			return 0.0
+		}
+		return math.Float32frombits(binary.BigEndian.Uint32(accum[offset : offset+4]))
+	}
+
+	if T_PLANAR(info.InputFormat) != 0 {
+		stride /= PixelSize(info.InputFormat)
+
+		wIn[0] = getF32(0) / MAX_ENCODEABLE_XYZ
+		wIn[1] = getF32(int(stride*4)) / MAX_ENCODEABLE_XYZ
+		wIn[2] = getF32(int(stride*2*4)) / MAX_ENCODEABLE_XYZ
+
+		return accum[4:]
+	}
+
+	wIn[0] = getF32(0) / MAX_ENCODEABLE_XYZ
+	wIn[1] = getF32(4) / MAX_ENCODEABLE_XYZ
+	wIn[2] = getF32(8) / MAX_ENCODEABLE_XYZ
+
+	extra := T_EXTRA(info.InputFormat)
+	return accum[int((3+extra)*4):]
+}
+
 func lab4toFloat(wIn []float32, lab4 [3]uint16) {
 	L := float32(lab4[0]) / 655.35
 	a := (float32(lab4[1]) / 257.0) - 128.0
@@ -1193,17 +1503,37 @@ func UnrollALabV2_8ToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Str
 
 	return accum[4:]
 }
-func UnrollLabV2_16ToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+
+/*
+	func UnrollLabV2_16ToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+		lab4 := [3]uint16{
+			FromLabV2ToLabV4(*(*uint16)(unsafe.Pointer(&accum[0]))),
+			FromLabV2ToLabV4(*(*uint16)(unsafe.Pointer(&accum[2]))),
+			FromLabV2ToLabV4(*(*uint16)(unsafe.Pointer(&accum[4]))),
+		}
+
+		lab4toFloat(wIn, lab4)
+
+		return accum[6:]
+	}
+*/
+func UnrollLabV2_16ToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
+	if len(accum) < 6 {
+		return accum // Not enough data
+	}
+
+	// Interpret input bytes as big-endian uint16 values
 	lab4 := [3]uint16{
-		FromLabV2ToLabV4(*(*uint16)(unsafe.Pointer(&accum[0]))),
-		FromLabV2ToLabV4(*(*uint16)(unsafe.Pointer(&accum[2]))),
-		FromLabV2ToLabV4(*(*uint16)(unsafe.Pointer(&accum[4]))),
+		FromLabV2ToLabV4(binary.BigEndian.Uint16(accum[0:2])),
+		FromLabV2ToLabV4(binary.BigEndian.Uint16(accum[2:4])),
+		FromLabV2ToLabV4(binary.BigEndian.Uint16(accum[4:6])),
 	}
 
 	lab4toFloat(wIn, lab4)
 
 	return accum[6:]
 }
+
 func PackChunkyBytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	nChan := T_CHANNELS(info.OutputFormat)
 	DoSwap := T_DOSWAP(info.OutputFormat)
@@ -1259,6 +1589,85 @@ func PackChunkyBytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride u
 	return output
 }
 func PackChunkyWords(info *cmsTRANSFORM, wOut []uint16, output []byte, stride uint32) []byte {
+	nChan := T_CHANNELS(info.OutputFormat)
+	swapEndian := T_ENDIAN16(info.OutputFormat)
+	doSwap := T_DOSWAP(info.OutputFormat)
+	reverse := T_FLAVOR(info.OutputFormat)
+	extra := T_EXTRA(info.OutputFormat)
+	swapFirst := T_SWAPFIRST(info.OutputFormat)
+	premul := T_PREMUL(info.OutputFormat)
+	extraFirst := doSwap ^ swapFirst
+
+	alphaFactor := uint32(0)
+
+	expectedWords := int(nChan + extra)
+	if len(output) < expectedWords*2 {
+		return output // Not enough space
+	}
+
+	// Create a temporary buffer to hold packed words before writing to byte slice
+	packed := make([]uint16, 0, expectedWords)
+
+	// Handle premultiplied alpha
+	if extraFirst != 0 {
+		if premul != 0 && extra != 0 {
+			alphaFactor = uint32(cmsToFixedDomain(int(wOut[0])))
+		}
+		wOut = wOut[extra:]
+	} else {
+		if premul != 0 && extra != 0 {
+			alphaFactor = uint32(cmsToFixedDomain(int(wOut[nChan])))
+		}
+	}
+
+	for i := uint32(0); i < nChan; i++ {
+		index := i
+		if doSwap != 0 {
+			index = nChan - i - 1
+		}
+
+		v := wOut[index]
+
+		if swapEndian != 0 {
+			v = CHANGE_ENDIAN(v)
+		}
+		if reverse != 0 {
+			v = REVERSE_FLAVOR_16(v)
+		}
+		if premul != 0 {
+			v = uint16((uint32(v)*alphaFactor + 0x8000) >> 16)
+		}
+
+		packed = append(packed, v)
+	}
+
+	// Add extra channels (alpha or others)
+	if extraFirst != 0 {
+		packed = append(packed, wOut[:extra]...)
+	} else {
+		packed = append(packed, wOut[nChan:nChan+extra]...)
+	}
+
+	// Swap first if needed and no extra channels
+	if extra == 0 && swapFirst != 0 {
+		// Rotate left, moving last to front
+		last := packed[nChan-1]
+		copy(packed[1:], packed[:nChan-1])
+		packed[0] = last
+	}
+
+	// Write packed uint16s to output []byte
+	for i := 0; i < len(packed); i++ {
+		if i*2+1 >= len(output) {
+			break
+		}
+		binary.BigEndian.PutUint16(output[i*2:], packed[i])
+	}
+
+	return output[:len(packed)*2]
+}
+
+/*func PackChunkyWords(info *cmsTRANSFORM, wOut []uint16, output []byte, stride uint32) []byte {
 	nChan := T_CHANNELS(info.OutputFormat)
 	swapEndian := T_ENDIAN16(info.OutputFormat)
 	doSwap := T_DOSWAP(info.OutputFormat)
@@ -1327,7 +1736,7 @@ func PackChunkyWords(info *cmsTRANSFORM, wOut []uint16, output []byte, stride ui
 	// Calculate bytes written
 	bytesWritten := len(output) - len(output16)*2
 	return output[:bytesWritten]
-}
+}*/
 
 func PackPlanarBytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	nChan := T_CHANNELS(info.OutputFormat)
@@ -1452,7 +1861,8 @@ func Pack6BytesSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride ui
 
 	return output[6:]
 }
-func Pack6Words(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+
+/*func Pack6Words(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	for i := 0; i < 6; i++ {
 		*(*uint16)(unsafe.Pointer(&output[i*2])) = wOut[i]
 	}
@@ -1463,7 +1873,31 @@ func Pack6WordsSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride ui
 		*(*uint16)(unsafe.Pointer(&output[i*2])) = wOut[5-i]
 	}
 	return output[12:]
+}*/
+
+func Pack6Words(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+	if len(output) < 12 || len(wOut) < 6 {
+		return output
+	}
+
+	for i := 0; i < 6; i++ {
+		binary.BigEndian.PutUint16(output[i*2:], wOut[i])
+	}
+
+	return output[12:]
 }
+func Pack6WordsSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+	if len(output) < 12 || len(wOut) < 6 {
+		return output
+	}
+
+	for i := 0; i < 6; i++ {
+		binary.BigEndian.PutUint16(output[i*2:], wOut[5-i])
+	}
+
+	return output[12:]
+}
+
 func Pack4Bytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	for i := 0; i < 4; i++ {
 		output[i] = FROM_16_TO_8(wOut[i])
@@ -1498,30 +1932,74 @@ func Pack4BytesSwapSwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, 
 
 	return output[4:]
 }
+
+/*
+	func Pack4Words(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		for i := 0; i < 4; i++ {
+			*(*uint16)(unsafe.Pointer(&output[i*2])) = wOut[i]
+		}
+		return output[8:]
+	}
+
+	func Pack4WordsReverse(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		for i := 0; i < 4; i++ {
+			*(*uint16)(unsafe.Pointer(&output[i*2])) = REVERSE_FLAVOR_16(wOut[i])
+		}
+		return output[8:]
+	}
+
+	func Pack4WordsSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		for i := 0; i < 4; i++ {
+			*(*uint16)(unsafe.Pointer(&output[i*2])) = wOut[3-i]
+		}
+		return output[8:]
+	}
+
+	func Pack4WordsBigEndian(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		for i := 0; i < 4; i++ {
+			*(*uint16)(unsafe.Pointer(&output[i*2])) = CHANGE_ENDIAN(wOut[i])
+		}
+		return output[8:]
+	}
+*/
 func Pack4Words(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+	if len(output) < 8 || len(wOut) < 4 {
+		return output
+	}
 	for i := 0; i < 4; i++ {
-		*(*uint16)(unsafe.Pointer(&output[i*2])) = wOut[i]
+		binary.LittleEndian.PutUint16(output[i*2:], wOut[i])
 	}
 	return output[8:]
 }
 func Pack4WordsReverse(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+	if len(output) < 8 || len(wOut) < 4 {
+		return output
+	}
 	for i := 0; i < 4; i++ {
-		*(*uint16)(unsafe.Pointer(&output[i*2])) = REVERSE_FLAVOR_16(wOut[i])
+		reversed := REVERSE_FLAVOR_16(wOut[i])
+		binary.LittleEndian.PutUint16(output[i*2:], reversed)
 	}
 	return output[8:]
 }
 func Pack4WordsSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+	if len(output) < 8 || len(wOut) < 4 {
+		return output
+	}
 	for i := 0; i < 4; i++ {
-		*(*uint16)(unsafe.Pointer(&output[i*2])) = wOut[3-i]
+		binary.LittleEndian.PutUint16(output[i*2:], wOut[3-i])
 	}
 	return output[8:]
 }
 func Pack4WordsBigEndian(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+	if len(output) < 8 || len(wOut) < 4 {
+		return output
+	}
 	for i := 0; i < 4; i++ {
-		*(*uint16)(unsafe.Pointer(&output[i*2])) = CHANGE_ENDIAN(wOut[i])
+		binary.BigEndian.PutUint16(output[i*2:], wOut[i])
 	}
 	return output[8:]
 }
+
 func PackLabV2_8(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = FROM_16_TO_8(FromLabV4ToLabV2(wOut[0]))
 	output[1] = FROM_16_TO_8(FromLabV4ToLabV2(wOut[1]))
@@ -1537,6 +2015,7 @@ func PackALabV2_8(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint
 
 	return output[4:]
 }
+
 /*func PackLabV2_16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	*(*uint16)(unsafe.Pointer(&output[0])) = FromLabV4ToLabV2(wOut[0])
 	*(*uint16)(unsafe.Pointer(&output[2])) = FromLabV4ToLabV2(wOut[1])
@@ -1579,27 +2058,60 @@ func Pack3BytesSwapOptimized(info *cmsTRANSFORM, wOut []uint16, output []uint8, 
 
 	return output[3:]
 }
-func Pack3Words(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
-	*(*uint16)(unsafe.Pointer(&output[0])) = wOut[0]
-	*(*uint16)(unsafe.Pointer(&output[2])) = wOut[1]
-	*(*uint16)(unsafe.Pointer(&output[4])) = wOut[2]
 
+/*
+	func Pack3Words(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		*(*uint16)(unsafe.Pointer(&output[0])) = wOut[0]
+		*(*uint16)(unsafe.Pointer(&output[2])) = wOut[1]
+		*(*uint16)(unsafe.Pointer(&output[4])) = wOut[2]
+
+		return output[6:]
+	}
+
+	func Pack3WordsSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		*(*uint16)(unsafe.Pointer(&output[0])) = wOut[2]
+		*(*uint16)(unsafe.Pointer(&output[2])) = wOut[1]
+		*(*uint16)(unsafe.Pointer(&output[4])) = wOut[0]
+
+		return output[6:]
+	}
+
+	func Pack3WordsBigEndian(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		*(*uint16)(unsafe.Pointer(&output[0])) = CHANGE_ENDIAN(wOut[0])
+		*(*uint16)(unsafe.Pointer(&output[2])) = CHANGE_ENDIAN(wOut[1])
+		*(*uint16)(unsafe.Pointer(&output[4])) = CHANGE_ENDIAN(wOut[2])
+
+		return output[6:]
+	}
+*/
+func Pack3Words(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+	if len(output) < 6 || len(wOut) < 3 {
+		return output
+	}
+	binary.LittleEndian.PutUint16(output[0:], wOut[0])
+	binary.LittleEndian.PutUint16(output[2:], wOut[1])
+	binary.LittleEndian.PutUint16(output[4:], wOut[2])
 	return output[6:]
 }
 func Pack3WordsSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
-	*(*uint16)(unsafe.Pointer(&output[0])) = wOut[2]
-	*(*uint16)(unsafe.Pointer(&output[2])) = wOut[1]
-	*(*uint16)(unsafe.Pointer(&output[4])) = wOut[0]
-
+	if len(output) < 6 || len(wOut) < 3 {
+		return output
+	}
+	binary.LittleEndian.PutUint16(output[0:], wOut[2])
+	binary.LittleEndian.PutUint16(output[2:], wOut[1])
+	binary.LittleEndian.PutUint16(output[4:], wOut[0])
 	return output[6:]
 }
 func Pack3WordsBigEndian(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
-	*(*uint16)(unsafe.Pointer(&output[0])) = CHANGE_ENDIAN(wOut[0])
-	*(*uint16)(unsafe.Pointer(&output[2])) = CHANGE_ENDIAN(wOut[1])
-	*(*uint16)(unsafe.Pointer(&output[4])) = CHANGE_ENDIAN(wOut[2])
-
+	if len(output) < 6 || len(wOut) < 3 {
+		return output
+	}
+	binary.BigEndian.PutUint16(output[0:], wOut[0])
+	binary.BigEndian.PutUint16(output[2:], wOut[1])
+	binary.BigEndian.PutUint16(output[4:], wOut[2])
 	return output[6:]
 }
+
 func Pack3BytesAndSkip1(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = FROM_16_TO_8(wOut[0])
 	output[1] = FROM_16_TO_8(wOut[1])
@@ -1648,39 +2160,85 @@ func Pack3BytesAndSkip1SwapOptimized(info *cmsTRANSFORM, wOut []uint16, output [
 
 	return output[4:]
 }
-func Pack3WordsAndSkip1(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
-	*(*uint16)(unsafe.Pointer(&output[0])) = wOut[0]
-	*(*uint16)(unsafe.Pointer(&output[2])) = wOut[1]
-	*(*uint16)(unsafe.Pointer(&output[4])) = wOut[2]
-	output = output[8:] // Skip 1 word (2 bytes)
 
-	return output
+/*
+	func Pack3WordsAndSkip1(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		*(*uint16)(unsafe.Pointer(&output[0])) = wOut[0]
+		*(*uint16)(unsafe.Pointer(&output[2])) = wOut[1]
+		*(*uint16)(unsafe.Pointer(&output[4])) = wOut[2]
+		output = output[8:] // Skip 1 word (2 bytes)
+
+		return output
+	}
+
+	func Pack3WordsAndSkip1Swap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		output = output[2:] // Skip 1 word (2 bytes)
+		*(*uint16)(unsafe.Pointer(&output[0])) = wOut[2]
+		*(*uint16)(unsafe.Pointer(&output[2])) = wOut[1]
+		*(*uint16)(unsafe.Pointer(&output[4])) = wOut[0]
+
+		return output[6:]
+	}
+
+	func Pack3WordsAndSkip1SwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		output = output[2:] // Skip first word
+		*(*uint16)(unsafe.Pointer(&output[0])) = wOut[0]
+		*(*uint16)(unsafe.Pointer(&output[2])) = wOut[1]
+		*(*uint16)(unsafe.Pointer(&output[4])) = wOut[2]
+
+		return output[6:]
+	}
+
+	func Pack3WordsAndSkip1SwapSwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		*(*uint16)(unsafe.Pointer(&output[0])) = wOut[2]
+		*(*uint16)(unsafe.Pointer(&output[2])) = wOut[1]
+		*(*uint16)(unsafe.Pointer(&output[4])) = wOut[0]
+		output = output[8:] // Skip 1 word after swapping
+
+		return output
+	}
+*/
+func Pack3WordsAndSkip1(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+	if len(output) < 8 || len(wOut) < 3 {
+		return output
+	}
+	binary.LittleEndian.PutUint16(output[0:], wOut[0])
+	binary.LittleEndian.PutUint16(output[2:], wOut[1])
+	binary.LittleEndian.PutUint16(output[4:], wOut[2])
+	return output[8:] // skip 1 word
 }
 func Pack3WordsAndSkip1Swap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
-	output = output[2:] // Skip 1 word (2 bytes)
-	*(*uint16)(unsafe.Pointer(&output[0])) = wOut[2]
-	*(*uint16)(unsafe.Pointer(&output[2])) = wOut[1]
-	*(*uint16)(unsafe.Pointer(&output[4])) = wOut[0]
+	if len(output) < 8 || len(wOut) < 3 {
+		return output
+	}
+	output = output[2:] // skip 1 word
 
+	binary.LittleEndian.PutUint16(output[0:], wOut[2])
+	binary.LittleEndian.PutUint16(output[2:], wOut[1])
+	binary.LittleEndian.PutUint16(output[4:], wOut[0])
 	return output[6:]
 }
 func Pack3WordsAndSkip1SwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
-	output = output[2:] // Skip first word
-	*(*uint16)(unsafe.Pointer(&output[0])) = wOut[0]
-	*(*uint16)(unsafe.Pointer(&output[2])) = wOut[1]
-	*(*uint16)(unsafe.Pointer(&output[4])) = wOut[2]
+	if len(output) < 8 || len(wOut) < 3 {
+		return output
+	}
+	output = output[2:] // skip 1 word
 
+	binary.LittleEndian.PutUint16(output[0:], wOut[0])
+	binary.LittleEndian.PutUint16(output[2:], wOut[1])
+	binary.LittleEndian.PutUint16(output[4:], wOut[2])
 	return output[6:]
 }
-
 func Pack3WordsAndSkip1SwapSwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
-	*(*uint16)(unsafe.Pointer(&output[0])) = wOut[2]
-	*(*uint16)(unsafe.Pointer(&output[2])) = wOut[1]
-	*(*uint16)(unsafe.Pointer(&output[4])) = wOut[0]
-	output = output[8:] // Skip 1 word after swapping
-
-	return output
+	if len(output) < 8 || len(wOut) < 3 {
+		return output
+	}
+	binary.LittleEndian.PutUint16(output[0:], wOut[2])
+	binary.LittleEndian.PutUint16(output[2:], wOut[1])
+	binary.LittleEndian.PutUint16(output[4:], wOut[0])
+	return output[8:] // skip 1 word after writing
 }
+
 func Pack3BytesAndSkip1SwapSwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
 	output[0] = uint8(wOut[2] >> 8) // FROM_16_TO_8 in the C code.
 	output[1] = uint8(wOut[1] >> 8) // FROM_16_TO_8 in the C code.
@@ -1717,32 +2275,78 @@ func Pack1ByteSkip1SwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, 
 	output[1] = FROM_16_TO_8(wOut[0]) // Skip the first byte
 	return output[2:]
 }
+
+/*
+	func Pack1Word(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		*(*uint16)(unsafe.Pointer(&output[0])) = wOut[0]
+		return output[2:]
+	}
+
+	func Pack1WordReversed(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		*(*uint16)(unsafe.Pointer(&output[0])) = REVERSE_FLAVOR_16(wOut[0])
+		return output[2:]
+	}
+
+	func Pack1WordBigEndian(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		*(*uint16)(unsafe.Pointer(&output[0])) = CHANGE_ENDIAN(wOut[0])
+		return output[2:]
+	}
+
+	func Pack1WordSkip1(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		*(*uint16)(unsafe.Pointer(&output[0])) = wOut[0]
+		return output[4:] // Skip 2 bytes (1 word)
+	}
+
+	func Pack1WordSkip1SwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		output = output[2:] // Skip 2 bytes (1 word)
+		*(*uint16)(unsafe.Pointer(&output[0])) = wOut[0]
+		return output[2:]
+	}
+*/
 func Pack1Word(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
-	*(*uint16)(unsafe.Pointer(&output[0])) = wOut[0]
+	if len(output) < 2 || len(wOut) < 1 {
+		return output
+	}
+	binary.LittleEndian.PutUint16(output, wOut[0])
 	return output[2:]
 }
 func Pack1WordReversed(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
-	*(*uint16)(unsafe.Pointer(&output[0])) = REVERSE_FLAVOR_16(wOut[0])
+	if len(output) < 2 || len(wOut) < 1 {
+		return output
+	}
+	v := REVERSE_FLAVOR_16(wOut[0])
+	binary.LittleEndian.PutUint16(output, v)
 	return output[2:]
 }
 func Pack1WordBigEndian(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
-	*(*uint16)(unsafe.Pointer(&output[0])) = CHANGE_ENDIAN(wOut[0])
+	if len(output) < 2 || len(wOut) < 1 {
+		return output
+	}
+	v := CHANGE_ENDIAN(wOut[0])
+	binary.LittleEndian.PutUint16(output, v)
 	return output[2:]
 }
 func Pack1WordSkip1(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
-	*(*uint16)(unsafe.Pointer(&output[0])) = wOut[0]
-	return output[4:] // Skip 2 bytes (1 word)
+	if len(output) < 4 || len(wOut) < 1 {
+		return output
+	}
+	binary.LittleEndian.PutUint16(output, wOut[0])
+	return output[4:]
 }
 func Pack1WordSkip1SwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
-	output = output[2:] // Skip 2 bytes (1 word)
-	*(*uint16)(unsafe.Pointer(&output[0])) = wOut[0]
+	if len(output) < 4 || len(wOut) < 1 {
+		return output
+	}
+	output = output[2:]
+	binary.LittleEndian.PutUint16(output, wOut[0])
 	return output[2:]
 }
-func PackLabDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+
+/*func PackLabDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
 	if T_PLANAR(info.OutputFormat) != 0 {
 		// Planar format
 		var lab cmsCIELab
-		cmsLabEncoded2Float(&lab, *(*[3]uint16)(wOut))
+		cmsLabEncoded2Float(&lab, (*[3]uint16)(wOut))
 
 		// Convert output to a []float64 equivalent using unsafe
 		outPtr := (*[3]float64)(unsafe.Pointer(&output[0])) // Assuming sufficient space in output
@@ -1755,7 +2359,7 @@ func PackLabDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stri
 	} else {
 		// Interleaved format
 		var lab cmsCIELab
-		cmsLabEncoded2Float(&lab, *(*[3]uint16)(wOut))
+		cmsLabEncoded2Float(&lab, (*[3]uint16)(wOut))
 
 		// Write directly into the output slice
 		outPtr := (*[3]float64)(unsafe.Pointer(&output[0])) // Assuming sufficient space in output
@@ -1771,7 +2375,7 @@ func PackLabDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stri
 
 func PackLabFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	var Lab cmsCIELab
-	cmsLabEncoded2Float(&Lab, *(*[3]uint16)(wOut))
+	cmsLabEncoded2Float(&Lab, (*[3]uint16)(wOut))
 
 	if T_PLANAR(info.OutputFormat) != 0 {
 		//out := (*float32)(unsafe.Pointer(&output[0]))
@@ -1796,7 +2400,7 @@ func PackLabFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Strid
 func PackXYZDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	if T_PLANAR(info.OutputFormat) != 0 {
 		var XYZ cmsCIEXYZ
-		cmsXYZEncoded2Float(&XYZ, *(*[3]uint16)(wOut))
+		cmsXYZEncoded2Float(&XYZ, (*[3]uint16)(wOut))
 
 		out := (*[3]float64)(unsafe.Pointer(&output[0]))
 		Stride /= PixelSize(info.OutputFormat)
@@ -1807,14 +2411,14 @@ func PackXYZDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stri
 
 		return output[8:] // sizeof(float64)
 	} else {
-		cmsXYZEncoded2Float((*cmsCIEXYZ)(unsafe.Pointer(&output[0])), *(*[3]uint16)(wOut))
+		cmsXYZEncoded2Float((*cmsCIEXYZ)(unsafe.Pointer(&output[0])), (*[3]uint16)(wOut))
 		return output[8+(T_EXTRA(info.OutputFormat)*8):] // sizeof(cmsCIEXYZ) + Extra
 	}
 }
 func PackXYZFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	if T_PLANAR(info.OutputFormat) != 0 {
 		var XYZ cmsCIEXYZ
-		cmsXYZEncoded2Float(&XYZ, *(*[3]uint16)(wOut))
+		cmsXYZEncoded2Float(&XYZ, (*[3]uint16)(wOut))
 
 		out := (*[3]float32)(unsafe.Pointer(&output[0]))
 		Stride /= PixelSize(info.OutputFormat)
@@ -1827,7 +2431,7 @@ func PackXYZFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Strid
 	} else {
 		var XYZ cmsCIEXYZ
 		out := (*[3]float32)(unsafe.Pointer(&output[0]))
-		cmsXYZEncoded2Float(&XYZ, *(*[3]uint16)(wOut))
+		cmsXYZEncoded2Float(&XYZ, (*[3]uint16)(wOut))
 
 		out[0] = float32(XYZ.X)
 		out[1] = float32(XYZ.Y)
@@ -1835,6 +2439,87 @@ func PackXYZFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Strid
 
 		return output[12+(T_EXTRA(info.OutputFormat)*4):] // 3 * sizeof(float32) + Extra
 	}
+}*/
+
+func PackLabDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+	var lab cmsCIELab
+	cmsLabEncoded2Float(&lab, &[3]uint16{wOut[0], wOut[1], wOut[2]})
+
+	if T_PLANAR(info.OutputFormat) != 0 {
+		stride /= PixelSize(info.OutputFormat)
+
+		binary.LittleEndian.PutUint64(output[0:], math.Float64bits(lab.L))
+		binary.LittleEndian.PutUint64(output[stride*8:], math.Float64bits(lab.a))
+		binary.LittleEndian.PutUint64(output[stride*16:], math.Float64bits(lab.b))
+
+		return output[8:]
+	}
+
+	binary.LittleEndian.PutUint64(output[0:], math.Float64bits(lab.L))
+	binary.LittleEndian.PutUint64(output[8:], math.Float64bits(lab.a))
+	binary.LittleEndian.PutUint64(output[16:], math.Float64bits(lab.b))
+
+	return output[24+(T_EXTRA(info.OutputFormat)*8):]
+}
+func PackLabFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+	var lab cmsCIELab
+	cmsLabEncoded2Float(&lab, &[3]uint16{wOut[0], wOut[1], wOut[2]})
+
+	if T_PLANAR(info.OutputFormat) != 0 {
+		stride /= PixelSize(info.OutputFormat)
+
+		binary.LittleEndian.PutUint32(output[0:], math.Float32bits(float32(lab.L)))
+		binary.LittleEndian.PutUint32(output[stride*4:], math.Float32bits(float32(lab.a)))
+		binary.LittleEndian.PutUint32(output[stride*8:], math.Float32bits(float32(lab.b)))
+
+		return output[4:]
+	}
+
+	binary.LittleEndian.PutUint32(output[0:], math.Float32bits(float32(lab.L)))
+	binary.LittleEndian.PutUint32(output[4:], math.Float32bits(float32(lab.a)))
+	binary.LittleEndian.PutUint32(output[8:], math.Float32bits(float32(lab.b)))
+
+	return output[12+(T_EXTRA(info.OutputFormat)*4):]
+}
+func PackXYZDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+	var xyz cmsCIEXYZ
+	cmsXYZEncoded2Float(&xyz, &[3]uint16{wOut[0], wOut[1], wOut[2]})
+
+	if T_PLANAR(info.OutputFormat) != 0 {
+		stride /= PixelSize(info.OutputFormat)
+
+		binary.LittleEndian.PutUint64(output[0:], math.Float64bits(xyz.X))
+		binary.LittleEndian.PutUint64(output[stride*8:], math.Float64bits(xyz.Y))
+		binary.LittleEndian.PutUint64(output[stride*16:], math.Float64bits(xyz.Z))
+
+		return output[8:]
+	}
+
+	binary.LittleEndian.PutUint64(output[0:], math.Float64bits(xyz.X))
+	binary.LittleEndian.PutUint64(output[8:], math.Float64bits(xyz.Y))
+	binary.LittleEndian.PutUint64(output[16:], math.Float64bits(xyz.Z))
+
+	return output[24+(T_EXTRA(info.OutputFormat)*8):]
+}
+func PackXYZFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+	var xyz cmsCIEXYZ
+	cmsXYZEncoded2Float(&xyz, &[3]uint16{wOut[0], wOut[1], wOut[2]})
+
+	if T_PLANAR(info.OutputFormat) != 0 {
+		stride /= PixelSize(info.OutputFormat)
+
+		binary.LittleEndian.PutUint32(output[0:], math.Float32bits(float32(xyz.X)))
+		binary.LittleEndian.PutUint32(output[stride*4:], math.Float32bits(float32(xyz.Y)))
+		binary.LittleEndian.PutUint32(output[stride*8:], math.Float32bits(float32(xyz.Z)))
+
+		return output[4:]
+	}
+
+	binary.LittleEndian.PutUint32(output[0:], math.Float32bits(float32(xyz.X)))
+	binary.LittleEndian.PutUint32(output[4:], math.Float32bits(float32(xyz.Y)))
+	binary.LittleEndian.PutUint32(output[8:], math.Float32bits(float32(xyz.Z)))
+
+	return output[12+(T_EXTRA(info.OutputFormat)*4):]
 }
 
 func PackDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
@@ -1845,51 +2530,56 @@ func PackDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride 
 	SwapFirst := T_SWAPFIRST(info.OutputFormat)
 	Planar := T_PLANAR(info.OutputFormat)
 	ExtraFirst := DoSwap ^ SwapFirst
-	var maximum float64 = 65535.0
+
+	maximum := 65535.0
 	if IsInkSpace(info.OutputFormat) {
 		maximum = 655.35
 	}
-	var v float64
-	outputFloats := (*[1 << 30]float64)(unsafe.Pointer(&output[0]))[:len(output)/8]
-	var start uint32
 
-	Stride /= PixelSize(info.OutputFormat)
-
+	start := uint32(0)
 	if ExtraFirst != 0 {
 		start = Extra
 	}
 
+	Stride /= PixelSize(info.OutputFormat)
+	//offset := 0
+	var v float64
+	size := 8 // float64 size in bytes
+
+	buf := make([]float64, (int(nChan)+int(Extra))*int(Stride)+1)
+
 	for i := uint32(0); i < nChan; i++ {
-		var index uint32
+		index := i
 		if DoSwap != 0 {
 			index = nChan - i - 1
-		} else {
-			index = i
 		}
 
 		v = float64(wOut[index]) / maximum
-
 		if Reverse != 0 {
 			v = maximum - v
 		}
 
 		if Planar != 0 {
-			outputFloats[(i+start)*Stride] = v
+			buf[(i+start)*Stride] = v
 		} else {
-			outputFloats[i+start] = v
+			buf[i+start] = v
 		}
 	}
 
 	if Extra == 0 && SwapFirst != 0 {
-		copy(outputFloats[1:], outputFloats[:nChan-1])
-		outputFloats[0] = v
+		copy(buf[1:], buf[:nChan-1])
+		buf[0] = v
+	}
+
+	b := bytes.NewBuffer(output[:0])
+	for i := 0; i < (int(nChan) + int(Extra)); i++ {
+		_ = binary.Write(b, binary.LittleEndian, buf[i])
 	}
 
 	if Planar != 0 {
-		return output[8:] // sizeof(float64)
-	} else {
-		return output[(nChan+Extra)*8:]
+		return output[size:]
 	}
+	return output[(nChan+Extra)*uint32(size):]
 }
 func PackFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	nChan := T_CHANNELS(info.OutputFormat)
@@ -1899,51 +2589,56 @@ func PackFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride u
 	SwapFirst := T_SWAPFIRST(info.OutputFormat)
 	Planar := T_PLANAR(info.OutputFormat)
 	ExtraFirst := DoSwap ^ SwapFirst
-	var maximum float64 = 65535.0
+
+	maximum := 65535.0
 	if IsInkSpace(info.OutputFormat) {
 		maximum = 655.35
 	}
-	var v float64
-	outputFloats := (*[1 << 30]float32)(unsafe.Pointer(&output[0]))[:len(output)/4]
-	var start uint32
 
-	Stride /= PixelSize(info.OutputFormat)
-
+	start := uint32(0)
 	if ExtraFirst != 0 {
 		start = Extra
 	}
 
+	Stride /= PixelSize(info.OutputFormat)
+	//offset := 0
+	var v float64
+	size := 4 // float32 size in bytes
+
+	buf := make([]float32, (int(nChan)+int(Extra))*int(Stride)+1)
+
 	for i := uint32(0); i < nChan; i++ {
-		var index uint32
+		index := i
 		if DoSwap != 0 {
 			index = nChan - i - 1
-		} else {
-			index = i
 		}
 
 		v = float64(wOut[index]) / maximum
-
 		if Reverse != 0 {
 			v = maximum - v
 		}
 
 		if Planar != 0 {
-			outputFloats[(i+start)*Stride] = float32(v)
+			buf[(i+start)*Stride] = float32(v)
 		} else {
-			outputFloats[i+start] = float32(v)
+			buf[i+start] = float32(v)
 		}
 	}
 
 	if Extra == 0 && SwapFirst != 0 {
-		copy(outputFloats[1:], outputFloats[:nChan-1])
-		outputFloats[0] = float32(v)
+		copy(buf[1:], buf[:nChan-1])
+		buf[0] = float32(v)
+	}
+
+	b := bytes.NewBuffer(output[:0])
+	for i := 0; i < (int(nChan) + int(Extra)); i++ {
+		_ = binary.Write(b, binary.LittleEndian, buf[i])
 	}
 
 	if Planar != 0 {
-		return output[4:] // sizeof(float32)
-	} else {
-		return output[(nChan+Extra)*4:]
+		return output[size:]
 	}
+	return output[(nChan+Extra)*uint32(size):]
 }
 func PackFloatsFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
 	nChan := T_CHANNELS(info.OutputFormat)
@@ -1953,51 +2648,54 @@ func PackFloatsFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Str
 	SwapFirst := T_SWAPFIRST(info.OutputFormat)
 	Planar := T_PLANAR(info.OutputFormat)
 	ExtraFirst := DoSwap ^ SwapFirst
+
 	maximum := float64(1.0)
 	if IsInkSpace(info.OutputFormat) {
 		maximum = 100.0
 	}
-	outputFloats := (*[1 << 30]float32)(unsafe.Pointer(&output[0]))[:len(output)/4]
-	var v float64
-	var start uint32
 
-	Stride /= PixelSize(info.OutputFormat)
-
+	start := uint32(0)
 	if ExtraFirst != 0 {
 		start = Extra
 	}
 
+	Stride /= PixelSize(info.OutputFormat)
+	size := 4 // float32
+
+	buf := make([]float32, (int(nChan)+int(Extra))*int(Stride)+1)
+
 	for i := uint32(0); i < nChan; i++ {
-		var index uint32
+		index := i
 		if DoSwap != 0 {
 			index = nChan - i - 1
-		} else {
-			index = i
 		}
 
-		v = float64(wOut[index]) * maximum
-
+		v := float64(wOut[index]) * maximum
 		if Reverse != 0 {
 			v = maximum - v
 		}
 
 		if Planar != 0 {
-			outputFloats[(i+start)*Stride] = float32(v)
+			buf[(i+start)*Stride] = float32(v)
 		} else {
-			outputFloats[i+start] = float32(v)
+			buf[i+start] = float32(v)
 		}
 	}
 
 	if Extra == 0 && SwapFirst != 0 {
-		copy(outputFloats[1:], outputFloats[:nChan-1])
-		outputFloats[0] = float32(v)
+		copy(buf[1:], buf[:nChan-1])
+		buf[0] = float32(buf[nChan-1])
+	}
+
+	b := bytes.NewBuffer(output[:0])
+	for i := 0; i < (int(nChan) + int(Extra)); i++ {
+		_ = binary.Write(b, binary.LittleEndian, buf[i])
 	}
 
 	if Planar != 0 {
-		return output[4:]
-	} else {
-		return output[(nChan+Extra)*4:]
+		return output[size:]
 	}
+	return output[(nChan+Extra)*uint32(size):]
 }
 func PackDoublesFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
 	nChan := T_CHANNELS(info.OutputFormat)
@@ -2007,349 +2705,575 @@ func PackDoublesFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, St
 	SwapFirst := T_SWAPFIRST(info.OutputFormat)
 	Planar := T_PLANAR(info.OutputFormat)
 	ExtraFirst := DoSwap ^ SwapFirst
+
 	maximum := float64(1.0)
 	if IsInkSpace(info.OutputFormat) {
 		maximum = 100.0
 	}
-	outputFloats := (*[1 << 30]float64)(unsafe.Pointer(&output[0]))[:len(output)/8]
-	var v float64
-	var start uint32
 
-	Stride /= PixelSize(info.OutputFormat)
-
+	start := uint32(0)
 	if ExtraFirst != 0 {
 		start = Extra
 	}
 
+	Stride /= PixelSize(info.OutputFormat)
+	size := 8 // float64
+
+	buf := make([]float64, (int(nChan)+int(Extra))*int(Stride)+1)
+
 	for i := uint32(0); i < nChan; i++ {
-		var index uint32
+		index := i
 		if DoSwap != 0 {
 			index = nChan - i - 1
-		} else {
-			index = i
 		}
 
-		v = float64(wOut[index]) * maximum
-
+		v := float64(wOut[index]) * maximum
 		if Reverse != 0 {
 			v = maximum - v
 		}
 
 		if Planar != 0 {
-			outputFloats[(i+start)*Stride] = v
+			buf[(i+start)*Stride] = v
 		} else {
-			outputFloats[i+start] = v
+			buf[i+start] = v
 		}
 	}
 
 	if Extra == 0 && SwapFirst != 0 {
-		copy(outputFloats[1:], outputFloats[:nChan-1])
-		outputFloats[0] = v
+		copy(buf[1:], buf[:nChan-1])
+		buf[0] = buf[nChan-1]
+	}
+
+	b := bytes.NewBuffer(output[:0])
+	for i := 0; i < (int(nChan) + int(Extra)); i++ {
+		_ = binary.Write(b, binary.LittleEndian, buf[i])
 	}
 
 	if Planar != 0 {
-		return output[8:]
-	} else {
-		return output[(nChan+Extra)*8:]
+		return output[size:]
 	}
+	return output[(nChan+Extra)*uint32(size):]
 }
 func PackLabFloatFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
+	L := wOut[0] * 100.0
+	a := wOut[1]*255.0 - 128.0
+	b := wOut[2]*255.0 - 128.0
+
+	buf := bytes.NewBuffer(output[:0])
 	if T_PLANAR(info.OutputFormat) != 0 {
-		out := (*[1 << 30]float32)(unsafe.Pointer(&output[0]))[:len(output)/4]
 		Stride /= PixelSize(info.OutputFormat)
 
-		out[0] = wOut[0] * 100.0
-		out[Stride] = wOut[1]*255.0 - 128.0
-		out[Stride*2] = wOut[2]*255.0 - 128.0
+		labBuf := make([]float32, 3*Stride)
+		labBuf[0] = L
+		labBuf[Stride] = a
+		labBuf[Stride*2] = b
 
+		_ = binary.Write(buf, binary.LittleEndian, labBuf[0])
 		return output[4:]
 	} else {
-		out := (*[3]float32)(unsafe.Pointer(&output[0]))
-		out[0] = wOut[0] * 100.0
-		out[1] = wOut[1]*255.0 - 128.0
-		out[2] = wOut[2]*255.0 - 128.0
+		_ = binary.Write(buf, binary.LittleEndian, float32(L))
+		_ = binary.Write(buf, binary.LittleEndian, float32(a))
+		_ = binary.Write(buf, binary.LittleEndian, float32(b))
 
 		return output[12+(T_EXTRA(info.OutputFormat)*4):]
 	}
 }
 func PackLabDoubleFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
+	L := float64(wOut[0] * 100.0)
+	a := float64(wOut[1]*255.0 - 128.0)
+	b := float64(wOut[2]*255.0 - 128.0)
+
+	buf := bytes.NewBuffer(output[:0])
 	if T_PLANAR(info.OutputFormat) != 0 {
-		out := (*[1 << 30]float64)(unsafe.Pointer(&output[0]))[:len(output)/8]
 		Stride /= PixelSize(info.OutputFormat)
 
-		out[0] = float64(wOut[0] * 100.0)
-		out[Stride] = float64(wOut[1]*255.0 - 128.0)
-		out[Stride*2] = float64(wOut[2]*255.0 - 128.0)
+		labBuf := make([]float64, 3*Stride)
+		labBuf[0] = L
+		labBuf[Stride] = a
+		labBuf[Stride*2] = b
 
+		_ = binary.Write(buf, binary.LittleEndian, labBuf[0])
 		return output[8:]
 	} else {
-		out := (*[3]float64)(unsafe.Pointer(&output[0]))
-		out[0] = float64(wOut[0] * 100.0)
-		out[1] = float64(wOut[1]*255.0 - 128.0)
-		out[2] = float64(wOut[2]*255.0 - 128.0)
+		_ = binary.Write(buf, binary.LittleEndian, L)
+		_ = binary.Write(buf, binary.LittleEndian, a)
+		_ = binary.Write(buf, binary.LittleEndian, b)
 
 		return output[24+(T_EXTRA(info.OutputFormat)*8):]
 	}
 }
 func PackXYZFloatFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
+	X := wOut[0] * MAX_ENCODEABLE_XYZ
+	Y := wOut[1] * MAX_ENCODEABLE_XYZ
+	Z := wOut[2] * MAX_ENCODEABLE_XYZ
+
+	buf := bytes.NewBuffer(output[:0])
 	if T_PLANAR(info.OutputFormat) != 0 {
-		out := (*[1 << 30]float32)(unsafe.Pointer(&output[0]))[:len(output)/4]
 		Stride /= PixelSize(info.OutputFormat)
 
-		out[0] = wOut[0] * MAX_ENCODEABLE_XYZ
-		out[Stride] = wOut[1] * MAX_ENCODEABLE_XYZ
-		out[Stride*2] = wOut[2] * MAX_ENCODEABLE_XYZ
+		xyzBuf := make([]float32, 3*Stride)
+		xyzBuf[0] = X
+		xyzBuf[Stride] = Y
+		xyzBuf[Stride*2] = Z
 
+		_ = binary.Write(buf, binary.LittleEndian, xyzBuf[0])
 		return output[4:]
 	} else {
-		out := (*[3]float32)(unsafe.Pointer(&output[0]))
-		out[0] = wOut[0] * MAX_ENCODEABLE_XYZ
-		out[1] = wOut[1] * MAX_ENCODEABLE_XYZ
-		out[2] = wOut[2] * MAX_ENCODEABLE_XYZ
+		_ = binary.Write(buf, binary.LittleEndian, float32(X))
+		_ = binary.Write(buf, binary.LittleEndian, float32(Y))
+		_ = binary.Write(buf, binary.LittleEndian, float32(Z))
 
 		return output[12+(T_EXTRA(info.OutputFormat)*4):]
 	}
 }
 func PackXYZDoubleFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
+	X := float64(wOut[0]) * MAX_ENCODEABLE_XYZ
+	Y := float64(wOut[1]) * MAX_ENCODEABLE_XYZ
+	Z := float64(wOut[2]) * MAX_ENCODEABLE_XYZ
+
+	buf := bytes.NewBuffer(output[:0])
 	if T_PLANAR(info.OutputFormat) != 0 {
-		out := (*[1 << 30]float64)(unsafe.Pointer(&output[0]))[:len(output)/8]
 		Stride /= PixelSize(info.OutputFormat)
 
-		out[0] = float64(wOut[0] * MAX_ENCODEABLE_XYZ)
-		out[Stride] = float64(wOut[1] * MAX_ENCODEABLE_XYZ)
-		out[Stride*2] = float64(wOut[2] * MAX_ENCODEABLE_XYZ)
+		xyzBuf := make([]float64, 3*Stride)
+		xyzBuf[0] = X
+		xyzBuf[Stride] = Y
+		xyzBuf[Stride*2] = Z
 
+		_ = binary.Write(buf, binary.LittleEndian, xyzBuf[0])
 		return output[8:]
 	} else {
-		out := (*[3]float64)(unsafe.Pointer(&output[0]))
-		out[0] = float64(wOut[0] * MAX_ENCODEABLE_XYZ)
-		out[1] = float64(wOut[1] * MAX_ENCODEABLE_XYZ)
-		out[2] = float64(wOut[2] * MAX_ENCODEABLE_XYZ)
+		_ = binary.Write(buf, binary.LittleEndian, X)
+		_ = binary.Write(buf, binary.LittleEndian, Y)
+		_ = binary.Write(buf, binary.LittleEndian, Z)
 
 		return output[24+(T_EXTRA(info.OutputFormat)*8):]
 	}
 }
-func UnrollHalfTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, Stride uint32) []uint8 {
+
+/*
+	func UnrollHalfTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, Stride uint32) []uint8 {
+		nChan := T_CHANNELS(info.InputFormat)
+		DoSwap := T_DOSWAP(info.InputFormat)
+		Reverse := T_FLAVOR(info.InputFormat)
+		SwapFirst := T_SWAPFIRST(info.InputFormat)
+		Extra := T_EXTRA(info.InputFormat)
+		ExtraFirst := DoSwap ^ SwapFirst
+		Planar := T_PLANAR(info.InputFormat)
+		var start uint32
+		var v float32
+		var maximum float32 = 65535.0
+		if IsInkSpace(info.InputFormat) {
+			maximum = 655.35
+		}
+
+		accumHalf := (*[1 << 30]uint16)(unsafe.Pointer(&accum[0]))[:len(accum)/2]
+
+		Stride /= PixelSize(info.InputFormat)
+
+		if ExtraFirst != 0 {
+			start = Extra
+		}
+
+		for i := uint32(0); i < nChan; i++ {
+			var index uint32
+			if DoSwap != 0 {
+				index = nChan - i - 1
+			} else {
+				index = i
+			}
+
+			if Planar != 0 {
+				v = cmsHalf2Float(accumHalf[(i+start)*Stride])
+			} else {
+				v = cmsHalf2Float(accumHalf[i+start])
+			}
+
+			if Reverse != 0 {
+				v = maximum - v
+			}
+
+			wIn[index] = cmsQuickSaturateWord(float64(v * maximum))
+		}
+
+		if Extra == 0 && SwapFirst != 0 {
+			tmp := wIn[0]
+			copy(wIn[0:], wIn[1:])
+			wIn[nChan-1] = tmp
+		}
+
+		if Planar != 0 {
+			return accum[2:] // sizeof(uint16)
+		} else {
+			return accum[(nChan+Extra)*2:]
+		}
+	}
+
+	func UnrollHalfToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+		nChan := T_CHANNELS(info.InputFormat)
+		DoSwap := T_DOSWAP(info.InputFormat)
+		Reverse := T_FLAVOR(info.InputFormat)
+		SwapFirst := T_SWAPFIRST(info.InputFormat)
+		Extra := T_EXTRA(info.InputFormat)
+		ExtraFirst := DoSwap ^ SwapFirst
+		Planar := T_PLANAR(info.InputFormat)
+		var start uint32
+		var v float32
+		var maximum float32 = 1.0
+		if IsInkSpace(info.InputFormat) {
+			maximum = 100.0
+		}
+
+		accumHalf := (*[1 << 30]uint16)(unsafe.Pointer(&accum[0]))[:len(accum)/2]
+
+		Stride /= PixelSize(info.InputFormat)
+
+		if ExtraFirst != 0 {
+			start = Extra
+		}
+
+		for i := uint32(0); i < nChan; i++ {
+			var index uint32
+			if DoSwap != 0 {
+				index = nChan - i - 1
+			} else {
+				index = i
+			}
+
+			if Planar != 0 {
+				v = cmsHalf2Float(accumHalf[(i+start)*Stride])
+			} else {
+				v = cmsHalf2Float(accumHalf[i+start])
+			}
+
+			v /= maximum
+
+			if Reverse != 0 {
+				v = 1 - v
+			}
+
+			wIn[index] = v
+		}
+
+		if Extra == 0 && SwapFirst != 0 {
+			tmp := wIn[0]
+			copy(wIn[0:], wIn[1:])
+			wIn[nChan-1] = tmp
+		}
+
+		if Planar != 0 {
+			return accum[2:] // sizeof(uint16)
+		} else {
+			return accum[(nChan+Extra)*2:]
+		}
+	}
+
+	func PackHalfFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+		nChan := T_CHANNELS(info.OutputFormat)
+		DoSwap := T_DOSWAP(info.OutputFormat)
+		Reverse := T_FLAVOR(info.OutputFormat)
+		Extra := T_EXTRA(info.OutputFormat)
+		SwapFirst := T_SWAPFIRST(info.OutputFormat)
+		Planar := T_PLANAR(info.OutputFormat)
+		ExtraFirst := DoSwap ^ SwapFirst
+		var maximum float32 = 65535.0
+		if IsInkSpace(info.OutputFormat) {
+			maximum = 655.35
+		}
+		var v float32
+		outputHalf := (*[1 << 30]uint16)(unsafe.Pointer(&output[0]))[:len(output)/2]
+		var start uint32
+
+		Stride /= PixelSize(info.OutputFormat)
+
+		if ExtraFirst != 0 {
+			start = Extra
+		}
+
+		for i := uint32(0); i < nChan; i++ {
+			var index uint32
+			if DoSwap != 0 {
+				index = nChan - i - 1
+			} else {
+				index = i
+			}
+
+			v = float32(wOut[index]) / maximum
+
+			if Reverse != 0 {
+				v = maximum - v
+			}
+
+			if Planar != 0 {
+				outputHalf[(i+start)*Stride] = cmsFloat2Half(v)
+			} else {
+				outputHalf[i+start] = cmsFloat2Half(v)
+			}
+		}
+
+		if Extra == 0 && SwapFirst != 0 {
+			copy(outputHalf[1:], outputHalf[:nChan-1])
+			outputHalf[0] = cmsFloat2Half(v)
+		}
+
+		if Planar != 0 {
+			return output[2:] // sizeof(uint16)
+		} else {
+			return output[(nChan+Extra)*2:]
+		}
+	}
+
+	func PackHalfFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
+		nChan := T_CHANNELS(info.OutputFormat)
+		DoSwap := T_DOSWAP(info.OutputFormat)
+		Reverse := T_FLAVOR(info.OutputFormat)
+		Extra := T_EXTRA(info.OutputFormat)
+		SwapFirst := T_SWAPFIRST(info.OutputFormat)
+		Planar := T_PLANAR(info.OutputFormat)
+		ExtraFirst := DoSwap ^ SwapFirst
+		var maximum float32 = 1.0
+		if IsInkSpace(info.OutputFormat) {
+			maximum = 100.0
+		}
+		outputHalf := (*[1 << 30]uint16)(unsafe.Pointer(&output[0]))[:len(output)/2]
+		var v float32
+		var start uint32
+
+		Stride /= PixelSize(info.OutputFormat)
+
+		if ExtraFirst != 0 {
+			start = Extra
+		}
+
+		for i := uint32(0); i < nChan; i++ {
+			var index uint32
+			if DoSwap != 0 {
+				index = nChan - i - 1
+			} else {
+				index = i
+			}
+
+			v = wOut[index] * maximum
+
+			if Reverse != 0 {
+				v = maximum - v
+			}
+
+			if Planar != 0 {
+				outputHalf[(i+start)*Stride] = cmsFloat2Half(v)
+			} else {
+				outputHalf[i+start] = cmsFloat2Half(v)
+			}
+		}
+
+		if Extra == 0 && SwapFirst != 0 {
+			copy(outputHalf[1:], outputHalf[:nChan-1])
+			outputHalf[0] = cmsFloat2Half(v)
+		}
+
+		if Planar != 0 {
+			return output[2:] // sizeof(uint16)
+		} else {
+			return output[(nChan+Extra)*2:]
+		}
+	}
+*/
+func UnrollHalfTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	nChan := T_CHANNELS(info.InputFormat)
-	DoSwap := T_DOSWAP(info.InputFormat)
-	Reverse := T_FLAVOR(info.InputFormat)
-	SwapFirst := T_SWAPFIRST(info.InputFormat)
-	Extra := T_EXTRA(info.InputFormat)
-	ExtraFirst := DoSwap ^ SwapFirst
-	Planar := T_PLANAR(info.InputFormat)
+	doSwap := T_DOSWAP(info.InputFormat)
+	reverse := T_FLAVOR(info.InputFormat)
+	swapFirst := T_SWAPFIRST(info.InputFormat)
+	extra := T_EXTRA(info.InputFormat)
+	extraFirst := doSwap ^ swapFirst
+	planar := T_PLANAR(info.InputFormat)
 	var start uint32
-	var v float32
 	var maximum float32 = 65535.0
 	if IsInkSpace(info.InputFormat) {
 		maximum = 655.35
 	}
 
-	accumHalf := (*[1 << 30]uint16)(unsafe.Pointer(&accum[0]))[:len(accum)/2]
+	stride /= PixelSize(info.InputFormat)
+	buf := bytes.NewReader(accum)
+	accumWords := make([]uint16, len(accum)/2)
+	binary.Read(buf, binary.BigEndian, &accumWords) // ICC uses big-endian
 
-	Stride /= PixelSize(info.InputFormat)
-
-	if ExtraFirst != 0 {
-		start = Extra
+	if extraFirst != 0 {
+		start = extra
 	}
 
 	for i := uint32(0); i < nChan; i++ {
-		var index uint32
-		if DoSwap != 0 {
+		index := i
+		if doSwap != 0 {
 			index = nChan - i - 1
-		} else {
-			index = i
 		}
-
-		if Planar != 0 {
-			v = cmsHalf2Float(accumHalf[(i+start)*Stride])
+		var v float32
+		if planar != 0 {
+			v = cmsHalf2Float(accumWords[(i+start)*stride])
 		} else {
-			v = cmsHalf2Float(accumHalf[i+start])
+			v = cmsHalf2Float(accumWords[i+start])
 		}
-
-		if Reverse != 0 {
+		if reverse != 0 {
 			v = maximum - v
 		}
-
 		wIn[index] = cmsQuickSaturateWord(float64(v * maximum))
 	}
 
-	if Extra == 0 && SwapFirst != 0 {
+	if extra == 0 && swapFirst != 0 {
 		tmp := wIn[0]
 		copy(wIn[0:], wIn[1:])
 		wIn[nChan-1] = tmp
 	}
 
-	if Planar != 0 {
-		return accum[2:] // sizeof(uint16)
+	if planar != 0 {
+		return accum[2:]
 	} else {
-		return accum[(nChan+Extra)*2:]
+		return accum[(nChan+extra)*2:]
 	}
 }
-func UnrollHalfToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+func UnrollHalfToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
 	nChan := T_CHANNELS(info.InputFormat)
-	DoSwap := T_DOSWAP(info.InputFormat)
-	Reverse := T_FLAVOR(info.InputFormat)
-	SwapFirst := T_SWAPFIRST(info.InputFormat)
-	Extra := T_EXTRA(info.InputFormat)
-	ExtraFirst := DoSwap ^ SwapFirst
-	Planar := T_PLANAR(info.InputFormat)
+	doSwap := T_DOSWAP(info.InputFormat)
+	reverse := T_FLAVOR(info.InputFormat)
+	swapFirst := T_SWAPFIRST(info.InputFormat)
+	extra := T_EXTRA(info.InputFormat)
+	extraFirst := doSwap ^ swapFirst
+	planar := T_PLANAR(info.InputFormat)
 	var start uint32
-	var v float32
 	var maximum float32 = 1.0
 	if IsInkSpace(info.InputFormat) {
 		maximum = 100.0
 	}
 
-	accumHalf := (*[1 << 30]uint16)(unsafe.Pointer(&accum[0]))[:len(accum)/2]
+	stride /= PixelSize(info.InputFormat)
+	buf := bytes.NewReader(accum)
+	accumWords := make([]uint16, len(accum)/2)
+	binary.Read(buf, binary.BigEndian, &accumWords)
 
-	Stride /= PixelSize(info.InputFormat)
-
-	if ExtraFirst != 0 {
-		start = Extra
+	if extraFirst != 0 {
+		start = extra
 	}
 
 	for i := uint32(0); i < nChan; i++ {
-		var index uint32
-		if DoSwap != 0 {
+		index := i
+		if doSwap != 0 {
 			index = nChan - i - 1
-		} else {
-			index = i
 		}
-
-		if Planar != 0 {
-			v = cmsHalf2Float(accumHalf[(i+start)*Stride])
+		var v float32
+		if planar != 0 {
+			v = cmsHalf2Float(accumWords[(i+start)*stride])
 		} else {
-			v = cmsHalf2Float(accumHalf[i+start])
+			v = cmsHalf2Float(accumWords[i+start])
 		}
-
 		v /= maximum
-
-		if Reverse != 0 {
-			v = 1 - v
+		if reverse != 0 {
+			v = 1.0 - v
 		}
-
 		wIn[index] = v
 	}
 
-	if Extra == 0 && SwapFirst != 0 {
+	if extra == 0 && swapFirst != 0 {
 		tmp := wIn[0]
 		copy(wIn[0:], wIn[1:])
 		wIn[nChan-1] = tmp
 	}
 
-	if Planar != 0 {
-		return accum[2:] // sizeof(uint16)
+	if planar != 0 {
+		return accum[2:]
 	} else {
-		return accum[(nChan+Extra)*2:]
+		return accum[(nChan+extra)*2:]
 	}
 }
-func PackHalfFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func PackHalfFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
 	nChan := T_CHANNELS(info.OutputFormat)
-	DoSwap := T_DOSWAP(info.OutputFormat)
-	Reverse := T_FLAVOR(info.OutputFormat)
-	Extra := T_EXTRA(info.OutputFormat)
-	SwapFirst := T_SWAPFIRST(info.OutputFormat)
-	Planar := T_PLANAR(info.OutputFormat)
-	ExtraFirst := DoSwap ^ SwapFirst
+	doSwap := T_DOSWAP(info.OutputFormat)
+	reverse := T_FLAVOR(info.OutputFormat)
+	extra := T_EXTRA(info.OutputFormat)
+	swapFirst := T_SWAPFIRST(info.OutputFormat)
+	planar := T_PLANAR(info.OutputFormat)
+	extraFirst := doSwap ^ swapFirst
 	var maximum float32 = 65535.0
 	if IsInkSpace(info.OutputFormat) {
 		maximum = 655.35
 	}
-	var v float32
-	outputHalf := (*[1 << 30]uint16)(unsafe.Pointer(&output[0]))[:len(output)/2]
+	stride /= PixelSize(info.OutputFormat)
+
+	outputWords := make([]uint16, (nChan+extra)*uint32(stride)+1)
 	var start uint32
-
-	Stride /= PixelSize(info.OutputFormat)
-
-	if ExtraFirst != 0 {
-		start = Extra
+	if extraFirst != 0 {
+		start = extra
 	}
 
+	var v float32
 	for i := uint32(0); i < nChan; i++ {
-		var index uint32
-		if DoSwap != 0 {
+		index := i
+		if doSwap != 0 {
 			index = nChan - i - 1
-		} else {
-			index = i
 		}
-
 		v = float32(wOut[index]) / maximum
-
-		if Reverse != 0 {
+		if reverse != 0 {
 			v = maximum - v
 		}
-
-		if Planar != 0 {
-			outputHalf[(i+start)*Stride] = cmsFloat2Half(v)
+		if planar != 0 {
+			outputWords[(i+start)*stride] = cmsFloat2Half(v)
 		} else {
-			outputHalf[i+start] = cmsFloat2Half(v)
+			outputWords[i+start] = cmsFloat2Half(v)
 		}
 	}
 
-	if Extra == 0 && SwapFirst != 0 {
-		copy(outputHalf[1:], outputHalf[:nChan-1])
-		outputHalf[0] = cmsFloat2Half(v)
+	if extra == 0 && swapFirst != 0 {
+		copy(outputWords[1:], outputWords[:nChan-1])
+		outputWords[0] = cmsFloat2Half(v)
 	}
 
-	if Planar != 0 {
-		return output[2:] // sizeof(uint16)
-	} else {
-		return output[(nChan+Extra)*2:]
-	}
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.BigEndian, outputWords)
+	return buf.Bytes()
 }
-func PackHalfFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
+func PackHalfFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, stride uint32) []uint8 {
 	nChan := T_CHANNELS(info.OutputFormat)
-	DoSwap := T_DOSWAP(info.OutputFormat)
-	Reverse := T_FLAVOR(info.OutputFormat)
-	Extra := T_EXTRA(info.OutputFormat)
-	SwapFirst := T_SWAPFIRST(info.OutputFormat)
-	Planar := T_PLANAR(info.OutputFormat)
-	ExtraFirst := DoSwap ^ SwapFirst
+	doSwap := T_DOSWAP(info.OutputFormat)
+	reverse := T_FLAVOR(info.OutputFormat)
+	extra := T_EXTRA(info.OutputFormat)
+	swapFirst := T_SWAPFIRST(info.OutputFormat)
+	planar := T_PLANAR(info.OutputFormat)
+	extraFirst := doSwap ^ swapFirst
 	var maximum float32 = 1.0
 	if IsInkSpace(info.OutputFormat) {
 		maximum = 100.0
 	}
-	outputHalf := (*[1 << 30]uint16)(unsafe.Pointer(&output[0]))[:len(output)/2]
-	var v float32
+	stride /= PixelSize(info.OutputFormat)
+
+	outputWords := make([]uint16, (nChan+extra)*uint32(stride)+1)
 	var start uint32
-
-	Stride /= PixelSize(info.OutputFormat)
-
-	if ExtraFirst != 0 {
-		start = Extra
+	if extraFirst != 0 {
+		start = extra
 	}
 
+	var v float32
 	for i := uint32(0); i < nChan; i++ {
-		var index uint32
-		if DoSwap != 0 {
+		index := i
+		if doSwap != 0 {
 			index = nChan - i - 1
-		} else {
-			index = i
 		}
-
 		v = wOut[index] * maximum
-
-		if Reverse != 0 {
+		if reverse != 0 {
 			v = maximum - v
 		}
-
-		if Planar != 0 {
-			outputHalf[(i+start)*Stride] = cmsFloat2Half(v)
+		if planar != 0 {
+			outputWords[(i+start)*stride] = cmsFloat2Half(v)
 		} else {
-			outputHalf[i+start] = cmsFloat2Half(v)
+			outputWords[i+start] = cmsFloat2Half(v)
 		}
 	}
 
-	if Extra == 0 && SwapFirst != 0 {
-		copy(outputHalf[1:], outputHalf[:nChan-1])
-		outputHalf[0] = cmsFloat2Half(v)
+	if extra == 0 && swapFirst != 0 {
+		copy(outputWords[1:], outputWords[:nChan-1])
+		outputWords[0] = cmsFloat2Half(v)
 	}
 
-	if Planar != 0 {
-		return output[2:] // sizeof(uint16)
-	} else {
-		return output[(nChan+Extra)*2:]
-	}
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.BigEndian, outputWords)
+	return buf.Bytes()
 }
 
 // InputFormatters16 is the table of 16-bit input formatters
@@ -2594,7 +3518,7 @@ var cmsFormattersPluginChunk = cmsFormattersPluginChunkType{FactoryList: nil}
 func DupFormatterFactoryList(ctx CmsContext, src CmsContext) {
 	var newHead cmsFormattersPluginChunkType
 	var previousEntry *cmsFormattersFactoryList
-	head := (*cmsFormattersPluginChunkType)((CmsContextStruct)(*src).chunks[FormattersPlugin])
+	head := (CmsContextStruct)(*src).chunks[FormattersPlugin].(*cmsFormattersPluginChunkType)
 
 	if head == nil {
 		panic("Source context does not contain FormattersPlugin chunk")
@@ -2602,7 +3526,7 @@ func DupFormatterFactoryList(ctx CmsContext, src CmsContext) {
 
 	// Walk the list and copy all nodes
 	for entry := head.FactoryList; entry != nil; entry = entry.Next {
-		newEntry := (*cmsFormattersFactoryList)(cmsSubAllocDup((CmsContextStruct)(*ctx).MemPool, unsafe.Pointer(entry), uint32(unsafe.Sizeof((*cmsFormattersFactoryList)(entry)))))
+		newEntry := cmsSubAllocDup((CmsContextStruct)(*ctx).MemPool, entry, uint32(unsafe.Sizeof((*cmsFormattersFactoryList)(entry)))).(*cmsFormattersFactoryList)
 		if newEntry == nil {
 			return
 		}
@@ -2638,18 +3562,22 @@ func cmsAllocFormattersPluginChunk(ctx CmsContext, src CmsContext) {
 }
 
 // Register formatters plugin
-func cmsRegisterFormattersPlugin(contextID CmsContext, data *cmsPluginBase) bool {
+func cmsRegisterFormattersPlugin(contextID CmsContext, Data PluginIntrfc) bool {
 	//ctx := (*cmsFormattersPluginChunkType)((CmsContextStruct)(*contextID).chunks[FormattersPlugin])
-	ctx := (*cmsFormattersPluginChunkType)(CmsContextGetClientChunk(contextID, FormattersPlugin))
-	plugin := (*cmsPluginFormatters)(unsafe.Pointer(data))
-
-	if plugin == nil {
+	ctx := CmsContextGetClientChunk(contextID, FormattersPlugin).(*cmsFormattersPluginChunkType)
+	//	plugin := (*cmsPluginFormatters)(unsafe.Pointer(data))
+	plugin, ok := Data.(*cmsPluginFormatters)
+	if !ok {
+		fmt.Printf("Error: Plugin is not of the type cmsPluginFormatters\n")
+		return false
+	}
+	if Data == nil {
 		// Reset to built-in defaults
 		ctx.FactoryList = nil
 		return true
 	}
-	var list cmsFormattersFactoryList
-	newEntry := (*cmsFormattersFactoryList)(cmsPluginMalloc(contextID, uint32(unsafe.Sizeof(list))))
+	//newEntry := (*cmsFormattersFactoryList)(cmsPluginMalloc(contextID, uint32(unsafe.Sizeof(list))))
+	newEntry := allocateStruct[cmsFormattersFactoryList]()
 
 	newEntry.Factory = plugin.FormattersFactory
 	newEntry.Next = ctx.FactoryList
@@ -2661,7 +3589,7 @@ func cmsRegisterFormattersPlugin(contextID CmsContext, data *cmsPluginBase) bool
 // Get a formatter
 func cmsGetFormatter(contextID CmsContext, typeID uint32, direction cmsFormatterDirection, dwFlags uint32) cmsFormatter {
 	//ctx := (*cmsFormattersPluginChunkType)((CmsContextStruct)(*contextID).chunks[FormattersPlugin])
-	ctx := (*cmsFormattersPluginChunkType)(CmsContextGetClientChunk(contextID, FormattersPlugin))
+	ctx := CmsContextGetClientChunk(contextID, FormattersPlugin).(*cmsFormattersPluginChunkType)
 	if T_CHANNELS(typeID) == 0 {
 		return cmsFormatter{} // Return a null formatter
 	}

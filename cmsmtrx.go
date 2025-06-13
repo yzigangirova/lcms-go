@@ -2,7 +2,7 @@ package golcms
 
 import (
 	"math"
-	"unsafe"
+	//"unsafe"
 )
 
 func DSWAP(x, y *float64) {
@@ -154,14 +154,15 @@ func cmsMAT3inverse(a, b *cmsMAT3) bool {
 func cmsMAT3solve(x *cmsVEC3, a *cmsMAT3, b *cmsVEC3) bool {
 	var m, a_1 cmsMAT3
 
-	memmove(unsafe.Pointer(&m), unsafe.Pointer(a), unsafe.Sizeof(cmsMAT3{}))
+	m = *a // Struct copy – safe, idiomatic, efficient
 
-	if cmsMAT3inverse(&m, &a_1) {
+	if !cmsMAT3inverse(&m, &a_1) {
 		return false // Singular matrix
 	}
 	cmsMAT3eval(x, &a_1, b)
 	return true
 }
+
 
 // Evaluate a vector across a matrix
 func cmsMAT3eval(r *cmsVEC3, a *cmsMAT3, v *cmsVEC3) {

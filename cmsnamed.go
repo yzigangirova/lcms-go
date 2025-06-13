@@ -1,8 +1,8 @@
 package golcms
 
 import (
-	"encoding/binary"
-	"unsafe"
+	//"encoding/binary"
+	//"unsafe"
 	//"fmt"
 )
 
@@ -92,21 +92,20 @@ func SearchMLUEntry(mlu *cmsMLU, LanguageCode, CountryCode uint16) int {
 }
 
 // AddMLUBlock adds a block of characters to the MLU for a specific language and country.
-func AddMLUBlock(mlu *cmsMLU, size uint32, block *uint16, LanguageCode, CountryCode uint16) bool {
+func AddMLUBlock(mlu *cmsMLU, block []uint16, LanguageCode, CountryCode uint16) bool {
+	size := uint32(len(block) * 2)
+
 	if mlu == nil {
 		return false
 	}
-
 	if mlu.UsedEntries >= mlu.AllocatedEntries {
 		if !GrowMLUtable(mlu) {
 			return false
 		}
 	}
-
 	if SearchMLUEntry(mlu, LanguageCode, CountryCode) >= 0 {
 		return false
 	}
-
 	for (mlu.PoolSize - mlu.PoolUsed) < size {
 		if !GrowMLUpool(mlu) {
 			return false
@@ -114,19 +113,25 @@ func AddMLUBlock(mlu *cmsMLU, size uint32, block *uint16, LanguageCode, CountryC
 	}
 
 	offset := mlu.PoolUsed
-	ptr := (*uint8)(mlu.MemPool)
+	ptr := mlu.MemPool.([]uint8)
 	if ptr == nil {
 		return false
 	}
 
-	memmove(unsafe.Add(unsafe.Pointer(ptr), offset), unsafe.Pointer(block), uintptr(size))
+	// Encode uint16 slice as little-endian []byte
+	for i, v := range block {
+		ptr[offset+2*uint32(i)] = byte(v)
+		ptr[offset+2*uint32(i)+1] = byte(v >> 8)
+	}
+
 	mlu.PoolUsed += size
 
-	// Calculate the address of the current entry
-	mlu.Entries[mlu.UsedEntries].StrW = offset
-	mlu.Entries[mlu.UsedEntries].Len = size
-	mlu.Entries[mlu.UsedEntries].Country = CountryCode
-	mlu.Entries[mlu.UsedEntries].Language = LanguageCode
+	// Record entry
+	entry := &mlu.Entries[mlu.UsedEntries]
+	entry.StrW = offset
+	entry.Len = size
+	entry.Country = CountryCode
+	entry.Language = LanguageCode
 	mlu.UsedEntries++
 
 	return true
@@ -146,46 +151,27 @@ func strFrom16(n uint16) string {
 }
 
 // cmsMLUsetASCII adds an ASCII entry to an MLU.
-func cmsMLUsetASCII(mlu *cmsMLU, LanguageCode, CountryCode string, ASCIIString *byte) bool {
-	lenASCII := strlen(ASCIIString)
+func cmsMLUsetASCII(mlu *cmsMLU, languageCode, countryCode string, asciiStr string) bool {
 	if mlu == nil {
 		return false
 	}
 
-	lang := strTo16(LanguageCode)
-	country := strTo16(CountryCode)
+	lang := strTo16(languageCode)
+	country := strTo16(countryCode)
 
-	if lenASCII == 0 {
-		lenASCII = 1
+	if asciiStr == "" {
+		asciiStr = "\x00"
 	}
 
-	wStr := make([]uint16, lenASCII)
-	for i := range wStr {
-		if i < lenASCII {
-			currentPtr := (*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(ASCIIString)) + uintptr(i)))
-			val := binary.LittleEndian.Uint16([]byte{
-				*currentPtr,
-				*(*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(currentPtr)) + 1)),
-			})
-			wStr[i] = uint16(val)
-		}
+	// Convert ASCII string to UTF-16LE []uint16
+	wStr := make([]uint16, len(asciiStr))
+	for i, b := range []byte(asciiStr) {
+		wStr[i] = uint16(b) // zero-extend ASCII into UTF-16
 	}
 
-	rc := AddMLUBlock(mlu, uint32(len(wStr)*2), (*uint16)(unsafe.Pointer(&wStr[0])), lang, country)
-	return rc
+	return AddMLUBlock(mlu, wStr, lang, country)
 }
 
-// mywcslen calculates the length of a wide string.
-func mywcslen(s *uint16) uint32 {
-	if s == nil {
-		return 0
-	}
-	var length uint32
-	for ptr := uintptr(unsafe.Pointer(s)); *(*uint16)(unsafe.Pointer(ptr)) != 0; ptr += 2 {
-		length++
-	}
-	return length
-}
 
 // cmsMLUsetWide adds a wide string entry to an MLU.
 func cmsMLUsetWide(mlu *cmsMLU, Language, Country string, WideString []uint16) bool {
@@ -201,7 +187,7 @@ func cmsMLUsetWide(mlu *cmsMLU, Language, Country string, WideString []uint16) b
 		lenWide = 2
 	}
 
-	return AddMLUBlock(mlu, lenWide, (*uint16)(unsafe.Pointer(&WideString[0])), lang, country)
+	return AddMLUBlock(mlu, WideString, lang, country)
 }
 
 // cmsMLUdup duplicates an MLU.
@@ -215,40 +201,34 @@ func cmsMLUdup(mlu *cmsMLU) *cmsMLU {
 		return nil
 	}
 
-	if newMLU.AllocatedEntries < mlu.UsedEntries {
+	if newMLU.AllocatedEntries < mlu.UsedEntries ||
+		newMLU.Entries == nil || mlu.Entries == nil {
 		cmsMLUfree(newMLU)
 		return nil
 	}
 
-	if newMLU.Entries == nil || mlu.Entries == nil {
-		cmsMLUfree(newMLU)
-		return nil
-	}
-
-	MemmoveSlice(newMLU.Entries, mlu.Entries, int(mlu.UsedEntries))
+	copy(newMLU.Entries[:mlu.UsedEntries], mlu.Entries[:mlu.UsedEntries])
 	newMLU.UsedEntries = mlu.UsedEntries
 
 	if mlu.PoolUsed == 0 {
 		newMLU.MemPool = nil
 	} else {
-		newMLU.MemPool = cmsMalloc(mlu.ContextID, mlu.PoolUsed)
-		if newMLU.MemPool == nil {
+		pool := make([]byte, mlu.PoolUsed)
+		src, ok := mlu.MemPool.([]byte)
+		if !ok || len(src) < int(mlu.PoolUsed) {
 			cmsMLUfree(newMLU)
 			return nil
 		}
+		copy(pool, src[:mlu.PoolUsed])
+		newMLU.MemPool = pool
 	}
 
 	newMLU.PoolSize = mlu.PoolUsed
-	if newMLU.MemPool == nil || mlu.MemPool == nil {
-		cmsMLUfree(newMLU)
-		return nil
-	}
-
-	memmove(newMLU.MemPool, mlu.MemPool, uintptr(mlu.PoolUsed))
 	newMLU.PoolUsed = mlu.PoolUsed
 
 	return newMLU
 }
+
 
 // cmsMLUfree frees all memory used by an MLU.
 func cmsMLUfree(mlu *cmsMLU) {
@@ -256,20 +236,28 @@ func cmsMLUfree(mlu *cmsMLU) {
 		if mlu.MemPool != nil {
 			cmsFree(mlu.ContextID, mlu.MemPool)
 		}
-		cmsFree(mlu.ContextID, unsafe.Pointer(mlu))
+		cmsFree(mlu.ContextID, mlu)
 	}
 }
 
 // cmsMLUgetWide searches for an entry in the MLU object and retrieves the wide string.
-func _cmsMLUgetWide(mlu *cmsMLU, length *uint32, LanguageCode, CountryCode uint16, UsedLanguageCode, UsedCountryCode *uint16) *uint16 {
-	if mlu == nil || mlu.AllocatedEntries == 0 {
+func _cmsMLUgetWide(
+	mlu *cmsMLU,
+	length *uint32,
+	LanguageCode, CountryCode uint16,
+	UsedLanguageCode, UsedCountryCode *uint16,
+) []uint16 {
+	if mlu == nil || mlu.AllocatedEntries == 0 || mlu.MemPool == nil {
 		return nil
 	}
 
-	// Convert the base pointer to uintptr for arithmetic
-	var bestMatch int = -1
+	memPool, ok := mlu.MemPool.([]uint8)
+	if !ok {
+		return nil
+	}
+
+	bestMatch := -1
 	for i := uint32(0); i < mlu.UsedEntries; i++ {
-		// Calculate the address of the current entry
 		entry := mlu.Entries[i]
 
 		if entry.Language == LanguageCode {
@@ -285,18 +273,20 @@ func _cmsMLUgetWide(mlu *cmsMLU, length *uint32, LanguageCode, CountryCode uint1
 				}
 				if length != nil {
 					*length = entry.Len
-
-					return (*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(mlu.MemPool)) + uintptr(entry.StrW)))
 				}
+				if entry.StrW+entry.Len > mlu.PoolSize {
+					return nil
+				}
+				return bytesToUint16Slice(memPool[entry.StrW : entry.StrW+entry.Len])
 			}
 		}
 	}
-	if bestMatch == -1 {
-		bestMatch = 0
-	}
-	// Cast the calculated address back to a *cmsMLUentry
-	entry := mlu.Entries[bestMatch]
 
+	if bestMatch == -1 {
+		return nil
+	}
+
+	entry := mlu.Entries[bestMatch]
 	if UsedLanguageCode != nil {
 		*UsedLanguageCode = entry.Language
 	}
@@ -309,11 +299,57 @@ func _cmsMLUgetWide(mlu *cmsMLU, length *uint32, LanguageCode, CountryCode uint1
 	if entry.StrW+entry.Len > mlu.PoolSize {
 		return nil
 	}
-	return (*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(mlu.MemPool)) + uintptr(entry.StrW)))
+	return bytesToUint16Slice(memPool[entry.StrW : entry.StrW+entry.Len])
+}
+func cmsMLUgetWide(
+	mlu *cmsMLU,
+	LanguageCode string,
+	CountryCode string,
+	Buffer []uint16,
+	BufferSize uint32,
+) uint32 {
+	var strLen uint32
+
+	lang := strTo16(LanguageCode)
+	country := strTo16(CountryCode)
+
+	if mlu == nil {
+		return 0
+	}
+
+	wStr := _cmsMLUgetWide(mlu, &strLen, lang, country, nil, nil)
+	if wStr == nil {
+		return 0
+	}
+
+	if Buffer == nil {
+		return strLen + 2
+	}
+
+	if BufferSize == 0 {
+		return 0
+	}
+
+	n := strLen / 2
+	if BufferSize < strLen+2 {
+		n = (BufferSize - 2) / 2
+	}
+
+	for i := uint32(0); i < n; i++ {
+		Buffer[i] = wStr[i]
+	}
+	Buffer[n] = 0
+
+	return strLen + 2
 }
 
 // cmsMLUgetASCII retrieves the ASCII string for a specific language and country.
-func cmsMLUgetASCII(mlu *cmsMLU, LanguageCode, CountryCode string, Buffer *byte, BufferSize uint32) uint32 {
+func cmsMLUgetASCII(
+	mlu *cmsMLU,
+	LanguageCode, CountryCode string,
+	buffer []byte,
+	bufferSize uint32,
+) uint32 {
 	lang := strTo16(LanguageCode)
 	country := strTo16(CountryCode)
 
@@ -324,82 +360,35 @@ func cmsMLUgetASCII(mlu *cmsMLU, LanguageCode, CountryCode string, Buffer *byte,
 	}
 
 	asciiLen := strLen / 2
-	if Buffer == nil {
+
+	// If buffer is nil, just return required size (including null terminator)
+	if buffer == nil {
 		return asciiLen + 1
 	}
-	if BufferSize <= 0 {
+
+	if bufferSize == 0 {
 		return 0
 	}
-	if BufferSize < asciiLen+1 {
-		asciiLen = BufferSize - 1
+
+	// Adjust length to fit in buffer including null terminator
+	if bufferSize < asciiLen+1 {
+		asciiLen = bufferSize - 1
 	}
 
 	for i := uint32(0); i < asciiLen; i++ {
-		//char := *(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(wide)) + uintptr(i*2)))
-		// Calculate the address of the current entry
-		// Cast the calculated address back to a *cmsMLUentry
-		//buff_i := *(*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(Buffer)) + uintptr(i)))
-		wide_i := *(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(wide)) + uintptr(i*2)))
-		if wide_i == 0 {
-			*(*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(Buffer)) + uintptr(i))) = 0
+		if wide[i] == 0 {
+			buffer[i] = 0
 		} else {
-			*(*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(Buffer)) + uintptr(i))) = byte(wide_i)
+			buffer[i] = byte(wide[i])
 		}
 	}
-	*(*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(Buffer)) + uintptr(asciiLen))) = 0
+
+	// Null-terminate
+	buffer[asciiLen] = 0
+
 	return asciiLen + 1
 }
-func cmsMLUgetWide(
-	mlu *cmsMLU,
-	LanguageCode string,
-	CountryCode string,
-	Buffer *uint16,
-	BufferSize uint32,
-) uint32 {
-	var Wide *uint16
-	var StrLen uint32 = 0
 
-	// Convert language and country codes to uint16
-	Lang := strTo16(LanguageCode[:])
-	Cntry := strTo16(CountryCode[:])
-
-	// Sanity check
-	if mlu == nil {
-		return 0
-	}
-
-	// Get the wide string representation
-	Wide = _cmsMLUgetWide(mlu, &StrLen, Lang, Cntry, nil, nil)
-	if Wide == nil {
-		return 0
-	}
-
-	// If the buffer is null, just return the length
-	if Buffer == nil {
-		return StrLen + uint32(unsafe.Sizeof(uint16(0)))
-	}
-
-	// If the buffer size is zero, no data can be written
-	if BufferSize == 0 {
-		return 0
-	}
-
-	// Adjust the length if the buffer size is too small
-	if BufferSize < StrLen+uint32(unsafe.Sizeof(uint16(0))) {
-		StrLen = BufferSize - uint32(unsafe.Sizeof(uint16(0)))
-	}
-
-	// Copy the data from Wide to the buffer
-	src := unsafe.Pointer(Wide)
-	dst := unsafe.Pointer(Buffer)
-	memmove(dst, src, uintptr(StrLen))
-
-	// Null-terminate the buffer
-	bufferSlice := (*[1 << 30]uint16)(unsafe.Pointer(Buffer))[:StrLen/2+1]
-	bufferSlice[StrLen/2] = 0
-
-	return StrLen + uint32(unsafe.Sizeof(uint16(0)))
-}
 
 // cmsMLUgetTranslation retrieves the language and country used for the translation.
 func cmsMLUgetTranslation(mlu *cmsMLU, LanguageCode, CountryCode string, ObtainedLanguage, ObtainedCountry *string) bool {
@@ -516,7 +505,7 @@ func cmsFreeNamedColorList(v *cmsNAMEDCOLORLIST) {
 	if v == nil {
 		return
 	}
-	cmsFree(v.ContextID, unsafe.Pointer(v))
+	cmsFree(v.ContextID, v)
 }
 
 // cmsDupNamedColorList duplicates a named color list.
@@ -543,7 +532,7 @@ func cmsDupNamedColorList(v *cmsNAMEDCOLORLIST) *cmsNAMEDCOLORLIST {
 	//copy(newNC.Prefix[:], v.Prefix[:])
 	//copy(newNC.Suffix[:], v.Suffix[:])
 	newNC.ColorantCount = v.ColorantCount
-  
+
 	MemcpySlice(newNC.List, v.List, int(v.nColors))
 	newNC.nColors = v.nColors
 
@@ -552,26 +541,26 @@ func cmsDupNamedColorList(v *cmsNAMEDCOLORLIST) *cmsNAMEDCOLORLIST {
 
 // FreeNamedColorList releases the resources for the named color list.
 func FreeNamedColorList(mpe *cmsStage) {
-	list := (*cmsNAMEDCOLORLIST)(mpe.Data)
+	list := mpe.Data.(*cmsNAMEDCOLORLIST)
 	cmsFreeNamedColorList(list)
 }
 
 // DupNamedColorList duplicates the named color list.
-func DupNamedColorList(mpe *cmsStage) unsafe.Pointer {
-	list := (*cmsNAMEDCOLORLIST)(mpe.Data)
-	return unsafe.Pointer(cmsDupNamedColorList(list))
+func DupNamedColorList(mpe *cmsStage) interface{} {
+	list := mpe.Data.(*cmsNAMEDCOLORLIST)
+	return cmsDupNamedColorList(list)
 }
 
 // EvalNamedColorPCS evaluates the named color in PCS (Profile Connection Space).
 
 // EvalNamedColorPCS evaluates named color in PCS (Lab) space.
 func EvalNamedColorPCS(in []float32, out []float32, mpe *cmsStage) {
-	NamedColorList := (*cmsNAMEDCOLORLIST)(mpe.Data)
+	NamedColorList := mpe.Data.(*cmsNAMEDCOLORLIST)
 	index := uint16(cmsQuickSaturateWord(float64(in[0]) * 65535.0))
 	// Interpret the `List` pointer as a slice of cmsNAMEDCOLOR.
 
 	if uint32(index) >= NamedColorList.nColors {
-		cmsSignalError(unsafe.Pointer(NamedColorList.ContextID), cmsERROR_RANGE, "Color %d out of range")
+		cmsSignalError(NamedColorList.ContextID, cmsERROR_RANGE, "Color %d out of range")
 		out[0] = 0.0
 		out[1] = 0.0
 		out[2] = 0.0
@@ -586,11 +575,11 @@ func EvalNamedColorPCS(in []float32, out []float32, mpe *cmsStage) {
 
 // EvalNamedColor evaluates named color in device colorant space.
 func EvalNamedColor(in []float32, out []float32, mpe *cmsStage) {
-	namedColorList := (*cmsNAMEDCOLORLIST)(mpe.Data)
+	namedColorList := mpe.Data.(*cmsNAMEDCOLORLIST)
 	index := uint16(cmsQuickSaturateWord(float64(in[0]) * 65535.0))
 
 	if uint32(index) >= namedColorList.nColors {
-		cmsSignalError(unsafe.Pointer(namedColorList.ContextID), cmsERROR_RANGE, "Color out of range")
+		cmsSignalError(namedColorList.ContextID, cmsERROR_RANGE, "Color out of range")
 
 		// Zero-out the output for all colorants.
 		for j := uint32(0); j < namedColorList.ColorantCount; j++ {
@@ -632,7 +621,7 @@ func cmsStageAllocNamedColor(namedColorList *cmsNAMEDCOLORLIST, usePCS bool) *cm
 		evalFunc,           // Evaluation function depends on `usePCS`.
 		DupNamedColorList,  // Duplication function.
 		FreeNamedColorList, // Freeing function.
-		unsafe.Pointer(cmsDupNamedColorList(namedColorList)), // Duplicate the named color list.
+		cmsDupNamedColorList(namedColorList), // Duplicate the named color list.
 	)
 }
 
@@ -752,7 +741,7 @@ func cmsAllocProfileSequenceDescription(ContextID CmsContext, n uint32) *cmsSEQ 
 	seq.n = n
 
 	if seq.seq == nil {
-		cmsFree(ContextID, unsafe.Pointer(seq))
+		cmsFree(ContextID, seq)
 		return nil
 	}
 
@@ -787,7 +776,7 @@ func cmsFreeProfileSequenceDescription(pseq *cmsSEQ) {
 		}
 	}
 
-	cmsFree(pseq.ContextID, unsafe.Pointer(pseq))
+	cmsFree(pseq.ContextID, pseq)
 }
 
 // cmsDupProfileSequenceDescription duplicates a profile sequence description.
@@ -796,7 +785,9 @@ func cmsDupProfileSequenceDescription(pseq *cmsSEQ) *cmsSEQ {
 		return nil
 	}
 
-	newSeq := (*cmsSEQ)(cmsMalloc(pseq.ContextID, uint32(unsafe.Sizeof(cmsSEQ{}))))
+	//newSeq := cmsMalloc(pseq.ContextID, uint32(unsafe.Sizeof(cmsSEQ{}))).(*cmsSEQ)
+	newSeq := allocateStruct[cmsSEQ]()
+
 	if newSeq == nil {
 		return nil
 	}
@@ -837,14 +828,14 @@ type cmsDICT struct {
 }
 
 // Allocate an empty dictionary
-func cmsDictAlloc(contextID CmsContext) cmsHANDLE {
+func cmsDictAlloc(contextID CmsContext) CmsHANDLE {
 	dict := allocateStruct[cmsDICT]()
-	return cmsHANDLE(unsafe.Pointer(dict))
+	return CmsHANDLE(dict)
 }
 
 // Dispose resources
-func cmsDictFree(hDict cmsHANDLE) {
-	dict := (*cmsDICT)(unsafe.Pointer(hDict))
+func cmsDictFree(hDict CmsHANDLE) {
+	dict := hDict.(*cmsDICT)
 	if dict == nil {
 		return
 	}
@@ -859,11 +850,11 @@ func cmsDictFree(hDict cmsHANDLE) {
 		}
 
 		next := entry.Next
-		cmsFree(dict.ContextID, unsafe.Pointer(entry))
+		cmsFree(dict.ContextID, entry)
 		entry = next
 	}
 
-	cmsFree(dict.ContextID, unsafe.Pointer(dict))
+	cmsFree(dict.ContextID, dict)
 }
 
 // Duplicate a wide character string
@@ -876,8 +867,8 @@ func DupWcs(contextID CmsContext, ptr []uint16) []uint16 {
 }
 
 // Add a new entry to the linked list
-func cmsDictAddEntry(hDict cmsHANDLE, name string, value string, displayName *cmsMLU, displayValue *cmsMLU) bool {
-	dict := (*cmsDICT)(unsafe.Pointer(hDict))
+func cmsDictAddEntry(hDict CmsHANDLE, name string, value string, displayName *cmsMLU, displayValue *cmsMLU) bool {
+	dict := hDict.(*cmsDICT)
 	if dict == nil || name == "" {
 		return false
 	}
@@ -898,8 +889,8 @@ func cmsDictAddEntry(hDict cmsHANDLE, name string, value string, displayName *cm
 }
 
 // Duplicate an existing dictionary
-func cmsDictDup(hDict cmsHANDLE) cmsHANDLE {
-	oldDict := (*cmsDICT)(unsafe.Pointer(hDict))
+func cmsDictDup(hDict CmsHANDLE) CmsHANDLE {
+	oldDict := hDict.(*cmsDICT)
 	if oldDict == nil {
 		return nil
 	}
@@ -922,8 +913,8 @@ func cmsDictDup(hDict cmsHANDLE) cmsHANDLE {
 }
 
 // Get a pointer to the linked list
-func cmsDictGetEntryList(hDict cmsHANDLE) *cmsDICTentry {
-	dict := (*cmsDICT)(unsafe.Pointer(hDict))
+func cmsDictGetEntryList(hDict CmsHANDLE) *cmsDICTentry {
+	dict := hDict.(*cmsDICT)
 	if dict == nil {
 		return nil
 	}

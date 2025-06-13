@@ -612,7 +612,7 @@ var FormatterAlpha = [6][6]cmsFormatterAlphaFn{
 }
 
 // cmsGetFormatterAlpha implements the logic
-func cmsGetFormatterAlpha(id unsafe.Pointer, in, out uint32) (cmsFormatterAlphaFn, error) {
+func cmsGetFormatterAlpha(id interface{}, in, out uint32) (cmsFormatterAlphaFn, error) {
 	inN := FormatterPos(in)
 	outN := FormatterPos(out)
 
@@ -776,7 +776,7 @@ func cmsHandleExtraChannels(
 	ComputeComponentIncrements(p.OutputFormat, Stride.BytesPerPlaneOut, DestStartingOrder[:], DestIncrements[:])
 
 	// Get formatter function
-	copyValueFn, _ := cmsGetFormatterAlpha(unsafe.Pointer(p.ContextID), p.InputFormat, p.OutputFormat)
+	copyValueFn, _ := cmsGetFormatterAlpha(p.ContextID, p.InputFormat, p.OutputFormat)
 	if copyValueFn == nil {
 		return
 	}

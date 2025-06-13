@@ -89,16 +89,17 @@ CIELAB (16 bit)     b*            -128.0 . +127      0x0000 . 0x8080 . 0xffff
 // Conversions
 func cmsXYZ2xyY(dest *CmsCIExyY, source *cmsCIEXYZ) {
 	sum := 1.0 / (source.X + source.Y + source.Z)
-	dest.x = source.X * sum
-	dest.y = source.Y * sum
-	dest.Y = source.Z
+	dest.X_small= source.X * sum
+	dest.Y_small = source.Y * sum
+	dest.Y_large = source.Z
 }
 
 func cmsxyY2XYZ(dest *cmsCIEXYZ, source *CmsCIExyY) {
-	dest.X = (source.x / source.y) * source.Y
-	dest.Y = source.Y
-	dest.Z = ((1 - source.x - source.y) / source.y) * source.Y
+	dest.X = (source.X_small / source.Y_small) * source.Y_large
+	dest.Y = source.Y_large
+	dest.Z = ((1 - source.X_small - source.Y_small) / source.Y_large) * source.Y_large
 }
+
 
 /*
    The break point (24/116)^3 = (6/29)^3 is a very small amount of tristimulus
@@ -183,13 +184,13 @@ func ab2float4(v uint16) float64 {
 	return (float64(v) / 257.0) - 128.0
 }
 
-func cmsLabEncoded2FloatV2(Lab *cmsCIELab, wLab [3]uint16) {
+func cmsLabEncoded2FloatV2(Lab *cmsCIELab, wLab *[3]uint16) {
 	Lab.L = L2float2(wLab[0])
 	Lab.a = ab2float2(wLab[1])
 	Lab.b = ab2float2(wLab[2])
 }
 
-func cmsLabEncoded2Float(Lab *cmsCIELab, wLab [3]uint16) {
+func cmsLabEncoded2Float(Lab *cmsCIELab, wLab *[3]uint16) {
 	Lab.L = L2float4(wLab[0])
 	Lab.a = ab2float4(wLab[1])
 	Lab.b = ab2float4(wLab[2])
@@ -220,7 +221,7 @@ func Clamp_ab_doubleV2(ab float64) float64 {
 	return ab
 }
 
-func cmsFloat2LabEncodedV2(wLab [3]uint16, fLab *cmsCIELab) {
+func cmsFloat2LabEncodedV2(wLab *[3]uint16, fLab *cmsCIELab) {
 	var Lab cmsCIELab
 
 	Lab.L = Clamp_L_doubleV2(fLab.L)
@@ -261,7 +262,7 @@ func ab2Fix4(ab float64) uint16 {
 	return cmsQuickSaturateWord((ab + 128.0) * 257.0)
 }
 
-func cmsFloat2LabEncoded(wLab [3]uint16, fLab *cmsCIELab) {
+func cmsFloat2LabEncoded(wLab []uint16, fLab *cmsCIELab) {
 	var Lab cmsCIELab
 
 	Lab.L = Clamp_L_doubleV4(fLab.L)
@@ -316,7 +317,7 @@ func XYZ2Fix(d float64) uint16 {
 	return cmsQuickSaturateWord(d * 32768.0)
 }
 
-func cmsFloat2XYZEncoded(XYZ [3]uint16, fXYZ *cmsCIEXYZ) {
+func cmsFloat2XYZEncoded(XYZ *[3]uint16, fXYZ *cmsCIEXYZ) {
 	var xyz cmsCIEXYZ
 	xyz.X, xyz.Y, xyz.Z = fXYZ.X, fXYZ.Y, fXYZ.Z
 
@@ -337,7 +338,7 @@ func XYZ2Float(v uint16) float64 {
 	return float64(v) / 32768.0
 }
 
-func cmsXYZEncoded2Float(fXYZ *cmsCIEXYZ, XYZ [3]uint16) {
+func cmsXYZEncoded2Float(fXYZ *cmsCIEXYZ, XYZ *[3]uint16) {
 	fXYZ.X = XYZ2Float(XYZ[0])
 	fXYZ.Y = XYZ2Float(XYZ[1])
 	fXYZ.Z = XYZ2Float(XYZ[2])

@@ -6,7 +6,7 @@ package golcms
 import (
 	//"fmt"
 	"math"
-	"unsafe"
+	//"unsafe"
 )
 
 // CreateRoundtripXForm creates a PCS -> PCS round trip transform, always using relative intent on the device -> PCS.
@@ -376,7 +376,7 @@ func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE,
 		Lab.a = math.Min(50, math.Max(-50, InitialLab.a))
 		Lab.b = math.Min(50, math.Max(-50, InitialLab.b))
 
-		CmsDoTransform(hRoundTrip, unsafe.Pointer(&Lab), unsafe.Pointer(&destLab), 1)
+		CmsDoTransform(hRoundTrip, &Lab, &destLab, 1)
 
 		inRamp[l] = Lab.L
 		outRamp[l] = destLab.L

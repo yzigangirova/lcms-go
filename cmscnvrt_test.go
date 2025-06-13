@@ -234,7 +234,7 @@ func TestBlackPreservingGrayOnlySampler_KOnly(t *testing.T) {
 		KTone:     kTone,
 	}
 
-	ok := BlackPreservingGrayOnlySampler(in, out, unsafe.Pointer(p))
+	ok := BlackPreservingGrayOnlySampler(in, out, p)
 	if ok != 1 {
 		t.Errorf("BlackPreservingGrayOnlySampler returned %d; want 1", ok)
 	}
@@ -270,7 +270,7 @@ func TestBlackPreservingSampler_KOnly(t *testing.T) {
 
 	defer CmsFreeToneCurve(p.KTone)
 
-	got := BlackPreservingSampler(in, out, unsafe.Pointer(p))
+	got := BlackPreservingSampler(in, out, p)
 	if got != 1 {
 		t.Errorf("BlackPreservingSampler should return 1 on success")
 	}

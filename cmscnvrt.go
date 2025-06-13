@@ -1,7 +1,7 @@
 package golcms
 
 import (
-	//"fmt"
+	"fmt"
 	"math"
 	"unsafe"
 )
@@ -47,7 +47,7 @@ func init() {
 // SearchIntent translates the given function
 func SearchIntent(ContextID CmsContext, Intent uint32) *cmsIntentsList {
 	// Retrieve the plugin chunk for intents
-	ctx := (*cmsIntentsPluginChunkType)(CmsContextGetClientChunk(ContextID, IntentPlugin))
+	ctx := CmsContextGetClientChunk(ContextID, IntentPlugin).(*cmsIntentsPluginChunkType)
 
 	// Search in the plugin intents list
 	for pt := ctx.Intents; pt != nil; pt = pt.Next {
@@ -300,7 +300,7 @@ func DefaultICCintents(
 		}
 
 		if !ColorSpaceIsCompatible(ColorSpaceIn, CurrentColorSpace) {
-			cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_COLORSPACE_CHECK, "ColorSpace mismatch")
+			cmsSignalError(ContextID, cmsERROR_COLORSPACE_CHECK, "ColorSpace mismatch")
 			goto Error
 		}
 
@@ -591,8 +591,8 @@ type GrayOnlyParams struct {
 }
 
 // BlackPreservingGrayOnlySampler preserves black-only CMYK transformations.
-func BlackPreservingGrayOnlySampler(In []uint16, Out []uint16, Cargo unsafe.Pointer) int32 {
-	bp := (*GrayOnlyParams)(Cargo)
+func BlackPreservingGrayOnlySampler(In []uint16, Out []uint16, cargo interface{}) int32 {
+	bp := cargo.(*GrayOnlyParams)
 
 	// If going across black only, keep black only
 	if In[0] == 0 && In[1] == 0 && In[2] == 0 {
@@ -691,7 +691,7 @@ func BlackPreservingKOnlyIntents(
 	}
 
 	// Sample the CLUT
-	if !cmsStageSampleCLut16bit(CLUT, BlackPreservingGrayOnlySampler, unsafe.Pointer(&bp), 0) {
+	if !cmsStageSampleCLut16bit(CLUT, BlackPreservingGrayOnlySampler, &bp, 0) {
 		goto Error
 	}
 
@@ -738,8 +738,8 @@ type PreserveKPlaneParams struct {
 }
 
 // BlackPreservingSampler performs sampling for K-plane preservation.
-func BlackPreservingSampler(In, Out []uint16, Cargo unsafe.Pointer) int32 {
-	bp := (*PreserveKPlaneParams)(Cargo)
+func BlackPreservingSampler(In, Out []uint16, cargo interface{}) int32 {
+	bp := cargo.(*PreserveKPlaneParams)
 	var Inf, Outf, LabK [4]float32
 	var ColorimetricLab, BlackPreservingLab cmsCIELab
 	var SumCMY, SumCMYK, Error, Ratio float64
@@ -916,7 +916,7 @@ func BlackPreservingKPlaneIntents(
 	}
 
 	// Insert and sample CLUT
-	if !cmsPipelineInsertStage(Result, cmsAT_BEGIN, CLUT) || !cmsStageSampleCLut16bit(CLUT, BlackPreservingSampler, unsafe.Pointer(&bp), 0) {
+	if !cmsPipelineInsertStage(Result, cmsAT_BEGIN, CLUT) || !cmsStageSampleCLut16bit(CLUT, BlackPreservingSampler, &bp, 0) {
 		goto Cleanup
 	}
 
@@ -964,7 +964,7 @@ func cmsLinkProfiles(
 ) *cmsPipeline {
 	// Ensure a reasonable number of profiles is provided
 	if nProfiles == 0 || nProfiles > 255 {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_RANGE, "Couldn't link profiles")
+		cmsSignalError(ContextID, cmsERROR_RANGE, "Couldn't link profiles")
 		return nil
 	}
 
@@ -986,7 +986,7 @@ func cmsLinkProfiles(
 	// Search for an appropriate intent handler
 	intent := SearchIntent(ContextID, TheIntents[0])
 	if intent == nil {
-		cmsSignalError(unsafe.Pointer(ContextID), cmsERROR_UNKNOWN_EXTENSION, "Unsupported intent")
+		cmsSignalError(ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unsupported intent")
 		return nil
 	}
 
@@ -995,14 +995,19 @@ func cmsLinkProfiles(
 }
 
 // cmsRegisterRenderingIntentPlugin registers a rendering intent plugin.
-func cmsRegisterRenderingIntentPlugin(id CmsContext, Data *cmsPluginBase) bool {
-	ctx := (*cmsIntentsPluginChunkType)(CmsContextGetClientChunk(id, IntentPlugin))
-	Plugin := (*cmsPluginRenderingIntent)(unsafe.Pointer(Data))
-
+func cmsRegisterRenderingIntentPlugin(id CmsContext, Data PluginIntrfc) bool {
+	ctx := CmsContextGetClientChunk(id, IntentPlugin).(*cmsIntentsPluginChunkType)
+	//	Plugin := (*cmsPluginRenderingIntent)(unsafe.Pointer(Data))
 	// Reset custom intents if Data is nil.
 	if Data == nil {
 		ctx.Intents = nil
 		return true
+	}
+
+	plugin, ok := Data.(*cmsPluginRenderingIntent)
+	if !ok {
+		fmt.Printf("Error: Plugin is not of the type cmsPluginRenderingIntent\n")
+		return false
 	}
 
 	// Allocate memory for the new intent node.
@@ -1014,9 +1019,9 @@ func cmsRegisterRenderingIntentPlugin(id CmsContext, Data *cmsPluginBase) bool {
 	}*/
 
 	// Populate the new node's fields.
-	fl.Intent = Plugin.Intent
-	fl.Description = strncpy(Plugin.Description, int(unsafe.Sizeof(fl.Description)-1))
-	fl.Link = Plugin.Link
+	fl.Intent = plugin.Intent
+	fl.Description = strncpy(plugin.Description, int(unsafe.Sizeof(fl.Description)-1))
+	fl.Link = plugin.Link
 
 	// Update the linked list.
 	fl.Next = ctx.Intents
