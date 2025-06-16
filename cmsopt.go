@@ -251,19 +251,33 @@ func PrelinOpt16free(ContextID CmsContext, ptr interface{}) {
 }
 
 // Prelin16dup duplicates the Prelin16Data structure
-func Prelin16dup(ContextID CmsContext, ptr interface{}) interface{} {
+
+func Prelin16dup(_ CmsContext, ptr interface{}) interface{} {
 	p16 := ptr.(*Prelin16Data)
-	Duped := cmsDupMem(ContextID, p16, uint32(unsafe.Sizeof(p16))).(*Prelin16Data)
 
-
-	if Duped == nil {
-		return nil
+	// Create a new struct
+	duped := &Prelin16Data{
+		ContextID:       p16.ContextID,
+		NInputs:         p16.NInputs,
+		NOutputs:        p16.NOutputs,
+		EvalCurveIn16:   p16.EvalCurveIn16,   // [fixed array] copied by value
+		ParamsCurveIn16: p16.ParamsCurveIn16, // [fixed array of ptrs] copied as-is (shallow copy)
+		EvalCLUT:        p16.EvalCLUT,
+		CLUTParams:      p16.CLUTParams, // non-owned pointer: shallow copy
 	}
 
-	Duped.EvalCurveOut16 = ([]cmsInterpFn16)(cmsDupMemSlice(p16.EvalCurveOut16))
-	Duped.ParamsCurveOut16 = ([]*cmsInterpParams)(cmsDupMemSlice(p16.ParamsCurveOut16))
+	// Deep copy slices
+	if p16.EvalCurveOut16 != nil {
+		duped.EvalCurveOut16 = make([]cmsInterpFn16, len(p16.EvalCurveOut16))
+		copy(duped.EvalCurveOut16, p16.EvalCurveOut16)
+	}
 
-	return Duped
+	if p16.ParamsCurveOut16 != nil {
+		duped.ParamsCurveOut16 = make([]*cmsInterpParams, len(p16.ParamsCurveOut16))
+		copy(duped.ParamsCurveOut16, p16.ParamsCurveOut16) // shallow copy of pointers
+	}
+
+	return duped
 }
 
 // PrelinOpt16alloc allocates and initializes Prelin16Data
@@ -302,7 +316,7 @@ func PrelinOpt16alloc(ContextID CmsContext, ColorMap *cmsInterpParams, nInputs u
 
 	p16.ParamsCurveOut16 = make([]*cmsInterpParams, nOutputs)
 	if p16.ParamsCurveOut16 == nil {
-		cmsFree(ContextID,p16)
+		cmsFree(ContextID, p16)
 		return nil
 	}
 
@@ -1017,7 +1031,7 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 		if p8 == nil {
 			return false
 		}
-		cmsPipelineSetOptimizationParameters(OptimizedLUT, PrelinEval8,p8, Prelin8free, Prelin8dup)
+		cmsPipelineSetOptimizationParameters(OptimizedLUT, PrelinEval8, p8, Prelin8free, Prelin8dup)
 	} else {
 		p16 := PrelinOpt16alloc(OptimizedLUT.ContextID, OptimizedPrelinCLUT.Params, 3, OptimizedPrelinCurves, 3, nil)
 		if p16 == nil {
@@ -1611,7 +1625,7 @@ func DupPluginOptimizationList(ctx CmsContext, src CmsContext) {
 
 	// Walk the list and copy each node.
 	for entry = head.OptimizationCollection; entry != nil; entry = entry.Next {
-		newEntry := cmsSubAllocDup(ctx.MemPool, entry, uint32(unsafe.Sizeof(*entry))).(*cmsOptimizationCollection)
+		newEntry := allocateStruct[cmsOptimizationCollection]()
 		if newEntry == nil {
 			return
 		}
@@ -1644,7 +1658,6 @@ func cmsAllocOptimizationPluginChunk(ctx CmsContext, src CmsContext) {
 
 // cmsRegisterOptimizationPlugin registers a new optimization plugin.
 func cmsRegisterOptimizationPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
-	//plugin := (*cmsPluginOptimization)(unsafe.Pointer(Data))
 	// Early nil check
 	ctx := ContextID.chunks[OptimizationPlugin].(*cmsOptimizationPluginChunkType)
 	if Data == nil {

@@ -175,7 +175,7 @@ type cms_io_handler struct {
 	Close func(iohandler *cms_io_handler) bool
 	Tell  func(iohandler *cms_io_handler) uint32
 	//	Write        func(iohandler *cms_io_handler, size uint32, buffer []byte) bool
-	Write func(iohandler *cms_io_handler, size uint32, buffer interface{}) bool
+	Write func(iohandler *cms_io_handler, size uint32, buffer []byte) bool
 }
 
 //----------------------------------------------------------------------------------------------------------
@@ -331,22 +331,22 @@ const MAX_TYPES_IN_LCMS_PLUGIN = 20
 // Function type definitions for memory handler plug-ins.
 
 // _cmsMallocFnPtrType defines a function that allocates memory.
-type cmsMallocFnPtrType func(contextID CmsContext, size uint32) interface{}
+type cmsMallocFnPtrType func(contextID CmsContext, size uint32) []byte
 
 // _cmsFreeFnPtrType defines a function that frees allocated memory.
 type cmsFreeFnPtrType func(contextID CmsContext, ptr interface{}, size uint32)
 
 // _cmsReallocFnPtrType defines a function that reallocates memory.
-type cmsReallocFnPtrType func(contextID CmsContext, ptr interface{}, oldSize uint32, newSize uint32) interface{}
+type cmsReallocFnPtrType func(contextID CmsContext, ptr interface{}, oldSize uint32, newSize uint32) []byte
 
 // _cmsMalloZerocFnPtrType defines a function that allocates zero-initialized memory.
-type cmsMalloZerocFnPtrType func(contextID CmsContext, size uint32) interface{}
+type cmsMalloZerocFnPtrType func(contextID CmsContext, size uint32) []byte
 
 // _cmsCallocFnPtrType defines a function that allocates zero-initialized memory for an array.
-type cmsCallocFnPtrType func(contextID CmsContext, num uint32, size uint32) interface{}
+type cmsCallocFnPtrType func(contextID CmsContext, num uint32, size uint32) []byte
 
 // _cmsDupFnPtrType defines a function that duplicates a memory block.
-type cmsDupFnPtrType func(contextID CmsContext, org interface{}, size uint32) interface{}
+type cmsDupFnPtrType func(contextID CmsContext, org interface{}, size uint32) []byte
 
 // cmsPluginMemHandler represents the memory handler plug-in structure.
 type cmsPluginMemHandler struct {

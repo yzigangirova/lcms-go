@@ -1,6 +1,7 @@
 package golcms
 
 import (
+	"encoding/binary"
 	"fmt"
 	"math"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"unsafe"
 
 	//"io"
+	"bytes"
 	"sync"
 )
 
@@ -66,7 +68,7 @@ func NULLTell(iohandler *cms_io_handler) uint32 {
 
 // NULLWrite simulates writing to a null IOHandler.
 // func NULLWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
-func NULLWrite(iohandler *cms_io_handler, size uint32, ptr interface{}) bool {
+func NULLWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 	resData, ok := iohandler.Stream.(*FILENULL)
 	if !ok || resData == nil {
 		// If Stream is not a *FILENULL, do nothing
@@ -645,8 +647,7 @@ func cmsReadTag(hProfile CmsHPROFILE, sig cmsTagSignature) interface{} {
 	// Get the tag descriptor
 	TagDescriptor = cmsGetTagDescriptor(Icc.ContextID, sig)
 	if TagDescriptor == nil {
-		var String [5]byte
-		cmsTagSignature2String(String, sig)
+		//	str := cmsTagSignature2String(sig)
 		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unknown tag type found.")
 		goto Error
 	}
@@ -679,8 +680,7 @@ func cmsReadTag(hProfile CmsHPROFILE, sig cmsTagSignature) interface{} {
 	// The tag type is supported, but something wrong happened and we cannot read the tag.
 	// let know the user about this (although it is just a warning)
 	if Icc.TagPtrs[n] == nil {
-		var String [5]byte
-		cmsTagSignature2String(String, sig)
+		//	str := cmsTagSignature2String(sig)
 		cmsSignalError(Icc.ContextID, cmsERROR_CORRUPTION_DETECTED, "Corrupted tag")
 		goto Error
 	}
@@ -689,8 +689,7 @@ func cmsReadTag(hProfile CmsHPROFILE, sig cmsTagSignature) interface{} {
 	// This is a weird error that may be a symptom of something more serious, the number of
 	// stored item is actually less than the number of required elements.
 	if ElemCount < TagDescriptor.ElemCount {
-		var String [5]byte
-		cmsTagSignature2String(String, sig)
+		//	str := cmsTagSignature2String(sig)
 		cmsSignalError(Icc.ContextID, cmsERROR_CORRUPTION_DETECTED,
 			"Inconsistent number of items")
 		goto Error
@@ -769,7 +768,7 @@ func cmsWriteTag(hProfile CmsHPROFILE, sig cmsTagSignature, data interface{}) bo
 	var Type cmsTagTypeSignature
 	var i int
 	var Version float64
-	var TypeString, SigString [5]byte
+	var TypeString int
 	mm := &Icc.UsrMutex
 	if !cmsLockMutex(Icc.ContextID, (*cmsMutex)(mm)) {
 		return false
@@ -814,18 +813,16 @@ func cmsWriteTag(hProfile CmsHPROFILE, sig cmsTagSignature, data interface{}) bo
 
 	// Check if the type is supported
 	if !IsTypeSupported(TagDescriptor, Type) {
-		cmsTagSignature2String(TypeString, cmsTagSignature(Type))
-		cmsTagSignature2String(SigString, sig)
-		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unsupported type '%s' for tag '%s'", TypeString, SigString))
+		str := cmsTagSignature2String(sig)
+		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unsupported type '%s' for tag '%s'", TypeString, str))
 		goto Error
 	}
 
 	// Get the handler for the type
 	TypeHandler = cmsGetTagTypeHandler(Icc.ContextID, Type)
 	if TypeHandler == nil {
-		cmsTagSignature2String(TypeString, cmsTagSignature(Type))
-		cmsTagSignature2String(SigString, sig)
-		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unsupported type '%s' for tag '%s'", TypeString, SigString))
+		str := cmsTagSignature2String(sig)
+		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unsupported type '%s' for tag '%s'", TypeString, str))
 		goto Error
 	}
 
@@ -842,9 +839,8 @@ func cmsWriteTag(hProfile CmsHPROFILE, sig cmsTagSignature, data interface{}) bo
 	Icc.TagPtrs[i] = LocalTypeHandler.DupFn(&LocalTypeHandler, data, TagDescriptor.ElemCount)
 
 	if Icc.TagPtrs[i] == nil {
-		cmsTagSignature2String(TypeString, cmsTagSignature(Type))
-		cmsTagSignature2String(SigString, sig)
-		cmsSignalError(Icc.ContextID, cmsERROR_CORRUPTION_DETECTED, fmt.Sprintf("Malformed struct in type '%s' for tag '%s'", TypeString, SigString))
+		str := cmsTagSignature2String(sig)
+		cmsSignalError(Icc.ContextID, cmsERROR_CORRUPTION_DETECTED, fmt.Sprintf("Malformed struct in type '%s' for tag '%s'", str))
 		goto Error
 	}
 
@@ -860,7 +856,7 @@ Error:
 func cmsGetProfileContextID(hProfile CmsHPROFILE) CmsContext {
 	Icc, ok := hProfile.(*cmsICCPROFILE)
 
-	if !ok  || Icc == nil {
+	if !ok || Icc == nil {
 		return nil
 	}
 
@@ -1056,16 +1052,38 @@ func validDeviceClass(cl cmsProfileClassSignature) bool {
 		return false
 	}
 }
+func ReadStruct[T any](io *cmsIOHANDLER, endian binary.ByteOrder, count uint32) (T, error) {
+	var value T
+
+	size := binary.Size(value)
+	if size <= 0 {
+		return value, fmt.Errorf("invalid struct size: %d", size)
+	}
+
+	buf := make([]byte, size)
+	// Read the header
+	if io.Read((*cms_io_handler)(io), buf, uint32(size), count) != count {
+		return value, fmt.Errorf("FileRead failed")
+	}
+
+	err := binary.Read(bytes.NewReader(buf), endian, &value)
+	if err != nil {
+		return value, fmt.Errorf("binary.Read failed: %w", err)
+	}
+
+	return value, nil
+}
 
 // cmsReadHeader reads and validates the profile header.
 func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 	var Tag cmsTagEntry
 	var Header cmsICCHeader
-	var HeaderSize, TagCount uint32
+	var TagCount uint32
 	io := Icc.IOhandler
-	// Read the header
-	if io.Read((*cms_io_handler)(io), &Header, uint32(unsafe.Sizeof(cmsICCHeader{})), 1) != 1 {
-		return false
+
+	Header, err := ReadStruct[cmsICCHeader](io, binary.BigEndian, 1)
+	if err != nil {
+		fmt.Errorf("Failed to read ICC header: %v", err)
 	}
 
 	// Validate file as an ICC profile
@@ -1097,7 +1115,7 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 	}
 
 	// Get size as reported in header
-	HeaderSize = cmsAdjustEndianess32(Header.Size)
+	HeaderSize := cmsAdjustEndianess32(Header.Size)
 	if HeaderSize >= Icc.IOhandler.ReportedSize {
 		HeaderSize = Icc.IOhandler.ReportedSize
 	}
@@ -1163,6 +1181,22 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 	return true
 }
 
+func WriteStruct[T any](io *cmsIOHANDLER, value T, endian binary.ByteOrder) bool {
+	var buf bytes.Buffer
+	if err := binary.Write(&buf, endian, value); err != nil {
+		fmt.Println("binary.Write failed: %w", err)
+		return false
+	}
+
+	size := buf.Len()
+	if !io.Write((*cms_io_handler)(io), uint32(size), buf.Bytes()) {
+		fmt.Println("FileWrite failed: wrote %d element(s), expected 1")
+		return false
+	}
+
+	return true
+}
+
 // cmsWriteHeader saves the profile header.
 func cmsWriteHeader(Icc *cmsICCPROFILE, UsedSpace uint32) bool {
 	var Header cmsICCHeader
@@ -1193,7 +1227,7 @@ func cmsWriteHeader(Icc *cmsICCPROFILE, UsedSpace uint32) bool {
 	copy(Header.ProfileID[:], Icc.ProfileID[:])
 
 	// Write header
-	if !Icc.IOhandler.Write((*cms_io_handler)(Icc.IOhandler), uint32(unsafe.Sizeof(Header)), &Header) {
+	if !WriteStruct[cmsICCHeader](Icc.IOhandler, Header, binary.BigEndian) {
 		return false
 	}
 
@@ -1218,7 +1252,7 @@ func cmsWriteHeader(Icc *cmsICCPROFILE, UsedSpace uint32) bool {
 		Tag.Offset = cmsAdjustEndianess32(Icc.TagOffsets[i])
 		Tag.Size = cmsAdjustEndianess32(Icc.TagSizes[i])
 
-		if !Icc.IOhandler.Write((*cms_io_handler)(Icc.IOhandler), uint32(unsafe.Sizeof(Tag)), &Tag) {
+		if !WriteStruct[cmsTagEntry](Icc.IOhandler, Tag, binary.BigEndian) {
 			return false
 		}
 	}
@@ -1244,7 +1278,7 @@ func SaveTags(Icc *cmsICCPROFILE, FileOrig *cmsICCPROFILE) bool {
 		Icc.TagOffsets[i] = io.UsedSpace
 		begin := io.UsedSpace
 
-		data := Icc.TagPtrs[i].(*uint8)
+		data := Icc.TagPtrs[i].([]uint8)
 		if data == nil {
 			// Handle blind copy of unmodified disk-based ICC profile tags
 			if FileOrig != nil && Icc.TagOffsets[i] != 0 {
@@ -1309,8 +1343,6 @@ func SaveTags(Icc *cmsICCPROFILE, FileOrig *cmsICCPROFILE) bool {
 			localTypeHandler.ContextID = Icc.ContextID
 			localTypeHandler.ICCVersion = Icc.Version
 			if !localTypeHandler.WriteFn(&localTypeHandler, io, data, tagDescriptor.ElemCount) {
-				var str [5]byte
-				cmsTagSignature2String(str, (cmsTagSignature)(typeBase))
 				cmsSignalError(Icc.ContextID, cmsERROR_WRITE, "Couldn't write type")
 				return false
 			}
@@ -1344,7 +1376,7 @@ func SetLinks(Icc *cmsICCPROFILE) bool {
 
 // FILEMEM represents the memory-based stream structure.
 type FILEMEM struct {
-	Block            *byte  // Points to allocated memory
+	Block            []byte // Points to allocated memory
 	Size             uint32 // Size of allocated memory
 	Pointer          uint32 // Points to current location
 	FreeBlockOnClose bool   // Indicates if the block should be freed on close
@@ -1367,8 +1399,7 @@ func MemoryRead(iohandler *cms_io_handler, buffer interface{}, size, count uint3
 	}
 
 	// Reconstruct slice from pointer
-	block := unsafe.Slice(resData.Block, resData.Size)
-	src := block[resData.Pointer : resData.Pointer+length]
+	src := resData.Block[resData.Pointer : resData.Pointer+length]
 
 	// Assert interface and copy into destination
 	switch dst := buffer.(type) {
@@ -1413,7 +1444,7 @@ func MemoryTell(iohandler *cms_io_handler) uint32 {
 }
 
 // MemoryWrite writes data to the memory block and updates the used space.
-func MemoryWrite(iohandler *cms_io_handler, size uint32, ptr interface{}) bool {
+func MemoryWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 	resData, ok := iohandler.Stream.(*FILEMEM)
 	if !ok || resData == nil {
 		// If Stream is not a *FILENULL, do nothing
@@ -1433,20 +1464,9 @@ func MemoryWrite(iohandler *cms_io_handler, size uint32, ptr interface{}) bool {
 	}
 
 	// Convert *byte block to []byte
-	dest := unsafe.Slice(resData.Block, resData.Size)
-	destSlice := dest[resData.Pointer : resData.Pointer+size]
-
-	// Convert input interface to source []byte
-	switch src := ptr.(type) {
-	case []byte:
-		copy(destSlice, src)
-	case *[]byte:
-		copy(destSlice, *src)
-	default:
-		cmsSignalError(nil, cmsERROR_WRITE, "Unsupported buffer type in MemoryWrite")
-		return false
-	}
-
+	//	dest := unsafe.Slice(resData.Block, resData.Size)
+	destSlice := resData.Block[resData.Pointer : resData.Pointer+size]
+	copy(destSlice, ptr)
 	resData.Pointer += size
 
 	if resData.Pointer > iohandler.UsedSpace {
@@ -1501,7 +1521,7 @@ func cmsOpenIOhandlerFromMem(ContextID CmsContext, Buffer interface{}, size uint
 		}
 
 		// Allocate internal block
-		fm.Block = cmsMalloc(ContextID, size).(*byte)
+		fm.Block = cmsMalloc(ContextID, size)
 		if fm.Block == nil {
 			goto Error
 		}
@@ -1516,7 +1536,7 @@ func cmsOpenIOhandlerFromMem(ContextID CmsContext, Buffer interface{}, size uint
 			cmsSignalError(nil, cmsERROR_READ, "Provided buffer smaller than requested size")
 			goto Error
 		}
-		copy(unsafe.Slice(fm.Block, size), src)
+		copy(fm.Block, src)
 
 		fm.FreeBlockOnClose = true
 		fm.Size = size
@@ -1544,7 +1564,7 @@ func cmsOpenIOhandlerFromMem(ContextID CmsContext, Buffer interface{}, size uint
 			goto Error
 		}
 
-		fm.Block = &dst[0] // pointer to start of external buffer
+		fm.Block = dst // pointer to start of external buffer
 		fm.FreeBlockOnClose = false
 		fm.Size = size
 		fm.Pointer = 0
@@ -1686,6 +1706,7 @@ func cmsOpenIOhandlerFromFile(ContextID CmsContext, FileName string, AccessMode 
 
 // FileRead reads count elements of size bytes each from the file stream. Returns the number of elements read.
 func FileRead(iohandler *cms_io_handler, buffer interface{}, size, count uint32) uint32 {
+	fmt.Println("fileread")
 	file, ok := iohandler.Stream.(*os.File)
 	if !ok || file == nil {
 		// If Stream is not a *FILENULL, do nothing
@@ -1726,6 +1747,7 @@ func FileSeek(iohandler *cms_io_handler, offset uint32) bool {
 	file, ok := iohandler.Stream.(*os.File)
 	if !ok || file == nil {
 		// If Stream is not a *FILENULL, do nothing
+		cmsSignalError(nil, cmsERROR_FILE, "Unsupported stream type in FileSeek")
 		return false
 	}
 
@@ -1743,6 +1765,7 @@ func FileTell(iohandler *cms_io_handler) uint32 {
 	file, ok := iohandler.Stream.(*os.File)
 	if !ok || file == nil {
 		// If Stream is not a *FILENULL, do nothing
+		cmsSignalError(nil, cmsERROR_FILE, "Unsupported stream type in FileTell")
 		return 0
 	}
 
@@ -1773,7 +1796,7 @@ func FileTell(iohandler *cms_io_handler) uint32 {
 }*/
 
 // FileWrite writes data to the stream. Returns true on success, false otherwise.
-func FileWrite(iohandler *cms_io_handler, size uint32, buffer interface{}) bool {
+func FileWrite(iohandler *cms_io_handler, size uint32, buffer []byte) bool {
 	if size == 0 {
 		return true // We allow writing 0 bytes, but nothing is written
 	}
@@ -1781,11 +1804,10 @@ func FileWrite(iohandler *cms_io_handler, size uint32, buffer interface{}) bool 
 	file, ok := iohandler.Stream.(*os.File)
 	if !ok || file == nil {
 		// If Stream is not a *FILENULL, do nothing
+		cmsSignalError(nil, cmsERROR_FILE, "Unsupported stream type in FileRead")
 		return false
 	}
-	data := buffer.([]byte)
-
-	nWritten, err := file.Write(data)
+	nWritten, err := file.Write(buffer)
 	if err != nil || uint32(nWritten) != size {
 		cmsSignalError(iohandler.ContextID, cmsERROR_FILE, "Write error; expected to write  bytes")
 		return false

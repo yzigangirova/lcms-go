@@ -2,12 +2,12 @@ package golcms
 
 import "C"
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"math"
 	"unicode"
 	"unsafe"
-	"encoding/binary"
-
 )
 
 // ---------------------------------------------------------------------------------------------------------
@@ -76,17 +76,15 @@ func freeMemory(ptr interface{}, size uintptr) {
 }
 
 // accessMemory allows accessing memory at an offset from a base pointer.
-/*func accessMemory(base interface{}, offset uintptr) interface{} {
-	return unsafe.Pointer(unsafe.Pointer(base) + offset)
-}*/
+
 
 // Default memory allocation function
-func cmsMallocDefaultFn(ContextID CmsContext, size uint32) interface{} {
+func cmsMallocDefaultFn(ContextID CmsContext, size uint32) []byte {
 	return allocateMemory(uintptr(size))
 }
 
 // Generic allocate & zero
-func cmsMallocZeroDefaultFn(ContextID CmsContext, size uint32) interface{} {
+func cmsMallocZeroDefaultFn(ContextID CmsContext, size uint32) []byte {
 	ptr := allocateMemory(uintptr(size))
 	if ptr == nil {
 		return nil
@@ -100,7 +98,7 @@ func cmsFreeDefaultFn(ContextID CmsContext, ptr interface{}, size uint32) {
 }
 
 // Default realloc function
-func cmsReallocDefaultFn(ContextID CmsContext, ptr interface{}, newSize uint32, oldSize uint32) interface{} {
+func cmsReallocDefaultFn(ContextID CmsContext, ptr interface{}, newSize uint32, oldSize uint32) []byte {
 	if newSize > MAX_MEMORY_FOR_ALLOC {
 		return nil
 	}
@@ -131,14 +129,14 @@ func cmsReallocDefaultFn(ContextID CmsContext, ptr interface{}, newSize uint32, 
 }
 
 // Default calloc function
-func cmsCallocDefaultFn(ContextID CmsContext, num, size uint32) interface{} {
+func cmsCallocDefaultFn(ContextID CmsContext, num, size uint32) []byte {
 	total := uint64(num) * uint64(size)
 	if total == 0 || total > MAX_MEMORY_FOR_ALLOC || num > math.MaxUint32/size {
 		return nil
 	}
 	return cmsMallocZeroDefaultFn(ContextID, uint32(total))
 }
-func cmsDupDefaultFn(ContextID CmsContext, Org interface{}, size uint32) interface{} {
+func cmsDupDefaultFn(ContextID CmsContext, Org interface{}, size uint32) []byte {
 	if size > MAX_MEMORY_FOR_ALLOC {
 		return nil
 	}
@@ -191,7 +189,6 @@ var cmsMemPluginChunk = cmsMemPluginChunkType{cmsMallocDefaultFn, cmsMallocZeroD
 
 // Plug-in replacement entry
 func cmsRegisterMemHandlerPlugin(context CmsContext, Data PluginIntrfc) bool {
-	//plugin := (*cmsPluginMemHandler)(unsafe.Pointer(data))
 	var ptr *cmsMemPluginChunkType
 	if Data == nil {
 		// NULL forces to reset to defaults. In this special case, the defaults are stored in the context structure.
@@ -227,7 +224,7 @@ func cmsRegisterMemHandlerPlugin(context CmsContext, Data PluginIntrfc) bool {
 }
 
 // Generic allocate
-func cmsMalloc(contextID CmsContext, size uint32) interface{} {
+func cmsMalloc(contextID CmsContext, size uint32) []byte {
 	ptr := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType) // Assume 0 is the MemPlugin index
 	if ptr == nil || ptr.MallocPtr == nil {
 		return nil
@@ -242,7 +239,7 @@ func cmsMalloc(contextID CmsContext, size uint32) interface{} {
 }*/
 
 // Generic calloc
-func cmsCalloc(contextID CmsContext, num, size uint32) interface{} {
+func cmsCalloc(contextID CmsContext, num, size uint32) []byte {
 	ptr := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
 	if ptr == nil || ptr.CallocPtr == nil {
 		return nil
@@ -251,7 +248,7 @@ func cmsCalloc(contextID CmsContext, num, size uint32) interface{} {
 }
 
 // Generic reallocate
-func cmsRealloc(contextID CmsContext, oldPtr interface{}, size uint32) interface{} {
+func cmsRealloc(contextID CmsContext, oldPtr interface{}, size uint32) []byte {
 	ptr := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
 	if ptr == nil || ptr.ReallocPtr == nil {
 		return nil
@@ -270,7 +267,7 @@ func cmsFree(contextID CmsContext, oldPtr interface{}) {
 }
 
 // Generic block duplication for structures
-func cmsDupMem(contextID CmsContext, org interface{}, size uint32) interface{} {
+func cmsDupMem(contextID CmsContext, org interface{}, size uint32) []byte {
 	ptr := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
 	if ptr == nil || ptr.DupPtr == nil || org == nil {
 		return nil
@@ -311,7 +308,7 @@ func cmsCreateSubAllocChunk(contextID CmsContext, initial uint32) *cmsSubAllocat
 		return nil
 	}
 
-	chunk.Block = cmsMalloc(contextID, initial).(*uint8)
+	chunk.Block = make([]byte, initial)
 	if chunk.Block == nil {
 		cmsFree(contextID, (chunk))
 		return nil
@@ -356,7 +353,7 @@ func cmsSubAllocDestroy(sub *cmsSubAllocator) {
 }
 
 // Allocate memory from the suballocator
-func cmsSubAlloc(sub *cmsSubAllocator, size uint32) unsafe.Pointer {
+func cmsSubAlloc(sub *cmsSubAllocator, size uint32) []byte {
 	size = uint32(cmsALIGNMEM((uintptr(size))))
 
 	freeSpace := sub.Head.BlockSize - sub.Head.Used
@@ -375,13 +372,13 @@ func cmsSubAlloc(sub *cmsSubAllocator, size uint32) unsafe.Pointer {
 		sub.Head = newChunk
 	}
 
-	ptr := unsafe.Pointer(uintptr(unsafe.Pointer(sub.Head.Block)) + uintptr(sub.Head.Used))
+	ptr := sub.Head.Block[sub.Head.Used:]
 	sub.Head.Used += size
 
 	return ptr
 }
 
-func cmsSubAllocDup(sub *cmsSubAllocator, ptr interface{}, size uint32) interface{} {
+func cmsSubAllocDup(sub *cmsSubAllocator, ptr interface{}, size uint32) []byte {
 	if ptr == nil {
 		return nil
 	}
@@ -391,13 +388,11 @@ func cmsSubAllocDup(sub *cmsSubAllocator, ptr interface{}, size uint32) interfac
 		return nil
 	}
 
-	dest := unsafe.Slice((*byte)(newPtr), size)
-
 	switch src := ptr.(type) {
 	case []byte:
-		copy(dest, src)
+		copy(newPtr, src)
 	case *[]byte:
-		copy(dest, *src)
+		copy(newPtr, *src)
 	default:
 		cmsSignalError(nil, cmsERROR_RANGE, "Unsupported type for duplication")
 		return nil
@@ -466,7 +461,6 @@ func defMtxUnlock(mtx *cmsMutex) {
 
 func cmsRegisterMutexPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
 	ctx := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
-	//Plugin := (*cmsPluginMutex)(unsafe.Pointer(Data))
 
 	// If Data is nil, reset the mutex pointers to nil and return true.
 	if Data == nil {
@@ -571,47 +565,18 @@ func cmsUnlockMutex(ContextID CmsContext, mtx *cmsMutex) {
 	}
 }
 
-// Allocate and initialize mutex container.  ARE UNUSED
-/*func cmsAllocMutexPluginChunk(ctx *CmsContextStruct, src *CmsContextStruct) {
-
-	if src != nil {
-		// Copy the source mutex plugin chunk.
-		srcChunk := (*cmsMutexPluginChunkType)(unsafe.Pointer(src.chunks[MutexPlugin]))
-		dstChunk := (*cmsMutexPluginChunkType)(unsafe.Pointer(ctx.chunks[MutexPlugin]))
-		*dstChunk = *srcChunk
-	} else {
-		// Use the global mutex plugin chunk as default.
-		dstChunk := (*cmsMutexPluginChunkType)(unsafe.Pointer(ctx.chunks[MutexPlugin]))
-		*dstChunk = cmsMutexPluginChunk
-	}
-}
-
-// Allocate and initialize parallelization container.
-func cmsAllocParallelizationPluginChunk(ctx *CmsContextStruct, src *CmsContextStruct) {
-
-	if src != nil {
-		// Copy the source parallelization plugin chunk.
-		srcChunk := (*cmsParallelizationPluginChunkType)(unsafe.Pointer(src.chunks[ParallelizationPlugin]))
-		dstChunk := (*cmsParallelizationPluginChunkType)(unsafe.Pointer(ctx.chunks[ParallelizationPlugin]))
-		*dstChunk = *srcChunk
-	} else {
-		// Use the global parallelization plugin chunk as default.
-		dstChunk := (*cmsParallelizationPluginChunkType)(unsafe.Pointer(ctx.chunks[ParallelizationPlugin]))
-		*dstChunk = cmsParallelizationPluginChunk
-	}
-}*/
 
 // Utility function to print signatures
-func cmsTagSignature2String(String [5]byte, sig cmsTagSignature) {
-	// Convert to big endian
+func cmsTagSignature2String(sig cmsTagSignature) string {
 	be := cmsAdjustEndianess32(uint32(sig))
-
-	// Move chars
-	memmove(unsafe.Pointer(&String[0]), unsafe.Pointer(&be), 4)
-
-	// Make sure of terminator
-	String[4] = 0
+	return string([]byte{
+		byte(be >> 24),
+		byte(be >> 16),
+		byte(be >> 8),
+		byte(be),
+	})
 }
+
 func cmsstrcasecmp(s1, s2 *byte) int {
 	// Convert *byte pointers into slices to traverse
 	us1 := unsafe.Slice(s1, cmsMAX_PATH)
@@ -636,23 +601,30 @@ func cmsstrcasecmp(s1, s2 *byte) int {
 }
 
 // Convert []float32 to []byte
+
 func float32SliceToBytes(floats []float32) []byte {
-	size := len(floats) * 4
-	return unsafe.Slice((*byte)(unsafe.Pointer(&floats[0])), size)
+	buf := new(bytes.Buffer)
+	for _, f := range floats {
+		binary.Write(buf, binary.LittleEndian, f)
+	}
+	return buf.Bytes()
 }
 
-// Convert []float64 to []byte
 func float64SliceToBytes(floats []float64) []byte {
-	size := len(floats) * 8
-	return unsafe.Slice((*byte)(unsafe.Pointer(&floats[0])), size)
+	buf := new(bytes.Buffer)
+	for _, f := range floats {
+		binary.Write(buf, binary.LittleEndian, f)
+	}
+	return buf.Bytes()
 }
 
-// Convert []uint16 to []byte
 func uint16SliceToBytes(ints []uint16) []byte {
-	size := len(ints) * 2
-	return unsafe.Slice((*byte)(unsafe.Pointer(&ints[0])), size)
+	buf := new(bytes.Buffer)
+	for _, i := range ints {
+		binary.Write(buf, binary.LittleEndian, i)
+	}
+	return buf.Bytes()
 }
-
 
 func bytesToUint16Slice(b []uint8) []uint16 {
 	if len(b)%2 != 0 {

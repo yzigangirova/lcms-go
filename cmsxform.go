@@ -656,7 +656,7 @@ func DupPluginTransformList(ctx CmsContext, src CmsContext) {
 
 	// Walk the list and copy each node.
 	for entry = head.TransformCollection; entry != nil; entry = entry.Next {
-		newEntry := cmsSubAllocDup(ctx.MemPool, entry, uint32(unsafe.Sizeof(*entry))).(*cmsTransformCollection)
+		newEntry := allocateStruct[cmsTransformCollection]()
 		if newEntry == nil {
 			return
 		}
@@ -732,7 +732,6 @@ func cmsTransform2toTransformConverter(
 
 // cmsRegisterTransformPlugin registers a new transform plugin.
 func cmsRegisterTransformPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
-	//plugin := (*cmsPluginTransform)(unsafe.Pointer(Data))
 	ctx := ContextID.chunks[TransformPlugin].(*cmsTransformPluginChunkType)
 
 	if Data == nil {

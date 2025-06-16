@@ -997,7 +997,6 @@ func cmsLinkProfiles(
 // cmsRegisterRenderingIntentPlugin registers a rendering intent plugin.
 func cmsRegisterRenderingIntentPlugin(id CmsContext, Data PluginIntrfc) bool {
 	ctx := CmsContextGetClientChunk(id, IntentPlugin).(*cmsIntentsPluginChunkType)
-	//	Plugin := (*cmsPluginRenderingIntent)(unsafe.Pointer(Data))
 	// Reset custom intents if Data is nil.
 	if Data == nil {
 		ctx.Intents = nil

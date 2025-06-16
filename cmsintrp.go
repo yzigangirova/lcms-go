@@ -27,7 +27,6 @@ func cmsAllocInterpPluginChunk(ctx, src *CmsContextStruct) {
 
 // cmsRegisterInterpPlugin is the main entry for interpolation plug-in registration.
 func cmsRegisterInterpPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
-	//plugin := (*cmsPluginInterpolation)(unsafe.Pointer(Data))
 	ptr := CmsContextGetClientChunk(ContextID, InterpPlugin).(*cmsInterpPluginChunkType)
 
 	if Data == nil {

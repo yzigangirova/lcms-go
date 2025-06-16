@@ -1,7 +1,7 @@
 package golcms
 
 import (
-	"bytes"
+	//"bytes"
 	"encoding/binary"
 	"sync"
 	"time"
@@ -12,60 +12,51 @@ import (
 )
 
 // Check if the platform is little-endian
-func IsLittleEndian() bool {
-	var test uint16 = 0x1
-	return (*[2]byte)(unsafe.Pointer(&test))[0] == 0x1
-}
 
 // Platform endianess determined at runtime
 var platformEndian binary.ByteOrder
 
 func init() {
-	if IsLittleEndian() {
-		platformEndian = binary.LittleEndian
-	} else {
+	if isBigEndian() {
 		platformEndian = binary.BigEndian
+	} else {
+		platformEndian = binary.LittleEndian
 	}
 }
 
-// Adjust a 16-bit value for the platform endianess
+/*// Adjust a 16-bit value for the platform endianess
 func cmsAdjustEndianess16(word uint16) uint16 {
 	if platformEndian == binary.BigEndian {
-		return word // No adjustment needed
+		return word
 	}
-
-	var buf bytes.Buffer
-	binary.Write(&buf, binary.LittleEndian, word)
-	var adjusted uint16
-	binary.Read(&buf, binary.BigEndian, &adjusted)
-	return adjusted
+	return (word << 8) | (word >> 8)
 }
 
 // Adjust a 32-bit value for the platform endianess
 func cmsAdjustEndianess32(dword uint32) uint32 {
 	if platformEndian == binary.BigEndian {
-		return dword // No adjustment needed
+		return dword
 	}
-
-	var buf bytes.Buffer
-	binary.Write(&buf, binary.LittleEndian, dword)
-	var adjusted uint32
-	binary.Read(&buf, binary.BigEndian, &adjusted)
-	return adjusted
+	return (dword&0xFF)<<24 |
+		(dword&0xFF00)<<8 |
+		(dword&0xFF0000)>>8 |
+		(dword>>24)&0xFF
 }
 
 // Adjust a 64-bit value for the platform endianess
 func cmsAdjustEndianess64(qword uint64) uint64 {
 	if platformEndian == binary.BigEndian {
-		return qword // No adjustment needed
+		return qword
 	}
-
-	var buf bytes.Buffer
-	binary.Write(&buf, binary.LittleEndian, qword)
-	var adjusted uint64
-	binary.Read(&buf, binary.BigEndian, &adjusted)
-	return adjusted
-}
+	return (qword&0xFF)<<56 |
+		(qword&0xFF00)<<40 |
+		(qword&0xFF0000)<<24 |
+		(qword&0xFF000000)<<8 |
+		(qword&0xFF00000000)>>8 |
+		(qword&0xFF0000000000)>>24 |
+		(qword&0xFF000000000000)>>40 |
+		(qword>>56)&0xFF
+}*/
 
 // Auxiliary -- read 8, 16 and 32-bit numbers
 // cmsReadUInt8Number reads a single uint8 number.
@@ -73,7 +64,9 @@ func cmsAdjustEndianess64(qword uint64) uint64 {
 func cmsReadUInt8Number(io *cmsIOHANDLER, n *uint8) bool {
 	var tmp uint8
 
-	if io.Read((*cms_io_handler)(io), tmp, uint32(unsafe.Sizeof(tmp)), 1) != 1 {
+	tmp, err := ReadStruct[uint8](io, binary.BigEndian, 1)
+	if err != nil {
+		fmt.Errorf("Failed to read uint8: %v", err)
 		return false
 	}
 
@@ -87,7 +80,9 @@ func cmsReadUInt8Number(io *cmsIOHANDLER, n *uint8) bool {
 func cmsReadUInt16Number(io *cmsIOHANDLER, n *uint16) bool {
 	var tmp uint16
 
-	if io.Read((*cms_io_handler)(io), tmp, uint32(unsafe.Sizeof(tmp)), 1) != 1 {
+	tmp, err := ReadStruct[uint16](io, binary.BigEndian, 1)
+	if err != nil {
+		fmt.Errorf("Failed to read uint16: %v", err)
 		return false
 	}
 
@@ -117,10 +112,11 @@ func cmsReadUInt16Array(io *cmsIOHANDLER, n uint32, array []uint16) bool {
 func cmsReadUInt32Number(io *cmsIOHANDLER, n *uint32) bool {
 	var tmp uint32
 
-	if io.Read((*cms_io_handler)(io), &tmp, uint32(unsafe.Sizeof(tmp)), 1) != 1 {
+	tmp, err := ReadStruct[uint32](io, binary.BigEndian, 1)
+	if err != nil {
+		fmt.Errorf("Failed to read uint32: %v", err)
 		return false
 	}
-
 	if n != nil {
 		*n = cmsAdjustEndianess32(tmp)
 	}
@@ -132,8 +128,10 @@ func cmsReadFloat32Number(io *cmsIOHANDLER, n *float32) bool {
 	var tmp struct {
 		Integer uint32
 	}
-
-	if io.Read((*cms_io_handler)(io), tmp.Integer, uint32(unsafe.Sizeof(tmp.Integer)), 1) != 1 {
+	var err error
+	tmp.Integer, err = ReadStruct[uint32](io, binary.BigEndian, 1)
+	if err != nil {
+		fmt.Errorf("Failed to read uint32: %v", err)
 		return false
 	}
 
@@ -159,10 +157,11 @@ func cmsReadFloat32Number(io *cmsIOHANDLER, n *float32) bool {
 func cmsReadUInt64Number(io *cmsIOHANDLER, n *uint64) bool {
 	var tmp uint64
 
-	if io.Read((*cms_io_handler)(io), &tmp, uint32(unsafe.Sizeof(tmp)), 1) != 1 {
+	tmp, err := ReadStruct[uint64](io, binary.BigEndian, 1)
+	if err != nil {
+		fmt.Errorf("Failed to read uint64: %v", err)
 		return false
 	}
-
 	if n != nil {
 		*n = cmsAdjustEndianess64(tmp)
 	}
@@ -174,7 +173,9 @@ func cmsReadUInt64Number(io *cmsIOHANDLER, n *uint64) bool {
 func cmsRead15Fixed16Number(io *cmsIOHANDLER, n *float64) bool {
 	var tmp uint32
 
-	if io.Read((*cms_io_handler)(io), &tmp, uint32(unsafe.Sizeof(tmp)), 1) != 1 {
+	tmp, err := ReadStruct[uint32](io, binary.BigEndian, 1)
+	if err != nil {
+		fmt.Errorf("Failed to read uint32: %v", err)
 		return false
 	}
 
@@ -189,7 +190,9 @@ func cmsRead15Fixed16Number(io *cmsIOHANDLER, n *float64) bool {
 func cmsReadXYZNumber(io *cmsIOHANDLER, XYZ *cmsCIEXYZ) bool {
 	var xyz cmsEncodedXYZNumber
 
-	if io.Read((*cms_io_handler)(io), &xyz, uint32(unsafe.Sizeof(xyz)), 1) != 1 {
+	xyz, err := ReadStruct[cmsEncodedXYZNumber](io, binary.BigEndian, 1)
+	if err != nil {
+		fmt.Errorf("Failed to read uint32: %v", err)
 		return false
 	}
 
@@ -207,23 +210,14 @@ func cmsWriteUInt8Number(io *cmsIOHANDLER, n uint8) bool {
 	if io == nil {
 		panic("nil pointer in cmsWriteUInt8Number")
 	}
-
-	if !io.Write((*cms_io_handler)(io), 1, &n) {
-		return false
-	}
-	return true
+	return WriteStruct[uint8](io, n, binary.BigEndian)
 }
 
 func cmsWriteUInt16Number(io *cmsIOHANDLER, n uint16) bool {
 	if io == nil {
 		panic("nil pointer in cmsWriteUInt16Number")
 	}
-
-	tmp := cmsAdjustEndianess16(n)
-	if !io.Write((*cms_io_handler)(io), 2, &tmp) {
-		return false
-	}
-	return true
+	return WriteStruct[uint16](io, n, binary.BigEndian)
 }
 
 func cmsWriteUInt16Array(io *cmsIOHANDLER, n uint32, array []uint16) bool {
@@ -232,23 +226,18 @@ func cmsWriteUInt16Array(io *cmsIOHANDLER, n uint32, array []uint16) bool {
 	}
 
 	for i := uint32(0); i < n; i++ {
-		if !cmsWriteUInt16Number(io, array[i]) {
+		if !WriteStruct[uint16](io, array[i], binary.BigEndian) {
 			return false
 		}
 	}
 	return true
 }
-
 func cmsWriteUInt32Number(io *cmsIOHANDLER, n uint32) bool {
 	if io == nil {
 		panic("nil pointer in cmsWriteUInt32Number")
 	}
 
-	tmp := cmsAdjustEndianess32(n)
-	if io.Write((*cms_io_handler)(io), 4, &tmp) != true {
-		return false
-	}
-	return true
+	return WriteStruct[uint32](io, n, binary.BigEndian)
 }
 
 func cmsWriteFloat32Number(io *cmsIOHANDLER, n float32) bool {
@@ -256,24 +245,13 @@ func cmsWriteFloat32Number(io *cmsIOHANDLER, n float32) bool {
 		panic("nil pointer in cmsWriteFloat32Number")
 	}
 
-	tmp := math.Float32bits(n)
-	tmp = cmsAdjustEndianess32(tmp)
-	if !io.Write((*cms_io_handler)(io), 4, &tmp) {
-		return false
-	}
-	return true
+	return WriteStruct[float32](io, n, binary.BigEndian)
 }
-
 func cmsWriteUInt64Number(io *cmsIOHANDLER, n uint64) bool {
 	if io == nil {
 		panic("nil pointer in cmsWriteUInt64Number")
 	}
-
-	tmp := cmsAdjustEndianess64(n)
-	if !io.Write((*cms_io_handler)(io), 8, &tmp) {
-		return false
-	}
-	return true
+	return WriteStruct[uint64](io, n, binary.BigEndian)
 }
 
 func cmsWrite15Fixed16Number(io *cmsIOHANDLER, n float64) bool {
@@ -281,11 +259,9 @@ func cmsWrite15Fixed16Number(io *cmsIOHANDLER, n float64) bool {
 		panic("nil pointer in cmsWrite15Fixed16Number")
 	}
 
-	tmp := cmsAdjustEndianess32(uint32(cmsDoubleTo15Fixed16(n)))
-	if !io.Write((*cms_io_handler)(io), 4, &tmp) {
-		return false
-	}
-	return true
+	fixed := uint32(cmsDoubleTo15Fixed16(n))
+	return WriteStruct[uint32](io, fixed, binary.BigEndian)
+
 }
 
 func cmsWriteXYZNumber(io *cmsIOHANDLER, xyz *cmsCIEXYZ) bool {
@@ -293,15 +269,13 @@ func cmsWriteXYZNumber(io *cmsIOHANDLER, xyz *cmsCIEXYZ) bool {
 		panic("nil pointer in cmsWriteXYZNumber")
 	}
 
-	var encodedXYZ cmsEncodedXYZNumber
-	encodedXYZ.X = cmsS15Fixed16Number(cmsAdjustEndianess32(uint32(cmsDoubleTo15Fixed16(xyz.X))))
-	encodedXYZ.Y = cmsS15Fixed16Number(cmsAdjustEndianess32(uint32(cmsDoubleTo15Fixed16(xyz.Y))))
-	encodedXYZ.Z = cmsS15Fixed16Number(cmsAdjustEndianess32(uint32(cmsDoubleTo15Fixed16(xyz.Z))))
-
-	if !io.Write((*cms_io_handler)(io), uint32(binary.Size(encodedXYZ)), &encodedXYZ) {
-		return false
+	encodedXYZ := cmsEncodedXYZNumber{
+		X: cmsS15Fixed16Number(cmsDoubleTo15Fixed16(xyz.X)),
+		Y: cmsS15Fixed16Number(cmsDoubleTo15Fixed16(xyz.Y)),
+		Z: cmsS15Fixed16Number(cmsDoubleTo15Fixed16(xyz.Z)),
 	}
-	return true
+
+	return WriteStruct[cmsEncodedXYZNumber](io, encodedXYZ, binary.BigEndian)
 }
 
 // Fixed Point Conversions
@@ -342,31 +316,33 @@ func cmsDoubleTo15Fixed16(v float64) cmsS15Fixed16Number {
 
 func cmsDecodeDateTimeNumber(source *cmsDateTimeNumber) time.Time {
 	return time.Date(
-		int(cmsAdjustEndianess16(source.year)),
-		time.Month(cmsAdjustEndianess16(source.month)),
-		int(cmsAdjustEndianess16(source.day)),
-		int(cmsAdjustEndianess16(source.hours)),
-		int(cmsAdjustEndianess16(source.minutes)),
-		int(cmsAdjustEndianess16(source.seconds)),
+		int(cmsAdjustEndianess16(source.Year)),
+		time.Month(cmsAdjustEndianess16(source.Month)),
+		int(cmsAdjustEndianess16(source.Day)),
+		int(cmsAdjustEndianess16(source.Hours)),
+		int(cmsAdjustEndianess16(source.Minutes)),
+		int(cmsAdjustEndianess16(source.Seconds)),
 		0,
 		time.UTC,
 	)
 }
 
 func cmsEncodeDateTimeNumber(dest *cmsDateTimeNumber, t time.Time) {
-	dest.seconds = cmsAdjustEndianess16(uint16(t.Second()))
-	dest.minutes = cmsAdjustEndianess16(uint16(t.Minute()))
-	dest.hours = cmsAdjustEndianess16(uint16(t.Hour()))
-	dest.day = cmsAdjustEndianess16(uint16(t.Day()))
-	dest.month = cmsAdjustEndianess16(uint16(t.Month()))
-	dest.year = cmsAdjustEndianess16(uint16(t.Year()))
+	dest.Seconds = cmsAdjustEndianess16(uint16(t.Second()))
+	dest.Minutes = cmsAdjustEndianess16(uint16(t.Minute()))
+	dest.Hours = cmsAdjustEndianess16(uint16(t.Hour()))
+	dest.Day = cmsAdjustEndianess16(uint16(t.Day()))
+	dest.Month = cmsAdjustEndianess16(uint16(t.Month()))
+	dest.Year = cmsAdjustEndianess16(uint16(t.Year()))
 }
 
 // Read/Write Base Tag
 
 func cmsReadTypeBase(io *cmsIOHANDLER) cmsTagTypeSignature {
 	var base cmsTagBase
-	if io.Read((*cms_io_handler)(io), &base, uint32(unsafe.Sizeof(base)), 1) != 1 {
+	base, err := ReadStruct[cmsTagBase](io, binary.BigEndian, 1)
+	if err != nil {
+		fmt.Errorf("Failed to read uint32: %v", err)
 		return 0
 	}
 	return cmsTagTypeSignature(cmsAdjustEndianess32(uint32(base.Sig)))
@@ -378,7 +354,7 @@ func cmsWriteTypeBase(io *cmsIOHANDLER, sig cmsTagTypeSignature) bool {
 	for i := range base.Reserved {
 		base.Reserved[i] = 0
 	}
-	return io.Write((*cms_io_handler)(io), uint32(unsafe.Sizeof(base)), unsafe.Pointer(&base))
+	return WriteStruct[cmsTagBase](io, base, binary.BigEndian)
 }
 
 // Alignment Functions
@@ -411,7 +387,7 @@ func cmsWriteAlignment(io *cmsIOHANDLER) bool {
 	if bytesToNextAlignedPos > 4 {
 		return false
 	}
-	return io.Write((*cms_io_handler)(io), uint32(len(buffer)), &buffer)
+	return io.Write((*cms_io_handler)(io), uint32(len(buffer)), buffer[:])
 }
 
 // Plugin memory management -------------------------------------------------------------------------------------------------

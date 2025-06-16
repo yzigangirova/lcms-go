@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 	"unsafe"
+		"bytes"
+	"encoding/binary"
 )
 
 // Determinant lower than that are assumed zero (used on matrix invert)
@@ -82,9 +84,10 @@ func cmsQuickFloor(val float64) int {
 }
 
 func isBigEndian() bool {
-	var i uint32 = 0x1
-	b := (*[4]byte)(unsafe.Pointer(&i))
-	return b[0] == 0
+	var i uint32 = 0x01000000 // MSB first
+	buf := new(bytes.Buffer)
+	_ = binary.Write(buf, binary.BigEndian, i)
+	return buf.Bytes()[0] == 0x01
 }
 
 // Fast floor restricted to 0..65535.0
@@ -321,7 +324,7 @@ type cmsMLU struct {
 
 // cmsSubAllocatorChunk represents a chunk of memory in the suballocator.
 type cmsSubAllocatorChunk struct {
-	Block     *uint8                // Pointer to the memory block
+	Block     []uint8                // Pointer to the memory block
 	BlockSize uint32                // Size of the memory block
 	Used      uint32                // Amount of memory used in the block
 	Next      *cmsSubAllocatorChunk // Pointer to the next chunk
@@ -611,7 +614,7 @@ func memset(ptr interface{}, value int, num uintptr) {
 
 // memmove copies n bytes from src to dst, handling overlapping regions correctly.
 // This is a direct implementation without slice conversion overhead.
-func memmove(dst, src unsafe.Pointer, n uintptr) {
+/*func memmove(dst, src unsafe.Pointer, n uintptr) {
 	if dst == src || n == 0 {
 		return
 	}
@@ -641,7 +644,7 @@ func memcpy(dst, src unsafe.Pointer, n uintptr) {
 	for i := uintptr(0); i < n; i++ {
 		*(*byte)(unsafe.Pointer(uintptr(dst) + i)) = *(*byte)(unsafe.Pointer(uintptr(src) + i))
 	}
-}
+}*/
 
 // strncpy copies up to `n` characters from `src` to a new `dst`.
 // It returns the resulting string, null-padded to `n` if `src` is shorter.
@@ -665,29 +668,4 @@ func strncpy(src string, n int) string {
 
 	// Convert to string (this makes an immutable copy)
 	return string(dst)
-}
-
-/*
-	func strlen(s string) int {
-	    return strings.IndexByte(s, 0) // Returns -1 if no null byte
-	}
-*/
-func strlen(str *byte) int {
-	if str == nil {
-		return 0
-	}
-
-	ptr := unsafe.Pointer(str)
-	length := 0
-
-	for {
-		current := *(*byte)(ptr)
-		if current == 0 {
-			break
-		}
-		length++
-		ptr = unsafe.Pointer(uintptr(ptr) + 1) // Safe: conversion in same expression
-	}
-
-	return length
 }

@@ -37,7 +37,6 @@ var cmsCurvesPluginChunk = cmsCurvesPluginChunkType{ParametricCurves: nil}
 
 func cmsRegisterParametricCurvesPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
 	ctx := CmsContextGetClientChunk(ContextID, CurvesPlugin).(*cmsCurvesPluginChunkType)
-	//Plugin := (*cmsPluginParametricCurves)(unsafe.Pointer(Data))
 	var fl *cmsParametricCurvesCollection
 
 	// Reset parametric curves if Data is nil.

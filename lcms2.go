@@ -446,12 +446,12 @@ type cmsICCData struct {
 
 // ICC date time
 type cmsDateTimeNumber struct {
-	year    uint16
-	month   uint16
-	day     uint16
-	hours   uint16
-	minutes uint16
-	seconds uint16
+	Year    uint16
+	Month   uint16
+	Day     uint16
+	Hours   uint16
+	Minutes uint16
+	Seconds uint16
 }
 
 // ICC XYZ
