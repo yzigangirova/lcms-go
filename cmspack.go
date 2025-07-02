@@ -2031,9 +2031,15 @@ func PackLabV2_16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint
 	return output[6:]
 }
 func Pack3Bytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+	/*	fmt.Println("wOut[0]", wOut[0])
+		fmt.Println("wOut[1]", wOut[1])
+		fmt.Println("wOut[2]", wOut[2])*/
 	output[0] = FROM_16_TO_8(wOut[0])
 	output[1] = FROM_16_TO_8(wOut[1])
 	output[2] = FROM_16_TO_8(wOut[2])
+	/*	fmt.Println("output[0]", output[0])
+		fmt.Println("output[1]", output[1])
+		fmt.Println("output[2]", output[2])*/
 
 	return output[3:]
 }
@@ -2782,6 +2788,9 @@ func PackLabDoubleFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, 
 	L := float64(wOut[0] * 100.0)
 	a := float64(wOut[1]*255.0 - 128.0)
 	b := float64(wOut[2]*255.0 - 128.0)
+	/*	fmt.Println("wOut[0]", L)
+		fmt.Println("wOut[1]", a)
+		fmt.Println("wOut[2]", b)*/
 
 	buf := bytes.NewBuffer(output[:0])
 	if T_PLANAR(info.OutputFormat) != 0 {

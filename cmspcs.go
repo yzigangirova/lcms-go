@@ -89,7 +89,7 @@ CIELAB (16 bit)     b*            -128.0 . +127      0x0000 . 0x8080 . 0xffff
 // Conversions
 func cmsXYZ2xyY(dest *CmsCIExyY, source *cmsCIEXYZ) {
 	sum := 1.0 / (source.X + source.Y + source.Z)
-	dest.X_small= source.X * sum
+	dest.X_small = source.X * sum
 	dest.Y_small = source.Y * sum
 	dest.Y_large = source.Z
 }
@@ -97,9 +97,8 @@ func cmsXYZ2xyY(dest *CmsCIExyY, source *cmsCIEXYZ) {
 func cmsxyY2XYZ(dest *cmsCIEXYZ, source *CmsCIExyY) {
 	dest.X = (source.X_small / source.Y_small) * source.Y_large
 	dest.Y = source.Y_large
-	dest.Z = ((1 - source.X_small - source.Y_small) / source.Y_large) * source.Y_large
+	dest.Z = ((1 - source.X_small - source.Y_small) / source.Y_small) * source.Y_large
 }
-
 
 /*
    The break point (24/116)^3 = (6/29)^3 is a very small amount of tristimulus

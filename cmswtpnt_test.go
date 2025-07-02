@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-
 func TestCmsD50_XYZ(t *testing.T) {
 	d50 := cmsD50_XYZ()
 	if !almostEq(d50.X, 0.9642) || !almostEq(d50.Y, 1.0) || !almostEq(d50.Z, 0.8249) {
@@ -15,8 +14,8 @@ func TestCmsD50_XYZ(t *testing.T) {
 
 func TestCmsD50_xyY(t *testing.T) {
 	d50xy := cmsD50_xyY()
-	if d50xy.Y != 0.824900{
-		t.Errorf("cmsD50_xyY Y should be 0.824900, got %f", d50xy.Y)
+	if d50xy.Y_large != 0.824900 {
+		t.Errorf("cmsD50_xyY Y should be 0.824900, got %f", d50xy.Y_large)
 	}
 }
 
@@ -26,7 +25,7 @@ func TestCmsWhitePointFromTemp_Valid(t *testing.T) {
 	if err != nil {
 		t.Errorf("cmsWhitePointFromTemp failed: %v", err)
 	}
-	if wp.x <= 0 || wp.y <= 0 {
+	if wp.X_small <= 0 || wp.Y_small <= 0 {
 		t.Errorf("Invalid white point result: %v", wp)
 	}
 }
@@ -60,6 +59,7 @@ func TestComputeChromaticAdaptation_Success(t *testing.T) {
 		t.Errorf("cmsAdaptationMatrix failed")
 	}
 }
+
 /*func TestCmsAdaptMatrixToD50_Basic(t *testing.T) {
 	var adapted cmsMAT3
 	src := &cmsCIEXYZ{X: 0.95, Y: 1.0, Z: 1.09}

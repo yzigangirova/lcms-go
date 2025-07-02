@@ -100,7 +100,7 @@ func TestCmsChannelsOf(t *testing.T) {
 func TestXYZEncodingRangeClamp(t *testing.T) {
 	in := &cmsCIEXYZ{X: -1, Y: 2, Z: 1.5}
 	var encoded [3]uint16
-	cmsFloat2XYZEncoded(encoded, in)
+	cmsFloat2XYZEncoded(&encoded, in)
 
 	if encoded[0] != 0 || encoded[1] > 0xffff {
 		t.Errorf("XYZ encoding range clamp failed: %v", encoded)
@@ -110,7 +110,7 @@ func TestXYZEncodingRangeClamp(t *testing.T) {
 func TestLabEncodingRangeClamp(t *testing.T) {
 	in := &cmsCIELab{L: 120, a: -150, b: 150}
 	var encoded [3]uint16
-	cmsFloat2LabEncoded(encoded, in)
+	cmsFloat2LabEncoded(encoded[:], in)
 
 	if encoded[0] > 0xffff || encoded[2] > 0xffff {
 		t.Errorf("Lab encoding clamp out of bounds: %v", encoded)

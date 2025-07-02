@@ -549,11 +549,14 @@ func cmsReadInputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 	ContextID := cmsGetProfileContextID(hProfile)
 
 	if cmsGetDeviceClass(hProfile) == cmsSigNamedColorClass {
-		nc := cmsReadTag(hProfile, cmsSigNamedColor2Tag).(*cmsNAMEDCOLORLIST)
+		nc, ok := cmsReadTag(hProfile, cmsSigNamedColor2Tag).(*cmsNAMEDCOLORLIST)
 		if nc == nil {
 			return nil
 		}
-
+		if !ok {
+			fmt.Printf("Error: Interface data assertion error, not *cmsNAMEDCOLORLIST\n")
+			return nil
+		}
 		Lut := cmsPipelineAlloc(ContextID, 0, 0)
 		if Lut == nil {
 			return nil
@@ -589,7 +592,8 @@ func cmsReadInputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 				return nil
 			}
 			if !ok {
-
+				fmt.Printf("Error: Interface data assertion error, not *cmsPipeline\n")
+				return nil
 			}
 
 			OriginalType := cmsGetTagTrueType(hProfile, tag16)
@@ -994,7 +998,8 @@ func GetMLUFromProfile(h CmsHPROFILE, sig cmsTagSignature) *cmsMLU {
 		return nil
 	}
 	if !ok {
-
+		fmt.Printf("Error: Interface data assertion error, not *cmsMLU\n")
+		return nil
 	}
 
 	return cmsMLUdup(mlu)
@@ -1024,7 +1029,8 @@ func cmsCompileProfileSequence(ContextID CmsContext, nProfiles uint32, hProfiles
 		if techpt == nil {
 			ps.technology = cmsTechnologySignature(0)
 		} else if !ok {
-
+			fmt.Printf("Error: Interface data assertion error, not *cmsTechnologySignature\n")
+			return nil
 		} else {
 			ps.technology = *techpt
 		}
@@ -1053,8 +1059,12 @@ func GetInfo(hProfile CmsHPROFILE, Info CmsInfoType) *cmsMLU {
 		return nil
 	}
 	mlu, ok := cmsReadTag(hProfile, sig).(*cmsMLU)
+	if mlu == nil {
+	return nil	
+	}
 	if !ok {
-
+		fmt.Printf("Error: Interface data assertion error, not *cmsMLU\n")
+		return nil
 	}
 	return mlu
 }

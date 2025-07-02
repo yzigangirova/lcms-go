@@ -39,9 +39,9 @@ const (
 )
 
 // Tag Base
-type cmsTagTypeSignature = uint32
+type cmsTagTypeSignature  uint32
 
-type cmsTagSignature = uint32
+type cmsTagSignature  uint32
 
 // Constants for interpolation flags
 const (

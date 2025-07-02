@@ -4,8 +4,9 @@ import (
 	//"errors"
 	"unsafe"
 	//"sync"
+	"bytes"
+	"encoding/binary"
 	"fmt"
-	"reflect"
 )
 
 // Transformations stuff
@@ -201,7 +202,12 @@ func PixelSize(Format uint32) uint32 {
 
 // cmsDoTransform applies a transformation to the input buffer and writes the result to the output buffer.
 func CmsDoTransform(Transform CmsHTRANSFORM, InputBuffer, OutputBuffer any, Size uint32) {
-	p := Transform.(*cmsTRANSFORM) // Cast the generic Transform to the specific type cmsTRANSFORM
+//	fmt.Println("start CmsDoTransform")
+
+	p, ok := Transform.(*cmsTRANSFORM) // Cast the generic Transform to the specific type cmsTRANSFORM
+	if !ok {
+		fmt.Println("Error: p is not of the type cmsTransform")
+	}
 	var stride cmsStride
 
 	// Initialize stride parameters
@@ -212,6 +218,8 @@ func CmsDoTransform(Transform CmsHTRANSFORM, InputBuffer, OutputBuffer any, Size
 
 	// Perform the transformation
 	p.Xform(p, InputBuffer, OutputBuffer, Size, 1, &stride)
+//	fmt.Println("end CmsDoTransform")
+
 }
 
 func CmsDoTransformStride(
@@ -264,6 +272,9 @@ func FloatXFORM(
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
+
+//	fmt.Println("FloatXFORM")
+
 	var fIn, fOut [cmsMAXCHANNELS]float32
 	var OutOfGamut float32
 	var strideIn, strideOut uint32
@@ -281,8 +292,10 @@ func FloatXFORM(
 		inBytes = float64SliceToBytes(v)
 	case []uint16:
 		inBytes = uint16SliceToBytes(v)
+	case *cmsCIELab:
+		inBytes = float64SliceToBytes(LabToSlice(*v))
 	default:
-		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16")
+		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16 , or *cmsCIELab")
 	}
 
 	// Type assertion and conversion for output
@@ -295,8 +308,10 @@ func FloatXFORM(
 		outBytes = float64SliceToBytes(v)
 	case []uint16:
 		outBytes = uint16SliceToBytes(v)
+	case *cmsCIELab:
+		outBytes = float64SliceToBytes(LabToSlice(*v))
 	default:
-		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16")
+		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
@@ -341,6 +356,33 @@ func FloatXFORM(
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
+	switch v := out.(type) {
+	case []byte:
+		copy(v, outBytes)
+	case []float32:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case []float64:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case []uint16:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case *cmsCIELab:
+		lab := bytesToLab(outBytes)
+		v.L = lab.L
+		v.a = lab.a
+		v.b = lab.b
+	default:
+		panic("Unsupported type in FloatXFORM output finalization")
+	}
+
 }
 
 func NullFloatXFORM(
@@ -448,10 +490,8 @@ func PrecalculatedXFORM(
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			// Process input
 			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
-
 			// Evaluate LUT
 			p.Lut.Eval16Fn(wIn[:], wOut[:], p.Lut.Data)
-
 			// Process output
 			output = p.ToOutput(p, wOut[:], output, Stride.BytesPerPlaneOut)
 		}
@@ -527,6 +567,8 @@ func CachedXFORM(
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
+//	fmt.Println("CachedXFORM")
+
 	var wIn, wOut [cmsMAXCHANNELS]uint16
 	var strideIn, strideOut uint32
 	var cache cmsCACHE
@@ -556,11 +598,24 @@ func CachedXFORM(
 			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
 
 			// Use cache to avoid redundant calculations
-			if reflect.DeepEqual(wIn, cache.CacheIn) {
+			equal := true
+			for i := 0; i < 16; i++ {
+				if wIn[i] != cache.CacheIn[i] {
+					equal = false
+					break
+				}
+			}
+			if equal {
 				copy(wOut[:], cache.CacheOut[:])
 			} else {
+				/*	fmt.Println("wIn[0]", wIn[0])
+					fmt.Println("wIn[1]", wIn[1])
+					fmt.Println("wIn[2]", wIn[2])*/
 				p.Lut.Eval16Fn(wIn[:], wOut[:], p.Lut.Data)
-				copy(cache.CacheIn[:], wIn[:])
+				/*	fmt.Println("wOut[0]", wOut[0])
+					fmt.Println("wOut[1]", wOut[1])
+					fmt.Println("wOut[2]", wOut[2])
+					copy(cache.CacheIn[:], wIn[:])*/
 				copy(cache.CacheOut[:], wOut[:])
 			}
 
@@ -609,7 +664,15 @@ func CachedXFORMGamutCheck(
 			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
 
 			//  Use cache for performance optimization
-			if reflect.DeepEqual(wIn, cache.CacheIn) {
+			// Use cache to avoid redundant calculations
+			equal := true
+			for i := 0; i < 16; i++ {
+				if wIn[i] != cache.CacheIn[i] {
+					equal = false
+					break
+				}
+			}
+			if equal {
 				copy(wOut[:], cache.CacheOut[:])
 			} else {
 				TransformOnePixelWithGamutCheck(p, wIn[:], wOut[:])
@@ -656,11 +719,8 @@ func DupPluginTransformList(ctx CmsContext, src CmsContext) {
 
 	// Walk the list and copy each node.
 	for entry = head.TransformCollection; entry != nil; entry = entry.Next {
-		newEntry := allocateStruct[cmsTransformCollection]()
-		if newEntry == nil {
-			return
-		}
-
+		newEntry := new(cmsTransformCollection) // Heap allocation
+		*newEntry = *entry
 		// Maintain order in the linked list.
 		newEntry.Next = nil
 		if prev != nil {
@@ -1116,7 +1176,7 @@ func cmsCreateExtendedTransform(
 	OutputFormat uint32,
 	dwFlags uint32,
 ) *cmsTRANSFORM {
-	//fmt.Println("cmsCreateExtendedTransform")
+//	fmt.Println("cmsCreateExtendedTransform")
 	// Check if it's a fake transform
 	if dwFlags&cmsFLAGS_NULLTRANSFORM != 0 {
 		return AllocEmptyTransform(ContextID, nil, INTENT_PERCEPTUAL, &InputFormat, &OutputFormat, &dwFlags)
@@ -1232,6 +1292,7 @@ func cmsCreateExtendedTransform(
 		}
 
 	}
+//	fmt.Println("end cmsCreateExtendedTransform before returning form")
 
 	return xform
 }
@@ -1246,7 +1307,7 @@ func cmsCreateMultiprofileTransformTHR(
 	Intent uint32,
 	dwFlags uint32,
 ) CmsHTRANSFORM {
-	//fmt.Println("cmsCreateMultiprofileTransformTHR")
+//	fmt.Println("start cmsCreateMultiprofileTransformTHR")
 	var BPC [256]bool
 	var Intents [256]uint32
 	var AdaptationStates [256]float64
@@ -1269,6 +1330,7 @@ func cmsCreateMultiprofileTransformTHR(
 	}
 
 	// Create the extended transform
+//	fmt.Println("end cmsCreateMultiprofileTransformTHR")
 	return CmsHTRANSFORM(cmsCreateExtendedTransform(ContextID, nProfiles, hProfiles, BPC[:], Intents[:], AdaptationStates[:], nil, 0, InputFormat, OutputFormat, dwFlags))
 }
 
@@ -1327,8 +1389,10 @@ func CmsCreateTransform(
 	Intent uint32,
 	dwFlags uint32,
 ) CmsHTRANSFORM {
-	//fmt.Println("CmsCreateTransform")
+//	fmt.Println("start CmsCreateTransform")
 	return cmsCreateTransformTHR(cmsGetProfileContextID(Input), Input, InputFormat, Output, OutputFormat, Intent, dwFlags)
+	//fmt.Println("end CmsCreateTransform")
+
 }
 
 func cmsCreateProofingTransformTHR(

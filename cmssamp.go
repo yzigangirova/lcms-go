@@ -4,10 +4,188 @@ package golcms
 // and black preservation.
 
 import (
-	//"fmt"
+	"fmt"
 	"math"
 	//"unsafe"
 )
+
+func debugPrintCmsICCPROFILE(prefix string, p *cmsICCPROFILE) {
+	if p == nil {
+		fmt.Printf("[%s] cmsICCPROFILE is nil\n", prefix)
+		return
+	}
+	fmt.Printf("[%s] cmsICCPROFILE @ %p\n", prefix, p)
+	fmt.Printf("[%s] ContextID: %v\n", prefix, p.ContextID)
+	fmt.Printf("[%s] Created: %v\n", prefix, p.Created)
+	fmt.Printf("[%s] Version: %d\n", prefix, p.Version)
+	fmt.Printf("[%s] DeviceClass: 0x%X\n", prefix, p.DeviceClass)
+	fmt.Printf("[%s] ColorSpace: 0x%X\n", prefix, p.ColorSpace)
+	fmt.Printf("[%s] PCS: 0x%X\n", prefix, p.PCS)
+	fmt.Printf("[%s] RenderingIntent: %d\n", prefix, p.RenderingIntent)
+	fmt.Printf("[%s] Flags: 0x%X\n", prefix, p.Flags)
+	fmt.Printf("[%s] Manufacturer: 0x%X\n", prefix, p.Manufacturer)
+	fmt.Printf("[%s] Model: 0x%X\n", prefix, p.Model)
+	fmt.Printf("[%s] Attributes: 0x%X\n", prefix, p.Attributes)
+	fmt.Printf("[%s] Creator: 0x%X\n", prefix, p.Creator)
+	fmt.Printf("[%s] ProfileID: %v\n", prefix, p.ProfileID)
+	fmt.Printf("[%s] TagCount: %d\n", prefix, p.TagCount)
+	fmt.Printf("[%s] IsWrite: %v\n", prefix, p.IsWrite)
+}
+func debugPrintCmsTRANSFORM(prefix string, t *cmsTRANSFORM) {
+	if t == nil {
+		fmt.Printf("[%s] cmsTRANSFORM is nil\n", prefix)
+		return
+	}
+	fmt.Printf("[%s] cmsTRANSFORM @ %p\n", prefix, t)
+	fmt.Printf("[%s] InputFormat: 0x%X, OutputFormat: 0x%X\n", prefix, t.InputFormat, t.OutputFormat)
+	fmt.Printf("[%s] EntryColorSpace: 0x%X, ExitColorSpace: 0x%X\n", prefix, t.EntryColorSpace, t.ExitColorSpace)
+	fmt.Printf("[%s] EntryWhitePoint: %+v\n", prefix, t.EntryWhitePoint)
+	fmt.Printf("[%s] ExitWhitePoint: %+v\n", prefix, t.ExitWhitePoint)
+	fmt.Printf("[%s] DwOriginalFlags: 0x%X\n", prefix, t.DwOriginalFlags)
+	fmt.Printf("[%s] AdaptationState: %.6f\n", prefix, t.AdaptationState)
+	fmt.Printf("[%s] RenderingIntent: %d\n", prefix, t.RenderingIntent)
+	fmt.Printf("[%s] ContextID: %v\n", prefix, t.ContextID)
+	fmt.Printf("[%s] MaxWorkers: %d, WorkerFlags: 0x%X\n", prefix, t.MaxWorkers, t.WorkerFlags)
+
+	// LUT Pipeline
+	if t.Lut != nil {
+		fmt.Printf("[%s] Lut Pipeline @ %p\n", prefix, t.Lut)
+		fmt.Printf("[%s] Lut InputChannels: %d, OutputChannels: %d\n", prefix, t.Lut.InputChannels, t.Lut.OutputChannels)
+		fmt.Printf("[%s] Lut SaveAs8Bits: %v\n", prefix, t.Lut.SaveAs8Bits)
+		fmt.Printf("[%s] Lut ContextID: %v\n", prefix, t.Lut.ContextID)
+		if t.Lut.Elements != nil {
+			debugPrintCmsStage(prefix+"->Lut.Elements", t.Lut.Elements)
+		} else {
+			fmt.Printf("[%s] Lut.Elements: nil\n", prefix)
+		}
+
+	} else {
+		fmt.Printf("[%s] Lut Pipeline: nil\n", prefix)
+	}
+
+	// GamutCheck Pipeline
+	if t.GamutCheck != nil {
+		fmt.Printf("[%s] GamutCheck Pipeline @ %p\n", prefix, t.GamutCheck)
+		fmt.Printf("[%s] GamutCheck InputChannels: %d, OutputChannels: %d\n", prefix, t.GamutCheck.InputChannels, t.GamutCheck.OutputChannels)
+	} else {
+		fmt.Printf("[%s] GamutCheck Pipeline: nil\n", prefix)
+	}
+
+	// InputColorant
+	if t.InputColorant != nil {
+		fmt.Printf("[%s] InputColorant @ %p\n", prefix, t.InputColorant)
+		fmt.Printf("[%s] InputColorant nColors: %d, Allocated: %d, ColorantCount: %d\n",
+			prefix, t.InputColorant.nColors, t.InputColorant.Allocated, t.InputColorant.ColorantCount)
+		fmt.Printf("[%s] InputColorant Prefix: %s\n", prefix, string(t.InputColorant.Prefix[:]))
+		fmt.Printf("[%s] InputColorant Suffix: %s\n", prefix, string(t.InputColorant.Suffix[:]))
+		fmt.Printf("[%s] InputColorant ContextID: %v\n", prefix, t.InputColorant.ContextID)
+	} else {
+		fmt.Printf("[%s] InputColorant: nil\n", prefix)
+	}
+
+	// OutputColorant
+	if t.OutputColorant != nil {
+		fmt.Printf("[%s] OutputColorant @ %p\n", prefix, t.OutputColorant)
+		fmt.Printf("[%s] OutputColorant nColors: %d, Allocated: %d, ColorantCount: %d\n",
+			prefix, t.OutputColorant.nColors, t.OutputColorant.Allocated, t.OutputColorant.ColorantCount)
+		fmt.Printf("[%s] OutputColorant Prefix: %s\n", prefix, string(t.OutputColorant.Prefix[:]))
+		fmt.Printf("[%s] OutputColorant Suffix: %s\n", prefix, string(t.OutputColorant.Suffix[:]))
+		fmt.Printf("[%s] OutputColorant ContextID: %v\n", prefix, t.OutputColorant.ContextID)
+	} else {
+		fmt.Printf("[%s] OutputColorant: nil\n", prefix)
+	}
+
+	// Sequence
+	if t.Sequence != nil {
+		fmt.Printf("[%s] Sequence @ %p (details omitted)\n", prefix, t.Sequence)
+	} else {
+		fmt.Printf("[%s] Sequence: nil\n", prefix)
+	}
+
+	// Worker and Xform function pointers
+	fmt.Printf("[%s] Worker: %v, Xform: %v, OldXform: %v\n",
+		prefix, t.Worker != nil, t.Xform != nil, t.OldXform != nil)
+
+	// UserData
+	if t.UserData != nil {
+		fmt.Printf("[%s] UserData: present (type: %T)\n", prefix, t.UserData)
+	} else {
+		fmt.Printf("[%s] UserData: nil\n", prefix)
+	}
+}
+func debugPrintCmsStage(prefix string, s *cmsStage) {
+	if s == nil {
+		fmt.Printf("[%s] cmsStage: nil\n", prefix)
+		return
+	}
+	fmt.Printf("[%s] cmsStage @ %p\n", prefix, s)
+	fmt.Printf("[%s] ContextID: %v\n", prefix, s.ContextID)
+	fmt.Printf("[%s] Type: 0x%X (%s)\n", prefix, s.Type, decodeStageSignature(s.Type))
+	fmt.Printf("[%s] Implements: 0x%X (%s)\n", prefix, s.Implements, decodeStageSignature(s.Implements))
+	fmt.Printf("[%s] InputChannels: %d, OutputChannels: %d\n", prefix, s.InputChannels, s.OutputChannels)
+	fmt.Printf("[%s] EvalPtr: present: %v\n", prefix, s.EvalPtr != nil)
+	fmt.Printf("[%s] DupElemPtr: present: %v\n", prefix, s.DupElemPtr != nil)
+	fmt.Printf("[%s] FreePtr: present: %v\n", prefix, s.FreePtr != nil)
+
+	// Print Data type
+	if s.Data != nil {
+		fmt.Printf("[%s] Data present (type: %T)\n", prefix, s.Data)
+
+		// If Data is *cmsStageMatrixData, print contents
+		if m, ok := s.Data.(*cmsStageMatrixData); ok {
+			fmt.Printf("[%s] cmsStageMatrixData @ %p\n", prefix, m)
+			fmt.Printf("[%s] Matrix (Double, len=%d): ", prefix, len(m.Double))
+			for i, v := range m.Double {
+				fmt.Printf("%.6f ", v)
+				if i >= 15 {
+					fmt.Print("... ")
+					break
+				}
+			}
+			fmt.Println()
+			if m.Offset != nil {
+				fmt.Printf("[%s] Offset (len=%d): ", prefix, len(m.Offset))
+				for i, v := range m.Offset {
+					fmt.Printf("%.6f ", v)
+					if i >= 15 {
+						fmt.Print("... ")
+						break
+					}
+				}
+				fmt.Println()
+			} else {
+				fmt.Printf("[%s] Offset: nil\n", prefix)
+			}
+		}
+	} else {
+		fmt.Printf("[%s] Data: nil\n", prefix)
+	}
+
+	if s.Next != nil {
+		fmt.Printf("[%s] Next: %p (following next)\n", prefix, s.Next)
+		debugPrintCmsStage(prefix+"->Next", s.Next)
+	} else {
+		fmt.Printf("[%s] Next: nil\n", prefix)
+	}
+}
+
+func decodeStageSignature(sig cmsStageSignature) string {
+	// Replace with your actual signature constants if needed
+	switch sig {
+	case cmsSigMatrixElemType:
+		return "Matrix"
+	case cmsSigCurveSetElemType:
+		return "CurveSet"
+	case cmsSigCLutElemType:
+		return "CLUT"
+	case cmsSigLab2XYZElemType:
+		return "Lab2XYZ"
+	case cmsSigXYZ2LabElemType:
+		return "XYZ2Lab"
+	default:
+		return "Unknown"
+	}
+}
 
 // CreateRoundtripXForm creates a PCS -> PCS round trip transform, always using relative intent on the device -> PCS.
 func CreateRoundtripXForm(hProfile CmsHPROFILE, nIntent uint32) CmsHTRANSFORM {
@@ -23,6 +201,12 @@ func CreateRoundtripXForm(hProfile CmsHPROFILE, nIntent uint32) CmsHTRANSFORM {
 		States[:], nil, 0, TYPE_Lab_DBL, TYPE_Lab_DBL, cmsFLAGS_NOCACHE|cmsFLAGS_NOOPTIMIZE,
 	))
 
+	//hlabProfile := hLab.(*cmsICCPROFILE)
+	//xformTransform := xform.(*cmsTRANSFORM)
+
+	// Debug output
+	//debugPrintCmsICCPROFILE("CreateRoundtripXForm", hlabProfile)
+	//debugPrintCmsTRANSFORM("CreateRoundtripXForm", xformTransform)
 	CmsCloseProfile(hLab)
 	return xform
 }
@@ -38,7 +222,7 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 	var nChannels uint32
 	var Space cmsColorSpaceSignature
 	ContextID := cmsGetProfileContextID(hInput)
-	//fmt.Println("START BlackPointAsDarkerColorant")
+//	fmt.Println("START BlackPointAsDarkerColorant")
 
 	// If the profile does not support input direction, assume Black point 0.
 	if !cmsIsIntentSupported(hInput, Intent, LCMS_USED_AS_INPUT) {
@@ -115,7 +299,7 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 	if BlackPoint != nil {
 		*BlackPoint = BlackXYZ
 	}
-	//fmt.Println("END BlackPointAsDarkerColorant BlackPoint.X, BlackPoint.Y, BlackPoint.Z ", (*BlackPoint).X, (*BlackPoint).Y, (*BlackPoint).Z)
+//	fmt.Println("END BlackPointAsDarkerColorant BlackPoint.X, BlackPoint.Y, BlackPoint.Z ", (*BlackPoint).X, (*BlackPoint).Y, (*BlackPoint).Z)
 
 	return true
 }
@@ -125,7 +309,7 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 // The process involves a roundtrip transformation using perceptual intent:
 // Lab (0, 0, 0) -> [Perceptual] Profile -> CMYK -> [Rel. Colorimetric] Profile -> Lab.
 func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE) bool {
-	//fmt.Println("START BlackPointUsingPerceptualBlack")
+//	fmt.Println("START BlackPointUsingPerceptualBlack ", BlackPoint)
 	var LabIn, LabOut cmsCIELab
 	var BlackXYZ cmsCIEXYZ
 
@@ -166,7 +350,7 @@ func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE)
 	if BlackPoint != nil {
 		*BlackPoint = BlackXYZ
 	}
-	//fmt.Println("END BlackPointUsingPerceptualBlack  BlackPoint.X, BlackPoint.Y, BlackPoint.Z ", (*BlackPoint).X, (*BlackPoint).Y, (*BlackPoint).Z)
+//	fmt.Println("END BlackPointUsingPerceptualBlack  BlackPoint.X, BlackPoint.Y, BlackPoint.Z ", (*BlackPoint).X, (*BlackPoint).Y, (*BlackPoint).Z)
 
 	return true
 }
@@ -175,7 +359,7 @@ func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE)
 // This function attempts to address the issues with broken black point tags in profiles.
 // It ensures the chromaticity of the black point is neutral to avoid tints during compensation.
 func cmsDetectBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE, Intent, dwFlags uint32) bool {
-	//fmt.Println("START cmsDetectBlackPoint")
+//	fmt.Println("START cmsDetectBlackPoint")
 
 	// Ensure the device class is adequate
 	devClass := cmsGetDeviceClass(hProfile)

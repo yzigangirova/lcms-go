@@ -439,9 +439,9 @@ const (
 
 // Common structures in ICC tags
 type cmsICCData struct {
-	len  uint32
-	flag uint32
-	data [1]uint8
+	Len  uint32
+	Flag uint32
+	Data []uint8
 }
 
 // ICC date time

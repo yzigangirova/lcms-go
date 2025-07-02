@@ -3,7 +3,7 @@ package golcms
 import (
 	//"encoding/binary"
 	//"unsafe"
-	//"fmt"
+	"fmt"
 )
 
 // cmsMLUalloc allocates an empty multi-localized unicode object.
@@ -172,7 +172,6 @@ func cmsMLUsetASCII(mlu *cmsMLU, languageCode, countryCode string, asciiStr stri
 	return AddMLUBlock(mlu, wStr, lang, country)
 }
 
-
 // cmsMLUsetWide adds a wide string entry to an MLU.
 func cmsMLUsetWide(mlu *cmsMLU, Language, Country string, WideString []uint16) bool {
 	if mlu == nil || WideString == nil {
@@ -228,7 +227,6 @@ func cmsMLUdup(mlu *cmsMLU) *cmsMLU {
 
 	return newMLU
 }
-
 
 // cmsMLUfree frees all memory used by an MLU.
 func cmsMLUfree(mlu *cmsMLU) {
@@ -389,7 +387,6 @@ func cmsMLUgetASCII(
 	return asciiLen + 1
 }
 
-
 // cmsMLUgetTranslation retrieves the language and country used for the translation.
 func cmsMLUgetTranslation(mlu *cmsMLU, LanguageCode, CountryCode string, ObtainedLanguage, ObtainedCountry *string) bool {
 	lang := strTo16(LanguageCode)
@@ -547,7 +544,11 @@ func FreeNamedColorList(mpe *cmsStage) {
 
 // DupNamedColorList duplicates the named color list.
 func DupNamedColorList(mpe *cmsStage) interface{} {
-	list := mpe.Data.(*cmsNAMEDCOLORLIST)
+	list, ok := mpe.Data.(*cmsNAMEDCOLORLIST)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *cmsNAMEDCOLORLIST\n")
+		return nil
+	}
 	return cmsDupNamedColorList(list)
 }
 
@@ -555,7 +556,11 @@ func DupNamedColorList(mpe *cmsStage) interface{} {
 
 // EvalNamedColorPCS evaluates named color in PCS (Lab) space.
 func EvalNamedColorPCS(in []float32, out []float32, mpe *cmsStage) {
-	NamedColorList := mpe.Data.(*cmsNAMEDCOLORLIST)
+	NamedColorList, ok := mpe.Data.(*cmsNAMEDCOLORLIST)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *cmsNAMEDCOLORLIST\n")
+		return
+	}
 	index := uint16(cmsQuickSaturateWord(float64(in[0]) * 65535.0))
 	// Interpret the `List` pointer as a slice of cmsNAMEDCOLOR.
 
@@ -575,7 +580,11 @@ func EvalNamedColorPCS(in []float32, out []float32, mpe *cmsStage) {
 
 // EvalNamedColor evaluates named color in device colorant space.
 func EvalNamedColor(in []float32, out []float32, mpe *cmsStage) {
-	namedColorList := mpe.Data.(*cmsNAMEDCOLORLIST)
+	namedColorList, ok := mpe.Data.(*cmsNAMEDCOLORLIST)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *cmsNAMEDCOLORLIST\n")
+		return
+	}
 	index := uint16(cmsQuickSaturateWord(float64(in[0]) * 65535.0))
 
 	if uint32(index) >= namedColorList.nColors {
@@ -616,11 +625,11 @@ func cmsStageAllocNamedColor(namedColorList *cmsNAMEDCOLORLIST, usePCS bool) *cm
 	return cmsStageAllocPlaceholder(
 		namedColorList.ContextID,
 		cmsSigNamedColorElemType,
-		1,                  // Input channels are always 1.
-		outputChannels,     // Output channels depend on `usePCS`.
-		evalFunc,           // Evaluation function depends on `usePCS`.
-		DupNamedColorList,  // Duplication function.
-		FreeNamedColorList, // Freeing function.
+		1,                                    // Input channels are always 1.
+		outputChannels,                       // Output channels depend on `usePCS`.
+		evalFunc,                             // Evaluation function depends on `usePCS`.
+		DupNamedColorList,                    // Duplication function.
+		FreeNamedColorList,                   // Freeing function.
 		cmsDupNamedColorList(namedColorList), // Duplicate the named color list.
 	)
 }
@@ -785,7 +794,6 @@ func cmsDupProfileSequenceDescription(pseq *cmsSEQ) *cmsSEQ {
 		return nil
 	}
 
-	//newSeq := cmsMalloc(pseq.ContextID, uint32(unsafe.Sizeof(cmsSEQ{}))).(*cmsSEQ)
 	newSeq := allocateStruct[cmsSEQ]()
 
 	if newSeq == nil {
@@ -835,11 +843,14 @@ func cmsDictAlloc(contextID CmsContext) CmsHANDLE {
 
 // Dispose resources
 func cmsDictFree(hDict CmsHANDLE) {
-	dict := hDict.(*cmsDICT)
+	dict, ok := hDict.(*cmsDICT)
 	if dict == nil {
 		return
 	}
-
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *cmsDICT\n")
+		return
+	}
 	entry := dict.head
 	for entry != nil {
 		if entry.DisplayName != nil {
@@ -868,7 +879,11 @@ func DupWcs(contextID CmsContext, ptr []uint16) []uint16 {
 
 // Add a new entry to the linked list
 func cmsDictAddEntry(hDict CmsHANDLE, name string, value string, displayName *cmsMLU, displayValue *cmsMLU) bool {
-	dict := hDict.(*cmsDICT)
+	dict, ok := hDict.(*cmsDICT)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *cmsDICT\n")
+		return false
+	}
 	if dict == nil || name == "" {
 		return false
 	}
@@ -890,7 +905,11 @@ func cmsDictAddEntry(hDict CmsHANDLE, name string, value string, displayName *cm
 
 // Duplicate an existing dictionary
 func cmsDictDup(hDict CmsHANDLE) CmsHANDLE {
-	oldDict := hDict.(*cmsDICT)
+	oldDict, ok := hDict.(*cmsDICT)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *cmsDICT\n")
+		return nil
+	}
 	if oldDict == nil {
 		return nil
 	}
@@ -914,7 +933,11 @@ func cmsDictDup(hDict CmsHANDLE) CmsHANDLE {
 
 // Get a pointer to the linked list
 func cmsDictGetEntryList(hDict CmsHANDLE) *cmsDICTentry {
-	dict := hDict.(*cmsDICT)
+	dict, ok := hDict.(*cmsDICT)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *cmsDICT\n")
+		return nil
+	}
 	if dict == nil {
 		return nil
 	}

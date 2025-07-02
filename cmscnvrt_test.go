@@ -3,7 +3,7 @@ package golcms
 import (
 	"math"
 	"testing"
-	"unsafe"
+	//"unsafe"
 )
 
 func TestTranslateNonICCIntents(t *testing.T) {
@@ -293,8 +293,8 @@ func TestCmsWhitePointFromTemp_D50(t *testing.T) {
 	var xyy CmsCIExyY
 	cmsWhitePointFromTemp(&xyy, 5000.0)
 
-	if xyy.Y < 0.9 || xyy.Y > 1.1 {
-		t.Errorf("cmsWhitePointFromTemp: bad Y=%f", xyy.Y)
+	if xyy.Y_large < 0.9 || xyy.Y_large > 1.1 {
+		t.Errorf("cmsWhitePointFromTemp: bad Y=%f", xyy.Y_large)
 	}
 }
 

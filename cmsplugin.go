@@ -87,7 +87,7 @@ func cmsReadUInt16Number(io *cmsIOHANDLER, n *uint16) bool {
 	}
 
 	if n != nil {
-		*n = cmsAdjustEndianess16(tmp)
+		*n = tmp
 	}
 	return true
 }
@@ -118,7 +118,7 @@ func cmsReadUInt32Number(io *cmsIOHANDLER, n *uint32) bool {
 		return false
 	}
 	if n != nil {
-		*n = cmsAdjustEndianess32(tmp)
+		*n = tmp
 	}
 	return true
 }
@@ -136,7 +136,7 @@ func cmsReadFloat32Number(io *cmsIOHANDLER, n *float32) bool {
 	}
 
 	if n != nil {
-		tmp.Integer = cmsAdjustEndianess32(tmp.Integer)
+		tmp.Integer = tmp.Integer
 		*n = math.Float32frombits(tmp.Integer)
 
 		// Safeguard against absurd values
@@ -163,7 +163,7 @@ func cmsReadUInt64Number(io *cmsIOHANDLER, n *uint64) bool {
 		return false
 	}
 	if n != nil {
-		*n = cmsAdjustEndianess64(tmp)
+		*n = tmp
 	}
 
 	return true
@@ -180,7 +180,7 @@ func cmsRead15Fixed16Number(io *cmsIOHANDLER, n *float64) bool {
 	}
 
 	if n != nil {
-		*n = cms15Fixed16ToDouble(int32(cmsAdjustEndianess32(tmp)))
+		*n = cms15Fixed16ToDouble(int32(tmp))
 	}
 
 	return true
@@ -197,9 +197,9 @@ func cmsReadXYZNumber(io *cmsIOHANDLER, XYZ *cmsCIEXYZ) bool {
 	}
 
 	if XYZ != nil {
-		XYZ.X = cms15Fixed16ToDouble(int32(cmsAdjustEndianess32(uint32(xyz.X))))
-		XYZ.Y = cms15Fixed16ToDouble(int32(cmsAdjustEndianess32(uint32(xyz.Y))))
-		XYZ.Z = cms15Fixed16ToDouble(int32(cmsAdjustEndianess32(uint32(xyz.Z))))
+		XYZ.X = cms15Fixed16ToDouble(int32(xyz.X))
+		XYZ.Y = cms15Fixed16ToDouble(int32(xyz.Y))
+		XYZ.Z = cms15Fixed16ToDouble(int32(xyz.Z))
 	}
 	return true
 }
@@ -316,24 +316,24 @@ func cmsDoubleTo15Fixed16(v float64) cmsS15Fixed16Number {
 
 func cmsDecodeDateTimeNumber(source *cmsDateTimeNumber) time.Time {
 	return time.Date(
-		int(cmsAdjustEndianess16(source.Year)),
-		time.Month(cmsAdjustEndianess16(source.Month)),
-		int(cmsAdjustEndianess16(source.Day)),
-		int(cmsAdjustEndianess16(source.Hours)),
-		int(cmsAdjustEndianess16(source.Minutes)),
-		int(cmsAdjustEndianess16(source.Seconds)),
+		int(source.Year),
+		time.Month(source.Month),
+		int(source.Day),
+		int(source.Hours),
+		int(source.Minutes),
+		int(source.Seconds),
 		0,
 		time.UTC,
 	)
 }
 
 func cmsEncodeDateTimeNumber(dest *cmsDateTimeNumber, t time.Time) {
-	dest.Seconds = cmsAdjustEndianess16(uint16(t.Second()))
-	dest.Minutes = cmsAdjustEndianess16(uint16(t.Minute()))
-	dest.Hours = cmsAdjustEndianess16(uint16(t.Hour()))
-	dest.Day = cmsAdjustEndianess16(uint16(t.Day()))
-	dest.Month = cmsAdjustEndianess16(uint16(t.Month()))
-	dest.Year = cmsAdjustEndianess16(uint16(t.Year()))
+	dest.Seconds = uint16(t.Second())
+	dest.Minutes = uint16(t.Minute())
+	dest.Hours = uint16(t.Hour())
+	dest.Day = uint16(t.Day())
+	dest.Month = uint16(t.Month())
+	dest.Year = uint16(t.Year())
 }
 
 // Read/Write Base Tag
@@ -345,12 +345,12 @@ func cmsReadTypeBase(io *cmsIOHANDLER) cmsTagTypeSignature {
 		fmt.Errorf("Failed to read uint32: %v", err)
 		return 0
 	}
-	return cmsTagTypeSignature(cmsAdjustEndianess32(uint32(base.Sig)))
+	return base.Sig
 }
 
 func cmsWriteTypeBase(io *cmsIOHANDLER, sig cmsTagTypeSignature) bool {
 	var base cmsTagBase
-	base.Sig = cmsTagTypeSignature(cmsAdjustEndianess32(uint32(sig)))
+	base.Sig = sig
 	for i := range base.Reserved {
 		base.Reserved[i] = 0
 	}

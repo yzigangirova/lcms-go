@@ -47,8 +47,11 @@ func init() {
 // SearchIntent translates the given function
 func SearchIntent(ContextID CmsContext, Intent uint32) *cmsIntentsList {
 	// Retrieve the plugin chunk for intents
-	ctx := CmsContextGetClientChunk(ContextID, IntentPlugin).(*cmsIntentsPluginChunkType)
-
+	ctx, ok := CmsContextGetClientChunk(ContextID, IntentPlugin).(*cmsIntentsPluginChunkType)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not cmsIntentsPluginChunkType\n")
+		return nil
+	}
 	// Search in the plugin intents list
 	for pt := ctx.Intents; pt != nil; pt = pt.Next {
 		if pt.Intent == Intent {
@@ -79,7 +82,9 @@ func SearchIntent(ContextID CmsContext, Intent uint32) *cmsIntentsList {
 // - a = (bpout - D50) / (bpin - D50)
 // - b = -D50 * (bpout - bpin) / (bpin - D50)
 func ComputeBlackPointCompensation(BlackPointIn *cmsCIEXYZ, BlackPointOut *cmsCIEXYZ, m *cmsMAT3, off *cmsVEC3) {
+//	fmt.Println("start ComputeBlackPointCompensation")
 	var ax, ay, az, bx, by, bz, tx, ty, tz float64
+
 
 	// Compute differences between black points and D50
 	tx = BlackPointIn.X - cmsD50_XYZ().X
@@ -103,6 +108,8 @@ func ComputeBlackPointCompensation(BlackPointIn *cmsCIEXYZ, BlackPointOut *cmsCI
 
 	// Initialize the offset vector
 	cmsVEC3init(off, bx, by, bz)
+
+//	fmt.Println("end ComputeBlackPointCompensation")
 }
 
 // Approximate a blackbody illuminant based on CHAD information
@@ -248,7 +255,7 @@ func DefaultICCintents(
 	AdaptationStates []float64,
 	dwFlags uint32,
 ) *cmsPipeline {
-	//fmt.Println("START DefaultICCintents")
+//	fmt.Println("START DefaultICCintents")
 	var (
 		Lut               *cmsPipeline
 		Result            *cmsPipeline
@@ -368,8 +375,8 @@ func DefaultICCintents(
 			}
 		}
 	}
-	//fmt.Println("END DefaultICCintents")
-
+//	fmt.Println("END DefaultICCintents")
+	//здесь появляется input channel 4 output 3 после cmsDoTransform перед третьим возвращением формы
 	return Result
 
 Error:
@@ -428,7 +435,7 @@ func IsEmptyLayer(m *cmsMAT3, off *cmsVEC3) bool {
 }
 
 func ComputeConversion(i uint32, hProfiles []CmsHPROFILE, Intent uint32, BPC bool, AdaptationState float64, m *cmsMAT3, off *cmsVEC3) bool {
-	//fmt.Println("START ComputeConversion")
+//	fmt.Println("START ComputeConversion")
 	// Initialize m and off to identity
 	cmsMAT3identity(m)
 	cmsVEC3init(off, 0, 0, 0)
@@ -476,11 +483,13 @@ func ComputeConversion(i uint32, hProfiles []CmsHPROFILE, Intent uint32, BPC boo
 	for k := 0; k < 3; k++ {
 		off.N[k] /= MAX_ENCODEABLE_XYZ
 	}
-	//("END ComputeConversion")
+
+//	fmt.Println("END ComputeConversion")
 
 	return true
 }
 func AddConversion(Result *cmsPipeline, InPCS cmsColorSpaceSignature, OutPCS cmsColorSpaceSignature, m *cmsMAT3, off *cmsVEC3) bool {
+//	fmt.Println("start AddConversion")
 	mAsDbl := MatToSlice(*m)
 	offAsDbl := VecToSlice(*off)
 
@@ -537,6 +546,7 @@ func AddConversion(Result *cmsPipeline, InPCS cmsColorSpaceSignature, OutPCS cms
 		}
 	}
 
+//	fmt.Println("end AddConversion")
 	return true
 }
 
@@ -592,8 +602,11 @@ type GrayOnlyParams struct {
 
 // BlackPreservingGrayOnlySampler preserves black-only CMYK transformations.
 func BlackPreservingGrayOnlySampler(In []uint16, Out []uint16, cargo interface{}) int32 {
-	bp := cargo.(*GrayOnlyParams)
-
+	bp, ok := cargo.(*GrayOnlyParams)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *GrayOnlyParams \n")
+		return 0
+	}
 	// If going across black only, keep black only
 	if In[0] == 0 && In[1] == 0 && In[2] == 0 {
 		// TAC does not apply because it is black ink!
@@ -739,7 +752,11 @@ type PreserveKPlaneParams struct {
 
 // BlackPreservingSampler performs sampling for K-plane preservation.
 func BlackPreservingSampler(In, Out []uint16, cargo interface{}) int32 {
-	bp := cargo.(*PreserveKPlaneParams)
+	bp, ok := cargo.(*PreserveKPlaneParams)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error,not PreserveKPlaneParams\n")
+		return 0
+	}
 	var Inf, Outf, LabK [4]float32
 	var ColorimetricLab, BlackPreservingLab cmsCIELab
 	var SumCMY, SumCMYK, Error, Ratio float64

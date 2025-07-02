@@ -143,6 +143,7 @@ func isFloatMatrixIdentity(a *cmsMAT3) bool {
 
 // _MultiplyMatrix simplifies two adjacent matrices by multiplying them.
 func _MultiplyMatrix(Lut *cmsPipeline) bool {
+	//	fmt.Println("MultiplyMatrix")
 	pt1 := &Lut.Elements
 	anyOpt := false
 
@@ -157,8 +158,12 @@ func _MultiplyMatrix(Lut *cmsPipeline) bool {
 		}
 
 		if (*pt1).Implements == cmsSigMatrixElemType && (*pt2).Implements == cmsSigMatrixElemType {
-			m1 := cmsStageData(*pt1).(*cmsStageMatrixData)
-			m2 := cmsStageData(*pt2).(*cmsStageMatrixData)
+			m1, ok := cmsStageData(*pt1).(*cmsStageMatrixData)
+			m2, ok := cmsStageData(*pt2).(*cmsStageMatrixData)
+			if !ok {
+				fmt.Printf("Error: Interface data assertion error, not *cmsStageMatrixData\n")
+				return false
+			}
 			var res cmsMAT3
 
 			if m1.Offset != nil || m2.Offset != nil ||
@@ -225,7 +230,11 @@ func Eval16nop1D(Input []uint16, Output []uint16, params *cmsInterpParams) {
 // PrelinEval16 implements the optimized interpolation for 16-bit input
 // PrelinEval16 implements the optimized interpolation for 16-bit input
 func PrelinEval16(Input []uint16, Output []uint16, D interface{}) {
-	p16 := D.(*Prelin16Data)
+	p16, ok := D.(*Prelin16Data)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *Prelin16Data\n")
+		return
+	}
 	var StageABC [16]uint16
 	var StageDEF [16]uint16
 
@@ -246,15 +255,22 @@ func PrelinEval16(Input []uint16, Output []uint16, D interface{}) {
 
 // PrelinOpt16free frees memory associated with Prelin16Data
 func PrelinOpt16free(ContextID CmsContext, ptr interface{}) {
-	p16 := ptr.(*Prelin16Data)
+	p16, ok := ptr.(*Prelin16Data)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *Prelin16Data\n")
+		return
+	}
 	cmsFree(ContextID, p16)
 }
 
 // Prelin16dup duplicates the Prelin16Data structure
 
 func Prelin16dup(_ CmsContext, ptr interface{}) interface{} {
-	p16 := ptr.(*Prelin16Data)
-
+	p16, ok := ptr.(*Prelin16Data)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *Prelin16Data\n")
+		return nil
+	}
 	// Create a new struct
 	duped := &Prelin16Data{
 		ContextID:       p16.ContextID,
@@ -266,16 +282,8 @@ func Prelin16dup(_ CmsContext, ptr interface{}) interface{} {
 		CLUTParams:      p16.CLUTParams, // non-owned pointer: shallow copy
 	}
 
-	// Deep copy slices
-	if p16.EvalCurveOut16 != nil {
-		duped.EvalCurveOut16 = make([]cmsInterpFn16, len(p16.EvalCurveOut16))
-		copy(duped.EvalCurveOut16, p16.EvalCurveOut16)
-	}
-
-	if p16.ParamsCurveOut16 != nil {
-		duped.ParamsCurveOut16 = make([]*cmsInterpParams, len(p16.ParamsCurveOut16))
-		copy(duped.ParamsCurveOut16, p16.ParamsCurveOut16) // shallow copy of pointers
-	}
+	duped.EvalCurveOut16 = ([]cmsInterpFn16)(cmsDupMemSlice(p16.EvalCurveOut16))
+	duped.ParamsCurveOut16 = ([]*cmsInterpParams)(cmsDupMemSlice(p16.ParamsCurveOut16))
 
 	return duped
 }
@@ -337,7 +345,12 @@ func PrelinOpt16alloc(ContextID CmsContext, ColorMap *cmsInterpParams, nInputs u
 const PRELINEARIZATION_POINTS = 4096
 
 func XFormSampler16(In []uint16, Out []uint16, cargo interface{}) int32 {
-	Lut := cargo.(*cmsPipeline)
+	//	fmt.Println("XFormSampler16")
+	Lut, ok := cargo.(*cmsPipeline)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *cmsPipeline\n")
+		return 0
+	}
 	//	fmt.Printf("XFormSampler16 %p\n", (*cmsStageToneCurvesData)(Lut.Elements.Data).TheCurves[0].InterpParams.Table)
 	var InFloat [cmsMAXCHANNELS]float32
 	var OutFloat [cmsMAXCHANNELS]float32
@@ -348,15 +361,21 @@ func XFormSampler16(In []uint16, Out []uint16, cargo interface{}) int32 {
 
 	// From 16-bit to floating-point
 	for i = 0; i < Lut.InputChannels; i++ {
+		//fmt.Println("from In[i] ", In[i])
 		InFloat[i] = float32(In[i]) / 65535.0
+		//fmt.Println("got InFloat[i] ", InFloat[i])
 	}
+	//fmt.Println("Whole infloat ", InFloat)
 
 	// Evaluate in floating-point
 	cmsPipelineEvalFloat(InFloat[:], OutFloat[:], Lut)
 
 	// Back to 16-bit representation
 	for i = 0; i < Lut.OutputChannels; i++ {
+		//fmt.Println("from OutFloat[i] ", OutFloat[i])
 		Out[i] = cmsQuickSaturateWord(float64(OutFloat[i] * 65535.0))
+		//fmt.Println("got Out[i] ", Out[i])
+
 	}
 
 	// Always succeed
@@ -380,7 +399,11 @@ func AllCurvesAreLinear(mpe *cmsStage) bool {
 }
 
 func PatchLUT(CLUT *cmsStage, At []uint16, Value []uint16, nChannelsOut, nChannelsIn uint32) bool {
-	Grid := CLUT.Data.(*cmsStageCLutData)
+	Grid, ok := CLUT.Data.(*cmsStageCLutData)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *cmsStageCLutData\n")
+		return false
+	}
 	p16 := Grid.Params
 	var px, py, pz, pw float64
 	var x0, y0, z0, w0, index int
@@ -566,6 +589,7 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		DataSetOut       []*CmsToneCurve
 		p16              *Prelin16Data
 	)
+	var ok bool
 	//fmt.Println("OptimizeByResampling")
 	// Lossy optimization, not suitable for floating-point formats
 	if cmsFormatterIsFloat(*InputFormat) || cmsFormatterIsFloat(*OutputFormat) {
@@ -590,6 +614,7 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	Src = *Lut
 
 	// Allocate an empty LUT
+	//Dest has a wrong table into one of his Elements
 	Dest = cmsPipelineAlloc(Src.ContextID, Src.InputChannels, Src.OutputChannels)
 	if Dest == nil {
 		return false
@@ -611,7 +636,7 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 
 	// Allocate the CLUT
 	CLUT = cmsStageAllocCLut16bit(Src.ContextID, nGridPoints, Src.InputChannels, Src.OutputChannels, nil)
-	if CLUT == nil || !cmsPipelineInsertStage(Dest, cmsAT_END, CLUT) {
+	if CLUT == nil || !cmsPipelineInsertStage(Dest, cmsAT_END, CLUT) { //после этого появляются Elements, но непр. таблицы еще нет
 		goto Error
 	}
 
@@ -643,8 +668,11 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	}
 	cmsPipelineFree(Src)
 
-	DataCLUT = CLUT.Data.(*cmsStageCLutData)
-
+	DataCLUT, ok = CLUT.Data.(*cmsStageCLutData)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *cmsStageCLutData\n")
+		return false
+	}
 	if NewPreLin != nil {
 		DataSetIn = ((NewPreLin.Data.(*cmsStageToneCurvesData)).TheCurves)
 	}
@@ -654,12 +682,19 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 
 	if DataSetIn == nil && DataSetOut == nil {
 		// Define the adapter function as a closure
-		adapterFn1 := func(In []uint16, Out []uint16, Data interface{}) {
+		/*adapterFn1 := func(In []uint16, Out []uint16, Data interface{}) {
 			params := Data.(*cmsInterpParams) // Convert Data back to *cmsInterpParams
 			DataCLUT.Params.Interpolation.Lerp16(In, Out, params)
 		}
 		// Use the closure as cmsPipelineEval16Fn
-		cmsPipelineSetOptimizationParameters(Dest, adapterFn1, DataCLUT.Params, nil, nil)
+		cmsPipelineSetOptimizationParameters(Dest, adapterFn1, DataCLUT.Params, nil, nil)*/
+		//перед cmsPipelineSetOptimizationParameters  Dest приобретает неправильную таблицу и она потом присваивается Lut
+
+		cmsPipelineSetOptimizationParameters(Dest,
+			func(In, Out []uint16, Data interface{}) {
+				Data.(*cmsInterpParams).Interpolation.Lerp16(In, Out, Data.(*cmsInterpParams))
+			},
+			DataCLUT.Params, nil, nil)
 	} else {
 		p16 = PrelinOpt16alloc(Dest.ContextID, DataCLUT.Params, Dest.InputChannels, DataSetIn, Dest.OutputChannels, DataSetOut)
 		if p16 == nil {
@@ -770,11 +805,22 @@ func Prelin8free(ContextID CmsContext, ptr interface{}) {
 }
 
 func Prelin8dup(ContextID CmsContext, ptr interface{}) interface{} {
-	return cmsDupMem(ContextID, ptr, uint32(unsafe.Sizeof(ptr)))
+	p, ok := ptr.(*Prelin8Data)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *Prelin8Data\n")
+		return nil
+	}
+	copied := new(Prelin8Data)
+	*copied = *p // struct copy
+	return copied
 }
 
 func PrelinEval8(Input []uint16, Output []uint16, D interface{}) {
-	p8 := D.(*Prelin8Data)
+	p8, ok := D.(*Prelin8Data)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *Prelin8Data\n")
+		return
+	}
 	p := p8.P
 	TotalOut := int(p.nOutputs)
 	// Ensure `p.Table` is a `[]uint16`
@@ -890,6 +936,7 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 		OptimizedPrelinCLUT   *cmsStageCLutData
 		OptimizedCLUTmpe      *cmsStage
 	)
+	var ok bool
 
 	if cmsFormatterIsFloat(*InputFormat) || cmsFormatterIsFloat(*OutputFormat) {
 		return false
@@ -930,7 +977,12 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 	}
 
 	if cmsStageType(last) == cmsSigCurveSetElemType {
-		Data := (cmsStageData(last)).(*cmsStageToneCurvesData)
+		Data, ok := (cmsStageData(last)).(*cmsStageToneCurvesData)
+		if !ok {
+			fmt.Printf("Error: Interface data assertion error, not *Prelin8Data\n")
+			goto Error
+		}
+
 		for i := uint32(0); i < Data.NCurves; i++ {
 			if IsDegenerated(Data.TheCurves[i]) {
 				goto Error
@@ -1023,7 +1075,11 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 	cmsPipelineFree(LutPlusCurves)
 
 	OptimizedPrelinCurves = cmsStageGetPtrToCurveSet(OptimizedPrelinMpe)
-	OptimizedPrelinCLUT = OptimizedCLUTmpe.Data.(*cmsStageCLutData)
+	OptimizedPrelinCLUT, ok = OptimizedCLUTmpe.Data.(*cmsStageCLutData)
+	if !ok {
+		fmt.Printf("Error: not of the type cmsStageCLutData\n")
+		return false
+	}
 
 	if cmsFormatterIs8bit(*InputFormat) {
 
@@ -1084,8 +1140,12 @@ func CurvesFree(ContextID CmsContext, ptr interface{}) {
 
 // CurvesDup duplicates a Curves16Data structure
 func CurvesDup(ContextID CmsContext, ptr interface{}) interface{} {
-	srcData := ptr.(*Curves16Data)
+	srcData, ok := ptr.(*Curves16Data)
 	if srcData == nil {
+		return nil
+	}
+	if !ok {
+		fmt.Printf("Error: not of the type *Curves16Data\n")
 		return nil
 	}
 
@@ -1136,7 +1196,11 @@ func CurvesAlloc(ContextID CmsContext, nCurves, nElements uint32, G []*CmsToneCu
 }
 
 func FastEvaluateCurves8(In []uint16, Out []uint16, D interface{}) {
-	data := D.(*Curves16Data)
+	data, ok := D.(*Curves16Data)
+	if !ok {
+		fmt.Printf("Error: not of the type *Curves16Data\n")
+		return
+	}
 
 	// Ensure Out has enough space
 	if len(Out) < int(data.NCurves) || len(In) < int(data.NCurves) {
@@ -1161,8 +1225,11 @@ func FastEvaluateCurves8(In []uint16, Out []uint16, D interface{}) {
 }
 
 func FastEvaluateCurves16(In []uint16, Out []uint16, D interface{}) {
-	data := D.(*Curves16Data)
-
+	data, ok := D.(*Curves16Data)
+	if !ok {
+		fmt.Printf("Error: not of the type *Curves16Data\n")
+		return
+	}
 	// Ensure Out and In have enough space
 	if len(Out) < int(data.NCurves) || len(In) < int(data.NCurves) {
 		return
@@ -1182,8 +1249,11 @@ func FastEvaluateCurves16(In []uint16, Out []uint16, D interface{}) {
 	}
 }
 func FastIdentity16(In []uint16, Out []uint16, D interface{}) {
-	Lut := D.(*cmsPipeline)
-
+	Lut, ok := D.(*cmsPipeline)
+	if !ok {
+		fmt.Printf("Error: not of the type *cmsPipeline\n")
+		return
+	}
 	// Ensure Out and In have enough space
 	if len(Out) < int(Lut.InputChannels) || len(In) < int(Lut.InputChannels) {
 		return
@@ -1275,8 +1345,11 @@ func OptimizeByJoiningCurves(
 
 	//  Check if all curves are linear
 	if !AllCurvesAreLinear(ObtainedCurves) {
-		Data := cmsStageData(ObtainedCurves).(*cmsStageToneCurvesData)
-
+		Data, ok := cmsStageData(ObtainedCurves).(*cmsStageToneCurvesData)
+		if !ok {
+			fmt.Printf("Error: not of the type *cmsStageToneCurvesData\n")
+			goto Error
+		}
 		if !cmsPipelineInsertStage(Dest, cmsAT_BEGIN, ObtainedCurves) {
 			goto Error
 		}
@@ -1338,11 +1411,20 @@ func FreeMatShaper(ContextID CmsContext, Data interface{}) {
 	}
 }
 func DupMatShaper(ContextID CmsContext, Data interface{}) interface{} {
-	return cmsDupMem(ContextID, Data, uint32(unsafe.Sizeof(MatShaper8Data{})))
+	p, ok := Data.(*MatShaper8Data)
+	if !ok {
+		fmt.Printf("Error: not of the type *MatShaper8Data\n")
+		return nil
+	}
+	copied := *p // struct copy
+	return &copied
 }
 func MatShaperEval16(In []uint16, Out []uint16, D interface{}) {
-	p := D.(*MatShaper8Data)
-
+	p, ok := D.(*MatShaper8Data)
+	if !ok {
+		fmt.Printf("Error: not of the type *MatShaper8Data\n")
+		return
+	}
 	//  Ensure In and Out have at least 3 elements
 	if len(In) < 3 || len(Out) < 3 {
 		return
@@ -1463,7 +1545,7 @@ func SetMatShaper(Dest *cmsPipeline, Curve1 [3]*CmsToneCurve, Mat *cmsMAT3, Off 
 	return true
 }
 func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) bool {
-	//fmt.Println("OptimizeMatrixShaper")
+	//	fmt.Println("OptimizeMatrixShaper")
 	var Curve1, Curve2 *cmsStage
 	var Matrix1, Matrix2 *cmsStage
 	var res cmsMAT3
@@ -1489,9 +1571,12 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	if cmsPipelineCheckAndRetrieveStages(Src, 4, []cmsStageSignature{cmsSigCurveSetElemType, cmsSigMatrixElemType, cmsSigMatrixElemType, cmsSigCurveSetElemType},
 		&Curve1, &Matrix1, &Matrix2, &Curve2) {
 		// Get both matrices
-		Data1 := cmsStageData(Matrix1).(*cmsStageMatrixData)
-		Data2 := cmsStageData(Matrix2).(*cmsStageMatrixData)
-
+		Data1, ok := cmsStageData(Matrix1).(*cmsStageMatrixData)
+		Data2, ok := cmsStageData(Matrix2).(*cmsStageMatrixData)
+		if !ok {
+			fmt.Printf("Error: not of the type *cmsStageMatrixData\n")
+			return false
+		}
 		// Only RGB to RGB
 		if Matrix1.InputChannels != 3 || Matrix1.OutputChannels != 3 ||
 			Matrix2.InputChannels != 3 || Matrix2.OutputChannels != 3 {
@@ -1517,7 +1602,11 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		if cmsPipelineCheckAndRetrieveStages(Src, 3, []cmsStageSignature{cmsSigCurveSetElemType, cmsSigMatrixElemType, cmsSigCurveSetElemType},
 			&Curve1, &Matrix1, &Curve2) {
 			// Single matrix case
-			Data := cmsStageData(Matrix1).(*cmsStageMatrixData)
+			Data, ok := cmsStageData(Matrix1).(*cmsStageMatrixData)
+			if !ok {
+				fmt.Printf("Error: not of the type *cmsStageMatrixData\n")
+				return false
+			}
 			// Copy the matrix to the result
 			res = SliceToMat(Data.Double)
 			// Preserve the offset (may be nil for zero offset)
@@ -1559,9 +1648,12 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	if IdentityMat {
 		OptimizeByJoiningCurves(&Dest, Intent, InputFormat, OutputFormat, dwFlags)
 	} else {
-		mpeC1 := cmsStageData(Curve1).(*cmsStageToneCurvesData)
-		mpeC2 := cmsStageData(Curve2).(*cmsStageToneCurvesData)
-
+		mpeC1, ok := cmsStageData(Curve1).(*cmsStageToneCurvesData)
+		mpeC2, ok := cmsStageData(Curve2).(*cmsStageToneCurvesData)
+		if !ok {
+			fmt.Printf("Error: not of the type *cmsStageToneCurvesData\n")
+			return false
+		}
 		// Disable cache for this optimization
 		*dwFlags |= cmsFLAGS_NOCACHE
 

@@ -814,7 +814,7 @@ func cmsWriteTag(hProfile CmsHPROFILE, sig cmsTagSignature, data interface{}) bo
 	// Check if the type is supported
 	if !IsTypeSupported(TagDescriptor, Type) {
 		str := cmsTagSignature2String(sig)
-		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unsupported type '%s' for tag '%s'", TypeString, str))
+		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unsupported type '%d' for tag '%s'", TypeString, str))
 		goto Error
 	}
 
@@ -822,7 +822,7 @@ func cmsWriteTag(hProfile CmsHPROFILE, sig cmsTagSignature, data interface{}) bo
 	TypeHandler = cmsGetTagTypeHandler(Icc.ContextID, Type)
 	if TypeHandler == nil {
 		str := cmsTagSignature2String(sig)
-		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unsupported type '%s' for tag '%s'", TypeString, str))
+		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unsupported type '%d' for tag '%s'", TypeString, str))
 		goto Error
 	}
 
@@ -840,7 +840,7 @@ func cmsWriteTag(hProfile CmsHPROFILE, sig cmsTagSignature, data interface{}) bo
 
 	if Icc.TagPtrs[i] == nil {
 		str := cmsTagSignature2String(sig)
-		cmsSignalError(Icc.ContextID, cmsERROR_CORRUPTION_DETECTED, fmt.Sprintf("Malformed struct in type '%s' for tag '%s'", str))
+		cmsSignalError(Icc.ContextID, cmsERROR_CORRUPTION_DETECTED, fmt.Sprintf("Malformed struct  for tag '%s'", str))
 		goto Error
 	}
 
@@ -1087,22 +1087,22 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 	}
 
 	// Validate file as an ICC profile
-	if cmsAdjustEndianess32(uint32(Header.Magic)) != cmsMagicNumber {
+	if Header.Magic != cmsMagicNumber {
 		cmsSignalError(Icc.ContextID, cmsERROR_BAD_SIGNATURE, "not an ICC profile, invalid signature")
 		return false
 	}
 
 	// Adjust endianness of the used parameters
-	Icc.DeviceClass = cmsProfileClassSignature(cmsAdjustEndianess32(uint32(Header.DeviceClass)))
-	Icc.ColorSpace = cmsColorSpaceSignature(cmsAdjustEndianess32(uint32(Header.ColorSpace)))
-	Icc.PCS = cmsColorSpaceSignature(cmsAdjustEndianess32(uint32(Header.PCS)))
-	Icc.RenderingIntent = cmsAdjustEndianess32(Header.RenderingIntent)
-	Icc.Flags = cmsAdjustEndianess32(Header.Flags)
-	Icc.Manufacturer = cmsAdjustEndianess32(uint32(Header.Manufacturer))
-	Icc.Model = cmsAdjustEndianess32(Header.Model)
-	Icc.Creator = cmsAdjustEndianess32(uint32(Header.Creator))
-	Icc.Attributes = cmsAdjustEndianess64(Header.Attributes)
-	Icc.Version = cmsAdjustEndianess32(validatedVersion(Header.Version))
+	Icc.DeviceClass = Header.DeviceClass
+	Icc.ColorSpace = Header.ColorSpace
+	Icc.PCS = Header.PCS
+	Icc.RenderingIntent = Header.RenderingIntent
+	Icc.Flags = Header.Flags
+	Icc.Manufacturer = uint32(Header.Manufacturer)
+	Icc.Model = Header.Model
+	Icc.Creator = uint32(Header.Creator)
+	Icc.Attributes = Header.Attributes
+	Icc.Version = validatedVersion(Header.Version)
 
 	if Icc.Version > 0x5000000 {
 		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unsupported profile version")
@@ -1115,9 +1115,8 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 	}
 
 	// Get size as reported in header
-	HeaderSize := cmsAdjustEndianess32(Header.Size)
-	if HeaderSize >= Icc.IOhandler.ReportedSize {
-		HeaderSize = Icc.IOhandler.ReportedSize
+	if Header.Size >= Icc.IOhandler.ReportedSize {
+		Header.Size = Icc.IOhandler.ReportedSize
 	}
 
 	// Get creation date/time
@@ -1138,18 +1137,18 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 	// Initialize tag directory
 	Icc.TagCount = 0
 	for i := uint32(0); i < TagCount; i++ {
-		if !cmsReadUInt32Number(io, &Tag.Sig) ||
+		if !cmsReadUInt32Number(io, (*uint32)(&Tag.Sig)) ||
 			!cmsReadUInt32Number(io, &Tag.Offset) ||
 			!cmsReadUInt32Number(io, &Tag.Size) {
 			return false
 		}
 
 		// Perform sanity checks
-		if Tag.Size == 0 || Tag.Offset == 0 || Tag.Offset+Tag.Size > HeaderSize || Tag.Offset+Tag.Size < Tag.Offset {
+		if Tag.Size == 0 || Tag.Offset == 0 || Tag.Offset+Tag.Size > Header.Size || Tag.Offset+Tag.Size < Tag.Offset {
 			continue
 		}
 
-		Icc.TagNames[Icc.TagCount] = Tag.Sig
+		Icc.TagNames[Icc.TagCount] = cmsTagSignature(Tag.Sig)
 		Icc.TagOffsets[Icc.TagCount] = Tag.Offset
 		Icc.TagSizes[Icc.TagCount] = Tag.Size
 
@@ -1190,7 +1189,7 @@ func WriteStruct[T any](io *cmsIOHANDLER, value T, endian binary.ByteOrder) bool
 
 	size := buf.Len()
 	if !io.Write((*cms_io_handler)(io), uint32(size), buf.Bytes()) {
-		fmt.Println("FileWrite failed: wrote %d element(s), expected 1")
+		fmt.Println("FileWrite failed: wrote wrong number of element(s), expected 1")
 		return false
 	}
 
@@ -1203,25 +1202,25 @@ func cmsWriteHeader(Icc *cmsICCPROFILE, UsedSpace uint32) bool {
 	var Tag cmsTagEntry
 	var Count uint32
 
-	Header.Size = cmsAdjustEndianess32(UsedSpace)
-	Header.CmmId = cmsSignature(cmsAdjustEndianess32(lcmsSignature))
-	Header.Version = cmsAdjustEndianess32(Icc.Version)
-	Header.DeviceClass = cmsProfileClassSignature(cmsAdjustEndianess32(uint32(Icc.DeviceClass)))
-	Header.ColorSpace = cmsColorSpaceSignature(cmsAdjustEndianess32(uint32(Icc.ColorSpace)))
-	Header.PCS = cmsColorSpaceSignature(cmsAdjustEndianess32(uint32(Icc.PCS)))
+	Header.Size = UsedSpace
+	Header.CmmId = lcmsSignature
+	Header.Version = Icc.Version
+	Header.DeviceClass =Icc.DeviceClass
+	Header.ColorSpace = Icc.ColorSpace
+	Header.PCS = Icc.PCS
 	cmsEncodeDateTimeNumber(&Header.Date, Icc.Created)
-	Header.Magic = cmsSignature(cmsAdjustEndianess32(cmsMagicNumber))
+	Header.Magic = cmsMagicNumber
 
-	Header.Platform = cmsPlatformSignature(cmsAdjustEndianess32(uint32(cmsSigMicrosoft)))
-	Header.Flags = cmsAdjustEndianess32(Icc.Flags)
-	Header.Manufacturer = cmsSignature(cmsAdjustEndianess32(Icc.Manufacturer))
-	Header.Model = cmsAdjustEndianess32(Icc.Model)
-	Icc.Attributes = cmsAdjustEndianess64(Header.Attributes)
-	Header.RenderingIntent = cmsAdjustEndianess32(Icc.RenderingIntent)
-	Header.Illuminant.X = cmsS15Fixed16Number(cmsAdjustEndianess32(uint32(cmsDoubleTo15Fixed16(cmsD50_XYZ().X))))
-	Header.Illuminant.Y = cmsS15Fixed16Number(cmsAdjustEndianess32(uint32(cmsDoubleTo15Fixed16(cmsD50_XYZ().Y))))
-	Header.Illuminant.Z = cmsS15Fixed16Number(cmsAdjustEndianess32(uint32(cmsDoubleTo15Fixed16(cmsD50_XYZ().Z))))
-	Header.Creator = cmsSignature(cmsAdjustEndianess32(lcmsSignature))
+	Header.Platform = cmsSigMicrosoft
+	Header.Flags = Icc.Flags
+	Header.Manufacturer = cmsSignature(Icc.Manufacturer)
+	Header.Model = Icc.Model
+	Header.Attributes = Icc.Attributes
+	Header.RenderingIntent = Icc.RenderingIntent
+	Header.Illuminant.X = cmsDoubleTo15Fixed16(cmsD50_XYZ().X)
+	Header.Illuminant.Y = cmsDoubleTo15Fixed16(cmsD50_XYZ().Y)
+	Header.Illuminant.Z = cmsDoubleTo15Fixed16(cmsD50_XYZ().Z)
+	Header.Creator = lcmsSignature
 
 	// Set profile ID. Endianness is always big endian
 	copy(Header.ProfileID[:], Icc.ProfileID[:])
@@ -1248,9 +1247,9 @@ func cmsWriteHeader(Icc *cmsICCPROFILE, UsedSpace uint32) bool {
 			continue
 		}
 
-		Tag.Sig = cmsTagSignature(cmsAdjustEndianess32(uint32(Icc.TagNames[i])))
-		Tag.Offset = cmsAdjustEndianess32(Icc.TagOffsets[i])
-		Tag.Size = cmsAdjustEndianess32(Icc.TagSizes[i])
+		Tag.Sig = Icc.TagNames[i]
+		Tag.Offset = Icc.TagOffsets[i]
+		Tag.Size = Icc.TagSizes[i]
 
 		if !WriteStruct[cmsTagEntry](Icc.IOhandler, Tag, binary.BigEndian) {
 			return false
@@ -1706,7 +1705,7 @@ func cmsOpenIOhandlerFromFile(ContextID CmsContext, FileName string, AccessMode 
 
 // FileRead reads count elements of size bytes each from the file stream. Returns the number of elements read.
 func FileRead(iohandler *cms_io_handler, buffer interface{}, size, count uint32) uint32 {
-	fmt.Println("fileread")
+//	fmt.Println("fileread")
 	file, ok := iohandler.Stream.(*os.File)
 	if !ok || file == nil {
 		// If Stream is not a *FILENULL, do nothing

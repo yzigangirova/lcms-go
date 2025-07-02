@@ -77,7 +77,6 @@ func freeMemory(ptr interface{}, size uintptr) {
 
 // accessMemory allows accessing memory at an offset from a base pointer.
 
-
 // Default memory allocation function
 func cmsMallocDefaultFn(ContextID CmsContext, size uint32) []byte {
 	return allocateMemory(uintptr(size))
@@ -214,8 +213,8 @@ func cmsRegisterMemHandlerPlugin(context CmsContext, Data PluginIntrfc) bool {
 	}
 
 	// Set replacement functions
-	ptr = CmsContextGetClientChunk(context, MemPlugin).(*cmsMemPluginChunkType)
-	if ptr == nil {
+	ptr, ok = CmsContextGetClientChunk(context, MemPlugin).(*cmsMemPluginChunkType)
+	if !ok || ptr == nil {
 		return false
 	}
 
@@ -225,8 +224,8 @@ func cmsRegisterMemHandlerPlugin(context CmsContext, Data PluginIntrfc) bool {
 
 // Generic allocate
 func cmsMalloc(contextID CmsContext, size uint32) []byte {
-	ptr := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType) // Assume 0 is the MemPlugin index
-	if ptr == nil || ptr.MallocPtr == nil {
+	ptr, ok := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType) // Assume 0 is the MemPlugin index
+	if !ok || ptr == nil || ptr.MallocPtr == nil {
 		return nil
 	}
 	return ptr.MallocPtr(contextID, size)
@@ -240,8 +239,8 @@ func cmsMalloc(contextID CmsContext, size uint32) []byte {
 
 // Generic calloc
 func cmsCalloc(contextID CmsContext, num, size uint32) []byte {
-	ptr := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
-	if ptr == nil || ptr.CallocPtr == nil {
+	ptr, ok := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
+	if !ok || ptr == nil || ptr.CallocPtr == nil {
 		return nil
 	}
 	return ptr.CallocPtr(contextID, num, size)
@@ -249,8 +248,8 @@ func cmsCalloc(contextID CmsContext, num, size uint32) []byte {
 
 // Generic reallocate
 func cmsRealloc(contextID CmsContext, oldPtr interface{}, size uint32) []byte {
-	ptr := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
-	if ptr == nil || ptr.ReallocPtr == nil {
+	ptr, ok := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
+	if !ok || ptr == nil || ptr.ReallocPtr == nil {
 		return nil
 	}
 	return ptr.ReallocPtr(contextID, oldPtr, size, size)
@@ -259,8 +258,8 @@ func cmsRealloc(contextID CmsContext, oldPtr interface{}, size uint32) []byte {
 // Generic free memory
 func cmsFree(contextID CmsContext, oldPtr interface{}) {
 	if oldPtr != nil {
-		ptr := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
-		if ptr != nil && ptr.FreePtr != nil {
+		ptr, ok := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
+		if !ok || ptr != nil && ptr.FreePtr != nil {
 			ptr.FreePtr(contextID, oldPtr, 0) //have to thing about freeing memory and size variable
 		}
 	}
@@ -268,8 +267,8 @@ func cmsFree(contextID CmsContext, oldPtr interface{}) {
 
 // Generic block duplication for structures
 func cmsDupMem(contextID CmsContext, org interface{}, size uint32) []byte {
-	ptr := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
-	if ptr == nil || ptr.DupPtr == nil || org == nil {
+	ptr, ok := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
+	if !ok || ptr == nil || ptr.DupPtr == nil || org == nil {
 		return nil
 	}
 	return ptr.DupPtr(contextID, org, size)
@@ -460,8 +459,11 @@ func defMtxUnlock(mtx *cmsMutex) {
 }
 
 func cmsRegisterMutexPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
-	ctx := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
-
+	ctx, ok := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not cmsMutexPluginChunkType\n")
+		return false
+	}
 	// If Data is nil, reset the mutex pointers to nil and return true.
 	if Data == nil {
 		ctx.CreateMutexPtr = nil
@@ -496,10 +498,18 @@ var cmsParallelizationPluginChunk = cmsParallelizationPluginChunkType{}
 
 // Register parallel processing plugin.
 func cmsRegisterParallelizationPlugin(ContextID CmsContext, Data interface{}) bool {
-	Plugin := Data.(*cmsPluginParalellization)
-	ctx := CmsContextGetClientChunk(ContextID, ParallelizationPlugin).(*cmsParallelizationPluginChunkType)
-
 	// If Data is nil, reset to default.
+
+	Plugin, ok := Data.(*cmsPluginParalellization)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not cmsPluginParalellization\n")
+		return false
+	}
+	ctx, ok := CmsContextGetClientChunk(ContextID, ParallelizationPlugin).(*cmsParallelizationPluginChunkType)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error not cmsParallelizationPluginChunkType\n")
+		return false
+	}
 	if Data == nil {
 		ctx.MaxWorkers = 0
 		ctx.WorkerFlags = 0
@@ -523,8 +533,11 @@ func cmsRegisterParallelizationPlugin(ContextID CmsContext, Data interface{}) bo
 // Create a new mutex.
 func cmsCreateMutex(ContextID CmsContext) *cmsMutex {
 
-	ptr := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
-
+	ptr, ok := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not cmsMutexPluginChunkType\n")
+		return nil
+	}
 	if ptr.CreateMutexPtr == nil {
 		return nil
 	}
@@ -535,8 +548,10 @@ func cmsCreateMutex(ContextID CmsContext) *cmsMutex {
 // Destroy a mutex.
 func cmsDestroyMutex(ContextID CmsContext, mtx *cmsMutex) {
 
-	ptr := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
-
+	ptr, ok := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not cmsMutexPluginChunkType\n")
+	}
 	if ptr.DestroyMutexPtr != nil {
 
 		ptr.DestroyMutexPtr(mtx)
@@ -546,8 +561,11 @@ func cmsDestroyMutex(ContextID CmsContext, mtx *cmsMutex) {
 // Lock the mutex.
 func cmsLockMutex(ContextID CmsContext, mtx *cmsMutex) bool {
 
-	ptr := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
-
+	ptr, ok := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not cmsMutexPluginChunkType\n")
+		return false
+	}
 	if ptr.LockMutexPtr == nil {
 		return true
 	}
@@ -557,23 +575,33 @@ func cmsLockMutex(ContextID CmsContext, mtx *cmsMutex) bool {
 
 // Unlock the mutex.
 func cmsUnlockMutex(ContextID CmsContext, mtx *cmsMutex) {
-	ptr := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
-
+	ptr, ok := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not cmsMutexPluginChunkType\n")
+	}
 	if ptr.UnlockMutexPtr != nil {
 
 		ptr.UnlockMutexPtr(mtx)
 	}
 }
 
-
 // Utility function to print signatures
-func cmsTagSignature2String(sig cmsTagSignature) string {
+/*func cmsTagSignature2String(sig cmsTagSignature) string {
 	be := cmsAdjustEndianess32(uint32(sig))
 	return string([]byte{
 		byte(be >> 24),
 		byte(be >> 16),
 		byte(be >> 8),
 		byte(be),
+	})
+}*/
+
+func cmsTagSignature2String(sig cmsTagSignature) string {
+	return string([]byte{
+		byte(sig >> 24),
+		byte(sig >> 16),
+		byte(sig >> 8),
+		byte(sig),
 	})
 }
 
@@ -637,6 +665,15 @@ func bytesToUint16Slice(b []uint8) []uint16 {
 	return u16
 }
 
+
+func bytesToLab(b []byte) cmsCIELab {
+	var lab cmsCIELab
+	buf := bytes.NewReader(b)
+	binary.Read(buf, binary.LittleEndian, &lab.L)
+	binary.Read(buf, binary.LittleEndian, &lab.a)
+	binary.Read(buf, binary.LittleEndian, &lab.b)
+	return lab
+}
 /*import (
 	"bytes"
 	"encoding/binary"

@@ -2,6 +2,7 @@ package golcms
 
 import (
 	//"unsafe"
+	"fmt"
 )
 
 // Append a Lab identity after the given sequence of profiles and return the transform.
@@ -158,7 +159,11 @@ type cmsTACestimator struct {
 
 // EstimateTAC is the callback function to calculate maximum TAC.
 func EstimateTAC(in []uint16, out []uint16, cargo interface{}) int32 {
-	bp := cargo.(*cmsTACestimator)
+	bp, ok := cargo.(*cmsTACestimator)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *cmsTACestimator\n")
+		return 0
+	}
 	var roundTrip [cmsMAXCHANNELS]float32
 	var sum float32
 
@@ -265,7 +270,11 @@ const ERR_THRESHOLD = 5
 // GamutSampler computes gamut boundaries by comparing original values with a transform
 // going back and forth. Values above ERR_THRESHOLD are considered out of gamut.
 func GamutSampler(In []uint16, Out []uint16, cargo interface{}) int32 {
-	t := cargo.(*GAMUTCHAIN)
+	t, ok := cargo.(*GAMUTCHAIN)
+	if !ok {
+		fmt.Printf("Error: Interface data assertion error, not *GAMUTCHAIN\n")
+		return 0
+	}
 	var LabIn1, LabOut1 cmsCIELab
 	var LabIn2, LabOut2 cmsCIELab
 	var Proof [cmsMAXCHANNELS]uint16

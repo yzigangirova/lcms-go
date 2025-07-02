@@ -855,18 +855,18 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 
 	// Process K0
 
-	/*fmt.Println("got K0", K0)
-	fmt.Println("got X0", X0)
-	fmt.Println("got Y0", Y0)
-	fmt.Println("got Z0", Z0)
-	fmt.Println("got X1", X1)
-	fmt.Println("got Y1", Y1)
-	fmt.Println("got Z1", Z1)*/
+	/*	fmt.Println("got K0", K0)
+		fmt.Println("got X0", X0)
+		fmt.Println("got Y0", Y0)
+		fmt.Println("got Z0", Z0)
+		fmt.Println("got X1", X1)
+		fmt.Println("got Y1", Y1)
+		fmt.Println("got Z1", Z1)*/
 
-	/*if Input[0] == 23130 && Input[1] == 56283 && Input[2] == 33153 && Input[3] == 11565 {
+	if Input[0] == 28270 && Input[1] == 25443 && Input[2] == 50115 && Input[3] == 7710 {
 		fmt.Println("stop")
 
-	}*/
+	}
 
 	LutTable, _ = p.Table.([]uint16) // Reset to original LUT
 	LutTable = LutTable[K0:]         // Shift by K0
@@ -924,6 +924,9 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 			fmt.Println("Rest", Rest)*/
 
 		Tmp1[outChan] = uint16(c0 + ((int32(cmsToFixedDomain(int(Rest))) + 0x8000) >> 16))
+
+		//	fmt.Println("Tmp1[outChan]", Tmp1[outChan])
+
 	}
 
 	// Process K1
@@ -971,16 +974,25 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 		} else {
 			c1, c2, c3 = 0, 0, 0
 		}
+		/*	fmt.Println("c0", c0)
+			fmt.Println("c1", c1)
+			fmt.Println("c2", c2)
+			fmt.Println("c3", c3)
+			fmt.Println("rx", rx)
+			fmt.Println("ry", ry)
+			fmt.Println("rz", rz)*/
 
 		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
 		Tmp2[outChan] = uint16(c0 + (int32(cmsToFixedDomain(int(Rest))+0x8000) >> 16))
+		//	fmt.Println("Rest", Rest)
+		//	fmt.Println("Tmp2[outChan]", Tmp2[outChan])
 	}
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
-		/*fmt.Println("rk", rk)
-		fmt.Println("Tmp1[i]", Tmp1[i])
-		fmt.Println("Tmp2[i]", Tmp2[i])*/
+		/*	fmt.Println("rk", rk)
+			fmt.Println("Tmp1[i]", Tmp1[i])
+			fmt.Println("Tmp2[i]", Tmp2[i])*/
 		Output[i] = LinearInterp(rk, int32(Tmp1[i]), int32(Tmp2[i]))
 		//fmt.Println("Output[i]", Output[i])
 	}
