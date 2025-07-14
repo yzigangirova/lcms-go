@@ -712,7 +712,8 @@ func TetrahedralInterpFloat(Input []float32, Output []float32, p *cmsInterpParam
 }
 
 // TetrahedralInterp16 performs tetrahedral interpolation for 16-bit values.
-func TetrahedralInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
+/*func TetrahedralInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
+	fmt.Println("TetrahedralInterp16")
 	TotalOut := uint32(p.nOutputs)
 
 	// Ensure Input and Output have enough elements
@@ -775,12 +776,164 @@ func TetrahedralInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 		Rest := c1*int(rx) + c2*int(ry) + c3*int(rz) + 0x8001
 		Output[outChan] = uint16(c0 + ((Rest + (Rest >> 16)) >> 16))
 	}
+}*/
+
+func TetrahedralInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
+	//fmt.Println("TetrahedralInterp16")
+
+	// Variables
+	LutTable, ok := p.Table.([]uint16)
+	if !ok {
+		fmt.Printf("Error: p.Table is not []uint16\n")
+		return
+	}
+
+	var fx, fy, fz cmsS15Fixed16Number
+	var rx, ry, rz cmsS15Fixed16Number
+	//var x0, y0, z0 int
+	var c0, c1, c2, c3, Rest int32
+	var X0, X1, Y0, Y1, Z0, Z1 uint32
+	TotalOut := p.nOutputs
+
+	fx = cmsToFixedDomain(int(Input[0]) * int(p.Domain[0]))
+	fy = cmsToFixedDomain(int(Input[1]) * int(p.Domain[1]))
+	fz = cmsToFixedDomain(int(Input[2]) * int(p.Domain[2]))
+
+	x0 := FIXED_TO_INT(fx)
+	y0 := FIXED_TO_INT(fy)
+	z0 := FIXED_TO_INT(fz)
+
+	rx = cmsS15Fixed16Number(FIXED_REST_TO_INT(fx))
+	ry = cmsS15Fixed16Number(FIXED_REST_TO_INT(fy))
+	rz = cmsS15Fixed16Number(FIXED_REST_TO_INT(fz))
+
+	X0 = uint32(p.opta[2]) * uint32(x0)
+	X1 = 0
+	if Input[0] != 0xFFFF {
+		X1 = uint32(p.opta[2])
+	}
+
+	Y0 = uint32(p.opta[1]) * uint32(y0)
+	Y1 = 0
+	if Input[1] != 0xFFFF {
+		Y1 = uint32(p.opta[1])
+	}
+
+	Z0 = uint32(p.opta[0]) * uint32(z0)
+	Z1 = 0
+	if Input[2] != 0xFFFF {
+		Z1 = uint32(p.opta[0])
+	}
+
+	LutOffset := X0 + Y0 + Z0
+
+	// Main conditional block matching C exactly
+	if rx >= ry {
+		if ry >= rz {
+			Y1 += X1
+			Z1 += Y1
+			for n := uint32(0); n < TotalOut; n++ {
+				base := LutOffset + n
+				c1 = int32(LutTable[base+X1])
+				c2 = int32(LutTable[base+Y1])
+				c3 = int32(LutTable[base+Z1])
+				c0 = int32(LutTable[base])
+				c3 -= c2
+				c2 -= c1
+				c1 -= c0
+				Rest = c1*int32(rx) + c2*int32(ry) + c3*int32(rz) + 0x8001
+				Output[n] = uint16(c0 + ((Rest + (Rest >> 16)) >> 16))
+			}
+
+		} else if rz >= rx {
+			X1 += Z1
+			Y1 += X1
+			for n := uint32(0); n < TotalOut; n++ {
+				base := LutOffset + n
+				c1 = int32(LutTable[base+X1])
+				c2 = int32(LutTable[base+Y1])
+				c3 = int32(LutTable[base+Z1])
+				c0 = int32(LutTable[base])
+				c2 -= c1
+				c1 -= c3
+				c3 -= c0
+				Rest = c1*int32(rx) + c2*int32(ry) + c3*int32(rz) + 0x8001
+				Output[n] = uint16(c0 + ((Rest + (Rest >> 16)) >> 16))
+			}
+
+		} else {
+			Z1 += X1
+			Y1 += Z1
+			for n := uint32(0); n < TotalOut; n++ {
+				base := LutOffset + n
+				c1 = int32(LutTable[base+X1])
+				c2 = int32(LutTable[base+Y1])
+				c3 = int32(LutTable[base+Z1])
+				c0 = int32(LutTable[base])
+				c2 -= c3
+				c3 -= c1
+				c1 -= c0
+				Rest = c1*int32(rx) + c2*int32(ry) + c3*int32(rz) + 0x8001
+				Output[n] = uint16(c0 + ((Rest + (Rest >> 16)) >> 16))
+			}
+		}
+
+	} else {
+		if rx >= rz {
+			X1 += Y1
+			Z1 += X1
+			for n := uint32(0); n < TotalOut; n++ {
+				base := LutOffset + n
+				c1 = int32(LutTable[base+X1])
+				c2 = int32(LutTable[base+Y1])
+				c3 = int32(LutTable[base+Z1])
+				c0 = int32(LutTable[base])
+				c3 -= c1
+				c1 -= c2
+				c2 -= c0
+				Rest = c1*int32(rx) + c2*int32(ry) + c3*int32(rz) + 0x8001
+				Output[n] = uint16(c0 + ((Rest + (Rest >> 16)) >> 16))
+			}
+
+		} else if ry >= rz {
+			Z1 += Y1
+			X1 += Z1
+			for n := uint32(0); n < TotalOut; n++ {
+				base := LutOffset + n
+				c1 = int32(LutTable[base+X1])
+				c2 = int32(LutTable[base+Y1])
+				c3 = int32(LutTable[base+Z1])
+				c0 = int32(LutTable[base])
+				c1 -= c3
+				c3 -= c2
+				c2 -= c0
+				Rest = c1*int32(rx) + c2*int32(ry) + c3*int32(rz) + 0x8001
+				Output[n] = uint16(c0 + ((Rest + (Rest >> 16)) >> 16))
+			}
+
+		} else {
+			Y1 += Z1
+			X1 += Y1
+			for n := uint32(0); n < TotalOut; n++ {
+				base := LutOffset + n
+				c1 = int32(LutTable[base+X1])
+				c2 = int32(LutTable[base+Y1])
+				c3 = int32(LutTable[base+Z1])
+				c0 = int32(LutTable[base])
+				c1 -= c2
+				c2 -= c3
+				c3 -= c0
+				Rest = c1*int32(rx) + c2*int32(ry) + c3*int32(rz) + 0x8001
+				Output[n] = uint16(c0 + ((Rest + (Rest >> 16)) >> 16))
+			}
+		}
+	}
 }
 
 // Eval4Inputs performs tetrahedral interpolation with 4 input channels for 16-bit values.
 // Eval4Inputs performs tetrahedral interpolation with 4 input channels for 16-bit values.
 func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
-	//fmt.Println("Start Eval4Inputs Input", Input[0], Input[1], Input[2], Input[3])
+	fmt.Println("Start Eval4Inputs Input", Input[0], Input[1], Input[2], Input[3])
 	var fk int32
 	var k0, rk int32
 	var K0, K1 int32
@@ -855,24 +1008,24 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 
 	// Process K0
 
-	/*	fmt.Println("got K0", K0)
-		fmt.Println("got X0", X0)
+	fmt.Println("got K0", K0)
+	/*	fmt.Println("got X0", X0)
 		fmt.Println("got Y0", Y0)
 		fmt.Println("got Z0", Z0)
 		fmt.Println("got X1", X1)
 		fmt.Println("got Y1", Y1)
 		fmt.Println("got Z1", Z1)*/
 
-	if Input[0] == 28270 && Input[1] == 25443 && Input[2] == 50115 && Input[3] == 7710 {
-		fmt.Println("stop")
-
-	}
-
 	LutTable, _ = p.Table.([]uint16) // Reset to original LUT
-	LutTable = LutTable[K0:]         // Shift by K0
+	for i := 0; i < 20; i++ {
+		fmt.Printf("LutTable[%d] = %d\n", i, LutTable[i])
+	}
+	LutTable = LutTable[K0:] // Shift by K0
 
 	for outChan := uint32(0); outChan < uint32(TotalOut); outChan++ {
 		c0 := DENS(X0, Y0, Z0, outChan)
+		fmt.Printf("X0+Y0+Z0+int32(outChan) %d\n", X0+Y0+Z0+int32(outChan))
+		fmt.Printf("returning LutTable[X0+Y0+Z0+int32(outChan)] %d\n", LutTable[X0+Y0+Z0+int32(outChan)])
 		var c1, c2, c3 cmsS15Fixed16Number
 
 		if rx >= ry && ry >= rz {
@@ -914,18 +1067,18 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 		}
 
 		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-		/*	fmt.Println("c0", c0)
-			fmt.Println("c1", c1)
-			fmt.Println("c2", c2)
-			fmt.Println("c3", c3)
-			fmt.Println("rx", rx)
-			fmt.Println("ry", ry)
-			fmt.Println("rz", rz)
-			fmt.Println("Rest", Rest)*/
+		fmt.Printf("c0 %d\n", c0)
+		fmt.Printf("c1 %d\n", c1)
+		fmt.Printf("c2 %d\n", c2)
+		fmt.Printf("c3 %d\n", c3)
+		fmt.Printf("rx %d\n", rx)
+		fmt.Printf("ry %d\n", ry)
+		fmt.Printf("rz %d\n", rz)
+		fmt.Printf("Rest %d\n", Rest)
 
-		Tmp1[outChan] = uint16(c0 + ((int32(cmsToFixedDomain(int(Rest))) + 0x8000) >> 16))
+		Tmp1[outChan] = uint16(c0 + ROUND_FIXED_TO_INT(cmsToFixedDomain(int(Rest))))
 
-		//	fmt.Println("Tmp1[outChan]", Tmp1[outChan])
+		fmt.Printf("Tmp1[outChan] %d\n", Tmp1[outChan])
 
 	}
 
@@ -974,18 +1127,20 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 		} else {
 			c1, c2, c3 = 0, 0, 0
 		}
-		/*	fmt.Println("c0", c0)
-			fmt.Println("c1", c1)
-			fmt.Println("c2", c2)
-			fmt.Println("c3", c3)
-			fmt.Println("rx", rx)
-			fmt.Println("ry", ry)
-			fmt.Println("rz", rz)*/
 
 		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-		Tmp2[outChan] = uint16(c0 + (int32(cmsToFixedDomain(int(Rest))+0x8000) >> 16))
-		//	fmt.Println("Rest", Rest)
-		//	fmt.Println("Tmp2[outChan]", Tmp2[outChan])
+		fmt.Printf("c0 %d\n", c0)
+		fmt.Printf("c1 %d\n", c1)
+		fmt.Printf("c2 %d\n", c2)
+		fmt.Printf("c3 %d\n", c3)
+		fmt.Printf("rx %d\n", rx)
+		fmt.Printf("ry %d\n", ry)
+		fmt.Printf("rz %d\n", rz)
+		fmt.Printf("Rest %d\n", Rest)
+
+		Tmp2[outChan] = uint16(c0 + (ROUND_FIXED_TO_INT(cmsToFixedDomain(int(Rest)))))
+
+		fmt.Printf("Tmp2[outChan] %d\n", Tmp2[outChan])
 	}
 
 	// Final interpolation
@@ -994,8 +1149,9 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 			fmt.Println("Tmp1[i]", Tmp1[i])
 			fmt.Println("Tmp2[i]", Tmp2[i])*/
 		Output[i] = LinearInterp(rk, int32(Tmp1[i]), int32(Tmp2[i]))
-		//fmt.Println("Output[i]", Output[i])
+		fmt.Printf("Output[i] %d\n", Output[i])
 	}
+	fmt.Println("End Eval4Inputs")
 
 }
 

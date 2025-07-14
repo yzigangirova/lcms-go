@@ -414,7 +414,7 @@ func cmsGetToneCurveParametricType(t *CmsToneCurve) int32 {
 
 // cmsEvalToneCurveFloat evaluates a tone curve at a specific point (float input and output).
 func cmsEvalToneCurveFloat(curve *CmsToneCurve, v float32) float32 {
-//	fmt.Println("cmsEvalToneCurveFloat v ", v)
+	//fmt.Printf("cmsEvalToneCurveFloat %.7f\n", v)
 
 	if curve == nil {
 		panic("ToneCurve cannot be nil")
@@ -423,11 +423,11 @@ func cmsEvalToneCurveFloat(curve *CmsToneCurve, v float32) float32 {
 	if curve.nSegments == 0 {
 		inValue := uint16(cmsQuickSaturateWord(float64(v) * 65535.0))
 		outValue := cmsEvalToneCurve16(curve, inValue)
-//		fmt.Println("returning out value  ", float32(outValue)/65535.0)
+		//fmt.Printf("returning out value %.7f\n", float32(outValue)/65535.0)
 		return float32(outValue) / 65535.0
 	}
 
-//	fmt.Println("returning out value  ", float32(EvalSegmentedFn(curve, float64(v))))
+	//fmt.Printf("returning out value %.7f\n", float32(EvalSegmentedFn(curve, float64(v))))
 	return float32(EvalSegmentedFn(curve, float64(v)))
 }
 

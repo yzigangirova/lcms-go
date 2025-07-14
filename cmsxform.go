@@ -202,7 +202,7 @@ func PixelSize(Format uint32) uint32 {
 
 // cmsDoTransform applies a transformation to the input buffer and writes the result to the output buffer.
 func CmsDoTransform(Transform CmsHTRANSFORM, InputBuffer, OutputBuffer any, Size uint32) {
-//	fmt.Println("start CmsDoTransform")
+	//fmt.Printf("start CmsDoTransform\n")
 
 	p, ok := Transform.(*cmsTRANSFORM) // Cast the generic Transform to the specific type cmsTRANSFORM
 	if !ok {
@@ -218,7 +218,8 @@ func CmsDoTransform(Transform CmsHTRANSFORM, InputBuffer, OutputBuffer any, Size
 
 	// Perform the transformation
 	p.Xform(p, InputBuffer, OutputBuffer, Size, 1, &stride)
-//	fmt.Println("end CmsDoTransform")
+
+	//fmt.Println("end CmsDoTransform")
 
 }
 
@@ -273,7 +274,7 @@ func FloatXFORM(
 	Stride *cmsStride,
 ) {
 
-//	fmt.Println("FloatXFORM")
+	fmt.Println("FloatXFORM")
 
 	var fIn, fOut [cmsMAXCHANNELS]float32
 	var OutOfGamut float32
@@ -289,6 +290,9 @@ func FloatXFORM(
 	case []float32:
 		inBytes = float32SliceToBytes(v)
 	case []float64:
+		/*	fmt.Printf("v[0] %.7f\n", v[0])
+			fmt.Printf("v[1] %.7f\n", v[1])
+			fmt.Printf("v[2] %.7f\n", v[2])*/
 		inBytes = float64SliceToBytes(v)
 	case []uint16:
 		inBytes = uint16SliceToBytes(v)
@@ -313,6 +317,10 @@ func FloatXFORM(
 	default:
 		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
+
+	/*fmt.Printf("inBytes[0] %df\n", inBytes[0])
+	fmt.Printf("inBytes[1] %d\n", inBytes[1])
+	fmt.Printf("inBytes[2] %d\n", inBytes[2])*/
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
 
@@ -345,10 +353,16 @@ func FloatXFORM(
 				}
 			} else {
 				//  No gamut check; evaluate pipeline directly
+				/*fmt.Printf("fIn[0] %.7f\n", fIn[0])
+				fmt.Printf("fIn[1] %.7f\n", fIn[1])
+				fmt.Printf("fIn[2] %.7f\n", fIn[2])*/
+
 				cmsPipelineEvalFloat(fIn[:], fOut[:], p.Lut)
 			}
 
 			//  Process output correctly
+			//	fmt.Println("fOut[:] ", fOut[:])
+
 			output = p.ToOutputFloat(p, fOut[:], output, Stride.BytesPerPlaneOut)
 		}
 
@@ -356,6 +370,11 @@ func FloatXFORM(
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
+	//fmt.Println("outBytes ", outBytes)
+	/*fmt.Printf("outBytes[0] %d\n", outBytes[0])
+	fmt.Printf("outBytes[1] %d\n", outBytes[1])
+	fmt.Printf("outBytes[2] %d\n", outBytes[2])*/
+
 	switch v := out.(type) {
 	case []byte:
 		copy(v, outBytes)
@@ -391,6 +410,8 @@ func NullFloatXFORM(
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
+	//fmt.Println("NullXFORM ")
+
 	var fIn [cmsMAXCHANNELS]float32
 	var strideIn, strideOut uint32
 	var accum, output []byte
@@ -467,6 +488,8 @@ func PrecalculatedXFORM(
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
+	//("PrecalculatedXFORM ")
+
 	var wIn, wOut [cmsMAXCHANNELS]uint16
 	var strideIn, strideOut uint32
 	var accum, output []byte
@@ -528,6 +551,8 @@ func PrecalculatedXFORMGamutCheck(
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
+	//fmt.Println("PrecalculatedXFORMGamutCheck ")
+
 	var wIn, wOut [cmsMAXCHANNELS]uint16
 	var strideIn, strideOut uint32
 	var accum, output []byte
@@ -567,7 +592,7 @@ func CachedXFORM(
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
-//	fmt.Println("CachedXFORM")
+	fmt.Println("CachedXFORM")
 
 	var wIn, wOut [cmsMAXCHANNELS]uint16
 	var strideIn, strideOut uint32
@@ -587,6 +612,10 @@ func CachedXFORM(
 	cache = p.Cache
 
 	strideIn, strideOut = 0, 0
+	/*	fmt.Println("inBytes ", inBytes)
+		fmt.Println("inBytes[0] ", inBytes[0])
+		fmt.Println("inBytes[1] ", inBytes[1])
+		fmt.Println("inBytes[2] ", inBytes[2])*/
 
 	for i := uint32(0); i < LineCount; i++ {
 		// Use slices with offsets instead of pointer arithmetic
@@ -608,14 +637,19 @@ func CachedXFORM(
 			if equal {
 				copy(wOut[:], cache.CacheOut[:])
 			} else {
-				/*	fmt.Println("wIn[0]", wIn[0])
-					fmt.Println("wIn[1]", wIn[1])
-					fmt.Println("wIn[2]", wIn[2])*/
+				/*		fmt.Printf("wIn[0] %d\n", wIn[0])
+						fmt.Printf("wIn[1] %d\n", wIn[1])
+						fmt.Printf("wIn[2] %d\n", wIn[2])*/
+
+				/*table16 := p.Lut.Data.(*cmsInterpParams).Table.([]uint16)
+				for i := 0; i < 20; i++ {
+					fmt.Printf("table[%d] = %d\n", i, table16[i])
+				}*/
 				p.Lut.Eval16Fn(wIn[:], wOut[:], p.Lut.Data)
-				/*	fmt.Println("wOut[0]", wOut[0])
-					fmt.Println("wOut[1]", wOut[1])
-					fmt.Println("wOut[2]", wOut[2])
-					copy(cache.CacheIn[:], wIn[:])*/
+				fmt.Printf("wOut[0] %d\n", wOut[0])
+				fmt.Printf("wOut[1] %d\n", wOut[1])
+				fmt.Printf("wOut[2] %d\n", wOut[2])
+				copy(cache.CacheIn[:], wIn[:])
 				copy(cache.CacheOut[:], wOut[:])
 			}
 
@@ -627,6 +661,11 @@ func CachedXFORM(
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
+	/*	fmt.Println("outBytes ", outBytes)
+		fmt.Println("outBytes[0] ", outBytes[0])
+		fmt.Println("outBytes[1] ", outBytes[1])
+		fmt.Println("outBytes[2] ", outBytes[2])*/
+
 }
 
 func CachedXFORMGamutCheck(
@@ -635,6 +674,8 @@ func CachedXFORMGamutCheck(
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
+	//fmt.Println("CachedXFORMGamutCheck ")
+
 	var wIn, wOut [cmsMAXCHANNELS]uint16
 	var strideIn, strideOut uint32
 	var cache cmsCACHE
@@ -945,6 +986,7 @@ func AllocEmptyTransform(
 	Intent uint32,
 	InputFormat, OutputFormat, dwFlags *uint32,
 ) *cmsTRANSFORM {
+	//	fmt.Println("AllocEmptyTransform")
 	// Get the transform plugin chunk
 	ctx := CmsContextGetClientChunk(ContextID, TransformPlugin).(*cmsTransformPluginChunkType)
 	var plugin *cmsTransformCollection
@@ -958,7 +1000,16 @@ func AllocEmptyTransform(
 
 	// Store the proposed pipeline
 	p.Lut = lut
+	/*if _, ok := p.Lut.Data.(*cmsInterpParams); ok {
+		fmt.Println("aaok := xform.Lut.Data.(*cmsInterpParams), count ", count)
+		table16 := p.Lut.Data.(*cmsInterpParams).Table.([]uint16)
+		for i := 0; i < 20; i++ {
+			fmt.Printf("table[%d] = %d\n", i, table16[i])
+		}
+	} else {
+		fmt.Println("aanot ok := xform.Lut.Data.(*cmsInterpParams)")
 
+	}*/
 	// Check if any plugin wants to handle the transform
 	if p.Lut != nil {
 		if (*dwFlags & cmsFLAGS_NOOPTIMIZE) == 0 {
@@ -996,7 +1047,27 @@ func AllocEmptyTransform(
 		}
 
 		// Optimize the pipeline if no plugin handled the transform
+		/*if _, ok := p.Lut.Data.(*cmsInterpParams); ok {
+			fmt.Println("bbok := xform.Lut.Data.(*cmsInterpParams), count ", count)
+			table16 := p.Lut.Data.(*cmsInterpParams).Table.([]uint16)
+			for i := 0; i < 20; i++ {
+				fmt.Printf("table[%d] = %d\n", i, table16[i])
+			}
+		} else {
+			fmt.Println("bbnot ok := xform.Lut.Data.(*cmsInterpParams)")
+
+		}*/
 		cmsOptimizePipeline(ContextID, &p.Lut, Intent, InputFormat, OutputFormat, dwFlags)
+		/*if _, ok := p.Lut.Data.(*cmsInterpParams); ok {
+			fmt.Println("ccok := xform.Lut.Data.(*cmsInterpParams), count ", count)
+			table16 := p.Lut.Data.(*cmsInterpParams).Table.([]uint16)
+			for i := 0; i < 20; i++ {
+				fmt.Printf("table[%d] = %d\n", i, table16[i])
+			}
+		} else {
+			fmt.Println("ccnot ok := xform.Lut.Data.(*cmsInterpParams)")
+
+		}*/
 	}
 
 	// Check for floating-point transform
@@ -1053,7 +1124,16 @@ func AllocEmptyTransform(
 			}
 		}
 	}
+	/*if _, ok := p.Lut.Data.(*cmsInterpParams); ok {
+		fmt.Println("ddok := xform.Lut.Data.(*cmsInterpParams), count ", count)
+		table16 := p.Lut.Data.(*cmsInterpParams).Table.([]uint16)
+		for i := 0; i < 20; i++ {
+			fmt.Printf("table[%d] = %d\n", i, table16[i])
+		}
+	} else {
+		fmt.Println("ddnot ok := xform.Lut.Data.(*cmsInterpParams)")
 
+	}*/
 	// Finalize the transform structure
 	p.InputFormat = *InputFormat
 	p.OutputFormat = *OutputFormat
@@ -1062,6 +1142,17 @@ func AllocEmptyTransform(
 	p.UserData = nil
 
 	ParallelizeIfSuitable(p)
+	/*if _, ok := p.Lut.Data.(*cmsInterpParams); ok {
+		fmt.Println("eeok := xform.Lut.Data.(*cmsInterpParams), count ", count)
+		table16 := p.Lut.Data.(*cmsInterpParams).Table.([]uint16)
+		for i := 0; i < 20; i++ {
+			fmt.Printf("table[%d] = %d\n", i, table16[i])
+		}
+	} else {
+		fmt.Println("eenot ok := xform.Lut.Data.(*cmsInterpParams)")
+
+	}*/
+	//	fmt.Println("END AllocEmptyTransform")
 	return p
 }
 func GetXFormColorSpaces(
@@ -1163,6 +1254,9 @@ func SetWhitePoint(wtPt *cmsCIEXYZ, src *cmsCIEXYZ) {
 	}
 
 }
+
+var count int
+
 func cmsCreateExtendedTransform(
 	ContextID CmsContext,
 	nProfiles uint32,
@@ -1176,7 +1270,7 @@ func cmsCreateExtendedTransform(
 	OutputFormat uint32,
 	dwFlags uint32,
 ) *cmsTRANSFORM {
-//	fmt.Println("cmsCreateExtendedTransform")
+	//("cmsCreateExtendedTransform")
 	// Check if it's a fake transform
 	if dwFlags&cmsFLAGS_NULLTRANSFORM != 0 {
 		return AllocEmptyTransform(ContextID, nil, INTENT_PERCEPTUAL, &InputFormat, &OutputFormat, &dwFlags)
@@ -1223,7 +1317,12 @@ func cmsCreateExtendedTransform(
 		cmsSignalError(ContextID, cmsERROR_NOT_SUITABLE, "Couldn't link the profiles")
 		return nil
 	}
+	/*if _, ok := Lut.Data.(*cmsInterpParams); ok {
+		fmt.Println("11ok := Lut.Data.(*cmsInterpParams)")
+	} else {
+		fmt.Println("11not ok := Lut.Data.(*cmsInterpParams)")
 
+	}*/
 	// Validate channel counts
 	// Check channel count
 	if (cmsChannelsOfColorSpace(EntryColorSpace) != int32(cmsPipelineInputChannels(Lut))) ||
@@ -1238,7 +1337,16 @@ func cmsCreateExtendedTransform(
 	if xform == nil {
 		return nil
 	}
+	/*if _, ok := xform.Lut.Data.(*cmsInterpParams); ok {
+		fmt.Println("22ok := xform.Lut.Data.(*cmsInterpParams), count ", count)
+		table16 := xform.Lut.Data.(*cmsInterpParams).Table.([]uint16)
+		for i := 0; i < 20; i++ {
+			fmt.Printf("table[%d] = %d\n", i, table16[i])
+		}
+	} else {
+		fmt.Println("22not ok := xform.Lut.Data.(*cmsInterpParams)")
 
+	}*/
 	// Configure transform
 	xform.EntryColorSpace = EntryColorSpace
 	xform.ExitColorSpace = ExitColorSpace
@@ -1275,7 +1383,16 @@ func cmsCreateExtendedTransform(
 			xform.OutputColorant = cmsDupNamedColorList((cmsReadTag(hProfiles[nProfiles-1], cmsSigColorantTableTag)).(*cmsNAMEDCOLORLIST))
 		}
 	}
+	/*if _, ok := xform.Lut.Data.(*cmsInterpParams); ok {
+		fmt.Println("33ok := xform.Lut.Data.(*cmsInterpParams) , count ", count)
+		table16 := xform.Lut.Data.(*cmsInterpParams).Table.([]uint16)
+		for i := 0; i < 20; i++ {
+			fmt.Printf("table[%d] = %d\n", i, table16[i])
+		}
+	} else {
+		fmt.Println("33not ok := xform.Lut.Data.(*cmsInterpParams)")
 
+	}*/
 	// Store the sequence of profiles
 	if dwFlags&cmsFLAGS_KEEP_SEQUENCE != 0 {
 		xform.Sequence = cmsCompileProfileSequence(ContextID, nProfiles, hProfiles)
@@ -1284,7 +1401,7 @@ func cmsCreateExtendedTransform(
 	}
 	// If this is a cached transform, init first value, which is zero (16 bits only)
 	if dwFlags&cmsFLAGS_NOCACHE == 0 {
-
+		//fmt.Println("cached transform")
 		if xform.GamutCheck != nil {
 			TransformOnePixelWithGamutCheck(xform, xform.Cache.CacheIn[:], xform.Cache.CacheOut[:])
 		} else {
@@ -1292,7 +1409,25 @@ func cmsCreateExtendedTransform(
 		}
 
 	}
-//	fmt.Println("end cmsCreateExtendedTransform before returning form")
+	/*if _, ok := xform.Lut.Data.(*cmsInterpParams); ok {
+		fmt.Println("44ok := xform.Lut.Data.(*cmsInterpParams) , count ", count)
+		table16 := xform.Lut.Data.(*cmsInterpParams).Table.([]uint16)
+		for i := 0; i < 20; i++ {
+			fmt.Printf("table[%d] = %d\n", i, table16[i])
+		}
+	} else {
+		fmt.Println("44not ok := xform.Lut.Data.(*cmsInterpParams)")
+
+	}*/
+	//if xform.Lut.Data.
+	/*if _, ok := xform.Lut.Data.(*cmsInterpParams); ok {
+		table16 := xform.Lut.Data.(*cmsInterpParams).Table.([]uint16)
+		for i := 0; i < 20; i++ {
+			fmt.Printf("table[%d] = %d\n", i, table16[i])
+		}
+	}*/
+	count++
+	//fmt.Println("end cmsCreateExtendedTransform before returning form")
 
 	return xform
 }
@@ -1307,7 +1442,7 @@ func cmsCreateMultiprofileTransformTHR(
 	Intent uint32,
 	dwFlags uint32,
 ) CmsHTRANSFORM {
-//	fmt.Println("start cmsCreateMultiprofileTransformTHR")
+	//	fmt.Println("start cmsCreateMultiprofileTransformTHR")
 	var BPC [256]bool
 	var Intents [256]uint32
 	var AdaptationStates [256]float64
@@ -1330,7 +1465,7 @@ func cmsCreateMultiprofileTransformTHR(
 	}
 
 	// Create the extended transform
-//	fmt.Println("end cmsCreateMultiprofileTransformTHR")
+	//	fmt.Println("end cmsCreateMultiprofileTransformTHR")
 	return CmsHTRANSFORM(cmsCreateExtendedTransform(ContextID, nProfiles, hProfiles, BPC[:], Intents[:], AdaptationStates[:], nil, 0, InputFormat, OutputFormat, dwFlags))
 }
 
@@ -1389,7 +1524,7 @@ func CmsCreateTransform(
 	Intent uint32,
 	dwFlags uint32,
 ) CmsHTRANSFORM {
-//	fmt.Println("start CmsCreateTransform")
+	//  fmt.Println("start CmsCreateTransform")
 	return cmsCreateTransformTHR(cmsGetProfileContextID(Input), Input, InputFormat, Output, OutputFormat, Intent, dwFlags)
 	//fmt.Println("end CmsCreateTransform")
 

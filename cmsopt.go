@@ -345,7 +345,7 @@ func PrelinOpt16alloc(ContextID CmsContext, ColorMap *cmsInterpParams, nInputs u
 const PRELINEARIZATION_POINTS = 4096
 
 func XFormSampler16(In []uint16, Out []uint16, cargo interface{}) int32 {
-	//	fmt.Println("XFormSampler16")
+	//fmt.Println("XFormSampler16")
 	Lut, ok := cargo.(*cmsPipeline)
 	if !ok {
 		fmt.Printf("Error: Interface data assertion error, not *cmsPipeline\n")
@@ -361,9 +361,9 @@ func XFormSampler16(In []uint16, Out []uint16, cargo interface{}) int32 {
 
 	// From 16-bit to floating-point
 	for i = 0; i < Lut.InputChannels; i++ {
-		//fmt.Println("from In[i] ", In[i])
-		InFloat[i] = float32(In[i]) / 65535.0
-		//fmt.Println("got InFloat[i] ", InFloat[i])
+		//fmt.Printf("from In[i] %d\n", In[i])
+		InFloat[i] = float32(float32(In[i]) / 65535.0)
+		//fmt.Printf("got InFloat[i]  %f\n", InFloat[i])
 	}
 	//fmt.Println("Whole infloat ", InFloat)
 
@@ -372,9 +372,9 @@ func XFormSampler16(In []uint16, Out []uint16, cargo interface{}) int32 {
 
 	// Back to 16-bit representation
 	for i = 0; i < Lut.OutputChannels; i++ {
-		//fmt.Println("from OutFloat[i] ", OutFloat[i])
+		//f("from OutFloat[i]  %f\n", OutFloat[i])
 		Out[i] = cmsQuickSaturateWord(float64(OutFloat[i] * 65535.0))
-		//fmt.Println("got Out[i] ", Out[i])
+		//fmt.Printf("got Out[i]  %d\n", Out[i])
 
 	}
 
@@ -591,6 +591,7 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	)
 	var ok bool
 	//fmt.Println("OptimizeByResampling")
+
 	// Lossy optimization, not suitable for floating-point formats
 	if cmsFormatterIsFloat(*InputFormat) || cmsFormatterIsFloat(*OutputFormat) {
 		return false
@@ -619,7 +620,16 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	if Dest == nil {
 		return false
 	}
+	/*	if _, ok := (Dest).Data.(*cmsInterpParams); ok {
+			fmt.Println("bbok := xform.Lut.Data.(*cmsInterpParams), count ", count)
+			//table16 := (Dest).Data.(*cmsInterpParams).Table.([]uint16)
+			for i := 0; i < 20; i++ {
+				//fmt.Printf("table[%d] = %d\n", i, table16[i])
+			}
+		} else {
+			fmt.Println("bbnot ok := xform.Lut.Data.(*cmsInterpParams)")
 
+		}*/
 	// Handle prelinearization
 	if *dwFlags&cmsFLAGS_CLUT_PRE_LINEARIZATION != 0 {
 		PreLin := cmsPipelineGetPtrToFirstStage(Src)
@@ -633,13 +643,35 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 			}
 		}
 	}
+	/*	if _, ok := (Dest).Data.(*cmsInterpParams); ok {
+			fmt.Println("ccok := xform.Lut.Data.(*cmsInterpParams), count ", count)
+			//table16 := (Dest).Data.(*cmsInterpParams).Table.([]uint16)
+			for i := 0; i < 20; i++ {
+				//fmt.Printf("table[%d] = %d\n", i, table16[i])
+			}
+		} else {
+			fmt.Println("ccnot ok := xform.Lut.Data.(*cmsInterpParams)")
 
+		}*/
 	// Allocate the CLUT
 	CLUT = cmsStageAllocCLut16bit(Src.ContextID, nGridPoints, Src.InputChannels, Src.OutputChannels, nil)
+	/*	if _, ok := CLUT.Data.(*cmsStageCLutData); ok {
+		fmt.Println("CLUT 1111 := CLUT.Data.(*cmsInterpParams), count ", count)
+		//table16 := CLUT.Data.(*cmsStageCLutData).Params.Table.([]uint16)
+		for i := 0; i < 20; i++ {
+			//fmt.Printf("table[%d] = %d\n", i, table16[i])
+		}
+	}*/
 	if CLUT == nil || !cmsPipelineInsertStage(Dest, cmsAT_END, CLUT) { //после этого появляются Elements, но непр. таблицы еще нет
 		goto Error
 	}
-
+	/*if _, ok := CLUT.Data.(*cmsStageCLutData); ok {
+		fmt.Println("CLUT 2222 := CLUT.Data.(*cmsInterpParams), count ", count)
+		//table16 := CLUT.Data.(*cmsStageCLutData).Params.Table.([]uint16)
+		for i := 0; i < 20; i++ {
+			//fmt.Printf("table[%d] = %d\n", i, table16[i])
+		}
+	}*/
 	// Handle postlinearization
 	if *dwFlags&cmsFLAGS_CLUT_POST_LINEARIZATION != 0 {
 		PostLin := cmsPipelineGetPtrToLastStage(Src)
@@ -653,12 +685,25 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 			}
 		}
 	}
-
+	/*if _, ok := CLUT.Data.(*cmsStageCLutData); ok {
+		fmt.Println("CLUT 3333 := CLUT.Data.(*cmsInterpParams), count ", count)
+		//table16 := CLUT.Data.(*cmsStageCLutData).Params.Table.([]uint16)
+		for i := 0; i < 20; i++ {
+			//fmt.Printf("table[%d] = %d\n", i, table16[i])
+		}
+	}*/
 	// Perform sampling
 	if !cmsStageSampleCLut16bit(CLUT, XFormSampler16, Src, 0) {
 		goto Error
 	}
-
+	/*if _, ok := CLUT.Data.(*cmsStageCLutData); ok {
+		fmt.Println("CLUT 4444 := CLUT.Data.(*cmsInterpParams), count ", count)
+		//table16 := CLUT.Data.(*cmsStageCLutData).Params.Table.([]uint16)
+		for i := 0; i < 20; i++ {
+			//fmt.Printf("table[%d] = %d\n", i, table16[i])
+		}
+	}*/
+	/***********************************************/
 	// Cleanup after sampling
 	if KeepPreLin != nil {
 		cmsStageFree(KeepPreLin)
@@ -673,6 +718,15 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		fmt.Printf("Error: Interface data assertion error, not *cmsStageCLutData\n")
 		return false
 	}
+
+	/*	if _, ok := CLUT.Data.(*cmsStageCLutData); ok {
+		fmt.Println("CLUT 5555  := CLUT.Data.(*cmsInterpParams), count ", count)
+		//table16 := DataCLUT.Params.Table.([]uint16)
+		for i := 0; i < 20; i++ {
+			//fmt.Printf("table[%d] = %d\n", i, table16[i])
+		}
+	}*/
+
 	if NewPreLin != nil {
 		DataSetIn = ((NewPreLin.Data.(*cmsStageToneCurvesData)).TheCurves)
 	}
@@ -681,13 +735,7 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	}
 
 	if DataSetIn == nil && DataSetOut == nil {
-		// Define the adapter function as a closure
-		/*adapterFn1 := func(In []uint16, Out []uint16, Data interface{}) {
-			params := Data.(*cmsInterpParams) // Convert Data back to *cmsInterpParams
-			DataCLUT.Params.Interpolation.Lerp16(In, Out, params)
-		}
-		// Use the closure as cmsPipelineEval16Fn
-		cmsPipelineSetOptimizationParameters(Dest, adapterFn1, DataCLUT.Params, nil, nil)*/
+
 		//перед cmsPipelineSetOptimizationParameters  Dest приобретает неправильную таблицу и она потом присваивается Lut
 
 		cmsPipelineSetOptimizationParameters(Dest,
@@ -695,7 +743,9 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 				Data.(*cmsInterpParams).Interpolation.Lerp16(In, Out, Data.(*cmsInterpParams))
 			},
 			DataCLUT.Params, nil, nil)
+
 	} else {
+
 		p16 = PrelinOpt16alloc(Dest.ContextID, DataCLUT.Params, Dest.InputChannels, DataSetIn, Dest.OutputChannels, DataSetOut)
 		if p16 == nil {
 			goto Error
@@ -712,6 +762,8 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	}
 
 	*Lut = Dest
+	//fmt.Println("END OptimizeByResampling")
+
 	return true
 
 Error:
@@ -1784,6 +1836,7 @@ func cmsRegisterOptimizationPlugin(ContextID CmsContext, Data PluginIntrfc) bool
 
 // cmsOptimizePipeline performs optimizations on a pipeline.
 func cmsOptimizePipeline(ContextID CmsContext, PtrLut **cmsPipeline, Intent uint32, InputFormat, OutputFormat, dwFlags *uint32) bool {
+	//fmt.Println("cmsOptimizePipeline")
 	ctx := CmsContextGetClientChunk(ContextID, OptimizationPlugin).(*cmsOptimizationPluginChunkType)
 	var AnySuccess bool
 	var mpe *cmsStage

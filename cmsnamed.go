@@ -280,8 +280,9 @@ func _cmsMLUgetWide(
 		}
 	}
 
+	// No string found. Return First one
 	if bestMatch == -1 {
-		return nil
+		bestMatch = 0
 	}
 
 	entry := mlu.Entries[bestMatch]

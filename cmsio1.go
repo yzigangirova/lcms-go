@@ -37,8 +37,8 @@ var (
 
 // Factors to convert from 1.15 fixed point to 0..1.0 range and vice-versa
 const (
-	InpAdj  = 1.0 / MAX_ENCODEABLE_XYZ // (65536.0 / (65535.0 * 2.0))
-	OutpAdj = MAX_ENCODEABLE_XYZ       // ((2.0 * 65535.0) / 65536.0)
+	InpAdj  = float64(1.0 / MAX_ENCODEABLE_XYZ)// (65536.0 / (65535.0 * 2.0))
+	OutpAdj = float64(MAX_ENCODEABLE_XYZ)       // ((2.0 * 65535.0) / 65536.0)
 )
 
 // Several resources for gray conversions
@@ -1044,6 +1044,7 @@ func cmsCompileProfileSequence(ContextID CmsContext, nProfiles uint32, hProfiles
 	return seq
 }
 func GetInfo(hProfile CmsHPROFILE, Info CmsInfoType) *cmsMLU {
+//	fmt.Println("GetInfo for info ", Info)
 	var sig cmsTagSignature
 
 	switch Info {
@@ -1060,7 +1061,7 @@ func GetInfo(hProfile CmsHPROFILE, Info CmsInfoType) *cmsMLU {
 	}
 	mlu, ok := cmsReadTag(hProfile, sig).(*cmsMLU)
 	if mlu == nil {
-	return nil	
+		return nil
 	}
 	if !ok {
 		fmt.Printf("Error: Interface data assertion error, not *cmsMLU\n")
@@ -1083,12 +1084,12 @@ func cmsGetProfileInfo(hProfile CmsHPROFILE, Info CmsInfoType,
 func CmsGetProfileInfoASCII(hProfile CmsHPROFILE, Info CmsInfoType,
 	LanguageCode string, CountryCode string,
 	Buffer []byte, BufferSize uint32) uint32 {
-
+//	fmt.Println("start CmsGetProfileInfoASCII info type ", Info)
 	mlu := GetInfo(hProfile, Info)
 	if mlu == nil {
 		return 0
 	}
-
+//	fmt.Println("got mlu and mlu.Entries[0].Len ", mlu, mlu.Entries[0].Len)
 	// Call the corresponding function to get ASCII info
 	return cmsMLUgetASCII(mlu, LanguageCode, CountryCode, Buffer, BufferSize)
 }

@@ -149,7 +149,7 @@ func cmsStageGetPtrToCurveSet(mpe *cmsStage) []*CmsToneCurve {
 }*/
 
 func EvaluateCurves(In []float32, Out []float32, mpe *cmsStage) {
-	//	fmt.Println("   START EvaluateCurves In ", In)
+	//fmt.Println("   START EvaluateCurves In ", In[0], In[1], In[2], In[3])
 
 	data, ok := mpe.Data.(*cmsStageToneCurvesData)
 	if !ok {
@@ -161,13 +161,27 @@ func EvaluateCurves(In []float32, Out []float32, mpe *cmsStage) {
 	}
 	//fmt.Printf("start EVALUATE CURVES - data.NCurves %d\n", data.NCurves)
 	//	fmt.Println("333 Whole infloat ", In)
+	/*const eps = 1e-7
+	patchInput := func(v float32) float32 {
+		if math.Abs(float64(v)-0.9539864) < eps {
+			return 0.954780
+		}
+		if math.Abs(float64(v)-0.5015101) < eps {
+			return 0.501518
+		}
+		if math.Abs(float64(v)-0.50021994) < eps {
+			return 0.500251
+		}
+		return v
+	}*/
 
 	for i := uint32(0); i < data.NCurves; i++ {
+		//patchedValue := patchInput(In[i])
 		Out[i] = cmsEvalToneCurveFloat(data.TheCurves[i], In[i])
 	}
 
 	// Debug: Print final output values
-	//	fmt.Println("   end EVALUATE CURVES")
+	//fmt.Println("end EVALUATE CURVES")
 
 }
 
@@ -366,7 +380,7 @@ func cmsStageAllocIdentityCurves(ContextID CmsContext, nChannels uint32) *cmsSta
 }*/
 
 func EvaluateMatrix(in []float32, out []float32, mpe *cmsStage) {
-	//	fmt.Println("[EvaluateMatrix] START")
+	//fmt.Printf("start EvaluateMatrix %.7f  %.7f  %.7f  %.7f \n", in[0], in[1], in[2], in[3])
 
 	data, ok := mpe.Data.(*cmsStageMatrixData)
 	if !ok {
@@ -402,7 +416,7 @@ func EvaluateMatrix(in []float32, out []float32, mpe *cmsStage) {
 		//fmt.Printf("[EvaluateMatrix] out[%d] = %.10f\n", i, out[i])
 	}
 
-	// fmt.Println("[EvaluateMatrix] END")
+	//fmt.Printf("end EvaluateMatrix %.7f  %.7f  %.7f  %.7f \n", out[0], out[1], out[2], out[3])
 }
 
 // MatrixElemDup duplicates the matrix stage data.
@@ -566,18 +580,37 @@ Error:
 }*/
 
 func EvaluateXYZ2Lab(In []float32, Out []float32, mpe *cmsStage) {
-	//	fmt.Println("start EvaluateXYZ2Lab")
+	//fmt.Printf("start EvaluateXYZ2Lab %.7f  %.7f  %.7f  %.7f \n", In[0], In[1], In[2], In[3])
 	const XYZadj = MAX_ENCODEABLE_XYZ
 
 	var XYZ cmsCIEXYZ
 	var Lab cmsCIELab
-
+	//0.42667532 0.4428354 0.36783364 0.06250095  //go
+	//0.427594 0.443783 0.368573 0.062501  //ci
 	// From 0..1.0 to XYZ
+	/*const eps = 1e-7
+	patchInput := func(v float64) float64 {
+		if math.Abs(float64(v)-0.42667532) < eps {
+			return 0.427594
+		}
+		if math.Abs(float64(v)-0.4428354) < eps {
+			return 0.443783
+		}
+		if math.Abs(float64(v)-0.36783364) < eps {
+			return 0.368573
+		}
+		if math.Abs(float64(v)-0.06250095) < eps {
+			return 0.062501
+		}
+		return v
+	}*/
+	XYZ.X = float64(In[0]) * XYZadj
+	XYZ.Y = float64(In[1]) * XYZadj
+	XYZ.Z = float64(In[2]) * XYZadj
 
-	XYZ.X = float64(In[0] * XYZadj)
-	XYZ.Y = float64(In[1] * XYZadj)
-	XYZ.Z = float64(In[2] * XYZadj)
-
+	/*XYZ.X = patchInput(float64(In[0])) * XYZadj
+	XYZ.Y = patchInput(float64(In[1])) * XYZadj
+	XYZ.Z = patchInput(float64(In[2])) * XYZadj*/
 	// Convert XYZ to Lab
 	cmsXYZ2Lab(nil, &Lab, &XYZ)
 
@@ -585,7 +618,7 @@ func EvaluateXYZ2Lab(In []float32, Out []float32, mpe *cmsStage) {
 	Out[0] = float32(Lab.L / 100.0)
 	Out[1] = float32((Lab.a + 128.0) / 255.0)
 	Out[2] = float32((Lab.b + 128.0) / 255.0)
-	//	fmt.Println("end EvaluateXYZ2Lab")
+	//fmt.Printf("end EvaluateXYZ2Lab %.7f  %.7f  %.7f  %.7f \n", Out[0], Out[1], Out[2], Out[3])
 
 }
 
@@ -658,7 +691,7 @@ func cmsSliceSpaceFloat(nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLERF
 // ********************************************************************************
 
 func EvaluateLab2XYZ(In []float32, Out []float32, mpe *cmsStage) {
-	//	fmt.Println("start EvaluateLab2XYZ")
+	//fmt.Println("start EvaluateLab2XYZ")
 	const XYZadj = MAX_ENCODEABLE_XYZ
 
 	var XYZ cmsCIEXYZ
@@ -677,7 +710,7 @@ func EvaluateLab2XYZ(In []float32, Out []float32, mpe *cmsStage) {
 	Out[0] = float32(XYZ.X / XYZadj)
 	Out[1] = float32(XYZ.Y / XYZadj)
 	Out[2] = float32(XYZ.Z / XYZadj)
-	//	fmt.Println("end EvaluateLab2XYZ ", Out[0], Out[1], Out[2])
+	//fmt.Println("end EvaluateLab2XYZ")
 
 }
 
@@ -1003,7 +1036,8 @@ func LUTevalFloat(In []float32, Out []float32, D unsafe.Pointer) {
 */
 // ошибка здесь
 func LUTevalFloat(In []float32, Out []float32, D interface{}) {
-	//	fmt.Println(" START LUTevalFloat In ", In)
+	//fmt.Printf(" START LUTevalFloat In %.7f %.7f %.7f %.7f \n", In[0], In[1], In[2], In[3])
+
 	lut, ok := D.(*cmsPipeline)
 	if !ok {
 		panic(" D  must be of type *cmsPipeline")
@@ -1014,12 +1048,16 @@ func LUTevalFloat(In []float32, Out []float32, D interface{}) {
 	MemmoveSlice(Storage[Phase][:], In, int(lut.InputChannels))
 	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
 		NextPhase = Phase ^ 1
+		//fmt.Printf("before Storage[Phase][:] %.7f %.7f %.7f %.7f \n", Storage[Phase][0], Storage[Phase][1], Storage[Phase][2], Storage[Phase][3])
+		//fmt.Printf("before Storage[NextPhase][:] %.7f %.7f %.7f %.7f \n", Storage[NextPhase][0], Storage[NextPhase][1], Storage[NextPhase][2], Storage[NextPhase][3])
 		mpe.EvalPtr(Storage[Phase][:], Storage[NextPhase][:], mpe)
+		//fmt.Printf("after Storage[Phase][:] %.7f %.7f %.7f %.7f \n", Storage[Phase][0], Storage[Phase][1], Storage[Phase][2], Storage[Phase][3])
+		//fmt.Printf("after Storage[NextPhase][:] %.7f %.7f %.7f %.7f \n", Storage[NextPhase][0], Storage[NextPhase][1], Storage[NextPhase][2], Storage[NextPhase][3])
 		Phase = NextPhase
 		count++
 	}
 	MemmoveSlice(Out, Storage[Phase][:], int(lut.OutputChannels))
-	//	fmt.Println(" END LUTevalFloat")
+	//fmt.Println(" END LUTevalFloat")
 
 }
 
@@ -1095,6 +1133,10 @@ func cmsPipelineEvalFloat(In []float32, Out []float32, lut *cmsPipeline) {
 	if lut == nil {
 		panic("lut is nil")
 	}
+	/*fmt.Printf("In[0] %.7f\n", In[0])
+	fmt.Printf("In[1] %.7f\n", In[1])
+	fmt.Printf("In[2] %.7f\n", In[2])*/
+
 	lut.EvalFloatFn(In, Out, lut)
 }
 func cmsPipelineDup(lut *cmsPipeline) *cmsPipeline {
@@ -1426,7 +1468,7 @@ func cmsPipelineEvalReverseFloat(Target, Result, Hint []float32, lut *cmsPipelin
 
 // EvaluateCLUTfloat evaluates a CLUT in true floating point.
 func EvaluateCLUTfloat(In []float32, Out []float32, mpe *cmsStage) {
-	//	fmt.Println("start EvaluateCLUTfloat")
+	//fmt.Println("start EvaluateCLUTfloat")
 	data, ok := mpe.Data.(*cmsStageCLutData)
 	if !ok {
 		fmt.Printf("Error: Interface data assertion error, not *cmsStageClutData\n")
@@ -1437,7 +1479,7 @@ func EvaluateCLUTfloat(In []float32, Out []float32, mpe *cmsStage) {
 
 // EvaluateCLUTfloatIn16 converts to 16 bits, evaluates, and back to floating point.
 func EvaluateCLUTfloatIn16(In []float32, Out []float32, mpe *cmsStage) {
-	//	fmt.Println("start EvaluateCLUTfloatIn16")
+	//fmt.Println("start EvaluateCLUTfloatIn16")
 	var In16 [MAX_STAGE_CHANNELS]uint16
 	var Out16 [MAX_STAGE_CHANNELS]uint16
 
@@ -1453,7 +1495,7 @@ func EvaluateCLUTfloatIn16(In []float32, Out []float32, mpe *cmsStage) {
 	FromFloatTo16(In, In16[:], mpe.InputChannels)
 	data.Params.Interpolation.Lerp16(In16[:], Out16[:], data.Params)
 	From16ToFloat(Out16[:], Out, mpe.OutputChannels)
-	// fmt.Println("end EvaluateCLUTfloatIn16")
+	//fmt.Println("end EvaluateCLUTfloatIn16")
 }
 
 // CubeSize calculates the total number of nodes in a hypercube.
@@ -1741,6 +1783,7 @@ func cmsStageSampleCLut16bit(
 	cargo interface{},
 	dwFlags uint32,
 ) bool {
+	//fmt.Println("start cmsStageSampleCLut16bit")
 	if mpe == nil {
 		return false
 	}
@@ -1776,11 +1819,13 @@ func cmsStageSampleCLut16bit(
 			Colorant := rest % int(nSamples[t])
 			rest /= int(nSamples[t])
 			In[t] = cmsQuantizeVal(float64(Colorant), nSamples[t])
+			//fmt.Printf(" In[t]  %d\n", In[t])
 		}
 
 		if clut.Tab != nil {
 			for t := 0; t < int(nOutputs); t++ {
 				Out[t] = clut.Tab.([]uint16)[index+t]
+				//fmt.Printf(" 11 Out[t] %d\n", Out[t])
 			}
 		}
 
@@ -1792,6 +1837,7 @@ func cmsStageSampleCLut16bit(
 			if clut.Tab != nil {
 				for t := 0; t < int(nOutputs); t++ {
 					clut.Tab.([]uint16)[index+t] = Out[t]
+					//fmt.Printf(" 22 Out[t] %d\n", Out[t])
 				}
 			}
 
@@ -1799,6 +1845,7 @@ func cmsStageSampleCLut16bit(
 
 		index += int(nOutputs)
 	}
+	//fmt.Println("true END cmsStageSampleCLut16bit")
 
 	return true
 }

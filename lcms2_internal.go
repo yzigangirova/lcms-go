@@ -14,11 +14,11 @@ import (
 const MATRIX_DET_TOLERANCE = 0.0001
 
 // Maximum encodeable values in floating point
-const MAX_ENCODEABLE_XYZ = (1.0 + 32767.0/32768.0)
-const MIN_ENCODEABLE_ab2 = (-128.0)
-const MAX_ENCODEABLE_ab2 = ((65535.0 / 256.0) - 128.0)
-const MIN_ENCODEABLE_ab4 = (-128.0)
-const MAX_ENCODEABLE_ab4 = (127.0)
+const MAX_ENCODEABLE_XYZ = float64(1.0 + 32767.0/32768.0)
+const MIN_ENCODEABLE_ab2 = float64(-128.0)
+const MAX_ENCODEABLE_ab2 = float64((65535.0 / 256.0) - 128.0)
+const MIN_ENCODEABLE_ab4 = float64(-128.0)
+const MAX_ENCODEABLE_ab4 = float64(127.0)
 
 const M_LOG10E = 0.434294481903251827651
 
