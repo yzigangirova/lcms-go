@@ -933,7 +933,7 @@ func TetrahedralInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 // Eval4Inputs performs tetrahedral interpolation with 4 input channels for 16-bit values.
 // Eval4Inputs performs tetrahedral interpolation with 4 input channels for 16-bit values.
 func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
-	fmt.Println("Start Eval4Inputs Input", Input[0], Input[1], Input[2], Input[3])
+	//fmt.Println("Start Eval4Inputs Input", Input[0], Input[1], Input[2], Input[3])
 	var fk int32
 	var k0, rk int32
 	var K0, K1 int32
@@ -1008,8 +1008,8 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 
 	// Process K0
 
-	fmt.Println("got K0", K0)
-	/*	fmt.Println("got X0", X0)
+	/*fmt.Println("got K0", K0)
+		fmt.Println("got X0", X0)
 		fmt.Println("got Y0", Y0)
 		fmt.Println("got Z0", Z0)
 		fmt.Println("got X1", X1)
@@ -1017,15 +1017,15 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 		fmt.Println("got Z1", Z1)*/
 
 	LutTable, _ = p.Table.([]uint16) // Reset to original LUT
-	for i := 0; i < 20; i++ {
+	/*for i := 0; i < 20; i++ {
 		fmt.Printf("LutTable[%d] = %d\n", i, LutTable[i])
-	}
+	}*/
 	LutTable = LutTable[K0:] // Shift by K0
 
 	for outChan := uint32(0); outChan < uint32(TotalOut); outChan++ {
 		c0 := DENS(X0, Y0, Z0, outChan)
-		fmt.Printf("X0+Y0+Z0+int32(outChan) %d\n", X0+Y0+Z0+int32(outChan))
-		fmt.Printf("returning LutTable[X0+Y0+Z0+int32(outChan)] %d\n", LutTable[X0+Y0+Z0+int32(outChan)])
+	//	fmt.Printf("X0+Y0+Z0+int32(outChan) %d\n", X0+Y0+Z0+int32(outChan))
+	//	fmt.Printf("returning LutTable[X0+Y0+Z0+int32(outChan)] %d\n", LutTable[X0+Y0+Z0+int32(outChan)])
 		var c1, c2, c3 cmsS15Fixed16Number
 
 		if rx >= ry && ry >= rz {
@@ -1067,18 +1067,18 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 		}
 
 		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-		fmt.Printf("c0 %d\n", c0)
+	/*	fmt.Printf("c0 %d\n", c0)
 		fmt.Printf("c1 %d\n", c1)
 		fmt.Printf("c2 %d\n", c2)
 		fmt.Printf("c3 %d\n", c3)
 		fmt.Printf("rx %d\n", rx)
 		fmt.Printf("ry %d\n", ry)
 		fmt.Printf("rz %d\n", rz)
-		fmt.Printf("Rest %d\n", Rest)
+		fmt.Printf("Rest %d\n", Rest)*/
 
 		Tmp1[outChan] = uint16(c0 + ROUND_FIXED_TO_INT(cmsToFixedDomain(int(Rest))))
 
-		fmt.Printf("Tmp1[outChan] %d\n", Tmp1[outChan])
+		//fmt.Printf("Tmp1[outChan] %d\n", Tmp1[outChan])
 
 	}
 
@@ -1129,18 +1129,18 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 		}
 
 		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-		fmt.Printf("c0 %d\n", c0)
+		/*fmt.Printf("c0 %d\n", c0)
 		fmt.Printf("c1 %d\n", c1)
 		fmt.Printf("c2 %d\n", c2)
 		fmt.Printf("c3 %d\n", c3)
 		fmt.Printf("rx %d\n", rx)
 		fmt.Printf("ry %d\n", ry)
 		fmt.Printf("rz %d\n", rz)
-		fmt.Printf("Rest %d\n", Rest)
+		fmt.Printf("Rest %d\n", Rest)*/
 
 		Tmp2[outChan] = uint16(c0 + (ROUND_FIXED_TO_INT(cmsToFixedDomain(int(Rest)))))
 
-		fmt.Printf("Tmp2[outChan] %d\n", Tmp2[outChan])
+		//fmt.Printf("Tmp2[outChan] %d\n", Tmp2[outChan])
 	}
 
 	// Final interpolation
@@ -1149,9 +1149,9 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 			fmt.Println("Tmp1[i]", Tmp1[i])
 			fmt.Println("Tmp2[i]", Tmp2[i])*/
 		Output[i] = LinearInterp(rk, int32(Tmp1[i]), int32(Tmp2[i]))
-		fmt.Printf("Output[i] %d\n", Output[i])
+		//fmt.Printf("Output[i] %d\n", Output[i])
 	}
-	fmt.Println("End Eval4Inputs")
+	//fmt.Println("End Eval4Inputs")
 
 }
 

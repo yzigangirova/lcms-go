@@ -67,8 +67,19 @@ func cmsAssert(condition bool, message string) {
 	}
 }
 
-// Fast floor conversion
+// only littleendian version
 func cmsQuickFloor(val float64) int {
+	const _lcms_double2fixmagic = 68719476736.0 * 1.5 // 2^36 * 1.5
+
+	temp := val + _lcms_double2fixmagic
+	bits := math.Float64bits(temp)
+
+	// Little-endian only
+	return int(int32(bits) >> 16)
+}
+
+// Fast floor conversion
+/*func cmsQuickFloor(val float64) int {
 	//	fmt.Println("cmsQuickFloor got ", val)
 	const _lcms_double2fixmagic = 68719476736.0 * 1.5 // 2^36 * 1.5
 
@@ -81,7 +92,7 @@ func cmsQuickFloor(val float64) int {
 	//	fmt.Println("cmsQuickFloor result ", int(int32(bits)>>16))
 	return int(int32(bits) >> 16)
 
-}
+}*/
 
 func isBigEndian() bool {
 	var i uint32 = 0x01000000 // MSB first
@@ -96,15 +107,15 @@ func cmsQuickFloorWord(d float64) uint16 {
 }
 
 // Floor to word with saturation
+
 func cmsQuickSaturateWord(d float64) uint16 {
-	d += 0.5
 	if d <= 0 {
 		return 0
 	}
 	if d >= 65535.0 {
 		return 0xFFFF
 	}
-	return cmsQuickFloorWord(d)
+	return cmsQuickFloorWord(d + 0.5)
 }
 
 /* The locking scheme in LCMS described above relies heavily on Windows-specific behaviors, particularly the use of CRITICAL_SECTION for lightweight synchronization. The implementation is tied closely to platform-specific details, such as how CRITICAL_SECTION is initialized and its internal structure.

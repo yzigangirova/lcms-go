@@ -274,7 +274,7 @@ func FloatXFORM(
 	Stride *cmsStride,
 ) {
 
-	fmt.Println("FloatXFORM")
+	//fmt.Println("FloatXFORM")
 
 	var fIn, fOut [cmsMAXCHANNELS]float32
 	var OutOfGamut float32
@@ -592,7 +592,7 @@ func CachedXFORM(
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
-	fmt.Println("CachedXFORM")
+	//fmt.Println("CachedXFORM")
 
 	var wIn, wOut [cmsMAXCHANNELS]uint16
 	var strideIn, strideOut uint32
@@ -646,9 +646,9 @@ func CachedXFORM(
 					fmt.Printf("table[%d] = %d\n", i, table16[i])
 				}*/
 				p.Lut.Eval16Fn(wIn[:], wOut[:], p.Lut.Data)
-				fmt.Printf("wOut[0] %d\n", wOut[0])
-				fmt.Printf("wOut[1] %d\n", wOut[1])
-				fmt.Printf("wOut[2] %d\n", wOut[2])
+				/*	fmt.Printf("wOut[0] %d\n", wOut[0])
+					fmt.Printf("wOut[1] %d\n", wOut[1])
+					fmt.Printf("wOut[2] %d\n", wOut[2])*/
 				copy(cache.CacheIn[:], wIn[:])
 				copy(cache.CacheOut[:], wOut[:])
 			}

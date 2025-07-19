@@ -1,6 +1,6 @@
 package golcms
 
-import "C"
+//import "C"
 import (
 	"bytes"
 	"encoding/binary"
