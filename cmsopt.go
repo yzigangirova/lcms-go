@@ -476,7 +476,8 @@ func PatchLUT(CLUT *cmsStage, At []uint16, Value []uint16, nChannelsOut, nChanne
 
 func WhitesAreEqual(n uint32, White1, White2 []uint16) bool {
 	for i := uint32(0); i < n; i++ {
-		if math.Abs(float64(White1[i]-White2[i])) > 0xf000 {
+		diff := int(White1[i]) - int(White2[i])
+		if math.Abs(float64(diff)) > 0xf000 {
 			return true // Values are extremely different; avoid fixup.
 		}
 		if White1[i] != White2[i] {
@@ -485,7 +486,6 @@ func WhitesAreEqual(n uint32, White1, White2 []uint16) bool {
 	}
 	return true
 }
-
 func FixWhiteMisalignment(Lut *cmsPipeline, EntryColorSpace, ExitColorSpace cmsColorSpaceSignature) bool {
 	var (
 		WhitePointIn, WhitePointOut    []uint16
