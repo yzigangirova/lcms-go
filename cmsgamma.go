@@ -3,7 +3,9 @@ package golcms
 import (
 	"fmt"
 	"math"
+
 	//"unsafe"
+	"arena"
 )
 
 // ----------------------------------------------------------------- Implementation
@@ -35,7 +37,7 @@ var DefaultCurves = cmsParametricCurvesCollection{
 // The linked list head
 var cmsCurvesPluginChunk = cmsCurvesPluginChunkType{ParametricCurves: nil}
 
-func cmsRegisterParametricCurvesPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
+func cmsRegisterParametricCurvesPlugin(ar *arena.Arena, ContextID CmsContext, Data PluginIntrfc) bool {
 	ctx := CmsContextGetClientChunk(ContextID, CurvesPlugin).(*cmsCurvesPluginChunkType)
 	var fl *cmsParametricCurvesCollection
 
@@ -51,7 +53,7 @@ func cmsRegisterParametricCurvesPlugin(ContextID CmsContext, Data PluginIntrfc) 
 	}
 	// Allocate memory for a new parametric curves collection.
 	//fl = (*cmsParametricCurvesCollection)(cmsPluginMalloc(ContextID, uint32(unsafe.Sizeof(cmsParametricCurvesCollection{}))))
-	fl = allocateStruct[cmsParametricCurvesCollection]()
+	fl = allocateStruct[cmsParametricCurvesCollection](ar)
 
 	if fl == nil {
 		return false
@@ -137,6 +139,7 @@ func allocateEvals(contextID CmsContext, nSegments uint32) []cmsParametricCurveE
 
 // AllocateToneCurveStruct allocates memory for a tone curve structure.
 func AllocateToneCurveStruct(
+	ar *arena.Arena,
 	ContextID CmsContext,
 	nEntries uint32,
 	nSegments uint32,
@@ -193,7 +196,7 @@ func AllocateToneCurveStruct(
 			currentSegment := Segments[i]
 
 			if currentSegment.Type == 0 {
-				p.SegInterp[i] = cmsComputeInterpParams(ContextID, currentSegment.NGridPoints, 1, 1, nil, CMS_LERP_FLAGS_FLOAT)
+				p.SegInterp[i] = cmsComputeInterpParams(ar, ContextID, currentSegment.NGridPoints, 1, 1, nil, CMS_LERP_FLAGS_FLOAT)
 			}
 
 			p.Segments[i] = currentSegment // Copy segment data
@@ -214,7 +217,7 @@ func AllocateToneCurveStruct(
 	}
 
 	// Compute interpolation parameters
-	p.InterpParams = cmsComputeInterpParams(ContextID, p.nEntries, 1, 1, p.Table16, CMS_LERP_FLAGS_16BITS)
+	p.InterpParams = cmsComputeInterpParams(ar, ContextID, p.nEntries, 1, 1, p.Table16, CMS_LERP_FLAGS_16BITS)
 	//fmt.Println("end AllocateToneCurveStruct")
 
 	if p.InterpParams != nil {
@@ -230,8 +233,8 @@ Error:
 }
 
 // Build a gamma table based on gamma constant
-func CmsBuildGamma(ContextID CmsContext, Gamma float64) *CmsToneCurve {
-	return cmsBuildParametricToneCurve(ContextID, 1, []float64{Gamma})
+func CmsBuildGamma(ar *arena.Arena, ContextID CmsContext, Gamma float64) *CmsToneCurve {
+	return cmsBuildParametricToneCurve(ar, ContextID, 1, []float64{Gamma})
 }
 
 // Free all memory taken by the gamma curve
@@ -278,18 +281,18 @@ func cmsFreeToneCurveTriple(Curve [3]*CmsToneCurve) {
 }
 
 // Duplicate a tone curve.
-func cmsDupToneCurve(In *CmsToneCurve) *CmsToneCurve {
+func cmsDupToneCurve(ar *arena.Arena, In *CmsToneCurve) *CmsToneCurve {
 
 	if In == nil {
 		return nil
 	}
 	//fmt.Println("cmsDupToneCurve")
-	return AllocateToneCurveStruct(In.InterpParams.ContextID, In.nEntries, In.nSegments, In.Segments, In.Table16)
+	return AllocateToneCurveStruct(ar, In.InterpParams.ContextID, In.nEntries, In.nSegments, In.Segments, In.Table16)
 }
 
 // Join two tone curves.
 // Produces y = Y^-1(X(t)).
-func cmsJoinToneCurve(ContextID CmsContext, X, Y *CmsToneCurve, nResultingPoints uint32) *CmsToneCurve {
+func cmsJoinToneCurve(ar *arena.Arena, ContextID CmsContext, X, Y *CmsToneCurve, nResultingPoints uint32) *CmsToneCurve {
 	if X == nil || Y == nil {
 		return nil
 	}
@@ -301,7 +304,7 @@ func cmsJoinToneCurve(ContextID CmsContext, X, Y *CmsToneCurve, nResultingPoints
 	)
 
 	// Reverse the Y tone curve
-	Yreversed = cmsReverseToneCurveEx(nResultingPoints, Y)
+	Yreversed = cmsReverseToneCurveEx(ar, nResultingPoints, Y)
 	if Yreversed == nil {
 		return nil
 	}
@@ -319,7 +322,7 @@ func cmsJoinToneCurve(ContextID CmsContext, X, Y *CmsToneCurve, nResultingPoints
 	}
 
 	// Build the output tone curve
-	out = cmsBuildTabulatedToneCurveFloat(ContextID, nResultingPoints, Res)
+	out = cmsBuildTabulatedToneCurveFloat(ar, ContextID, nResultingPoints, Res)
 
 Error:
 
@@ -497,11 +500,11 @@ func cmsGetToneCurveParams(t *CmsToneCurve) []float64 {
 }
 
 // cmsBuildTabulatedToneCurve16 creates an empty gamma curve using tables.
-func cmsBuildTabulatedToneCurve16(ContextID CmsContext, nEntries uint32, Values []uint16) *CmsToneCurve {
+func cmsBuildTabulatedToneCurve16(ar *arena.Arena, ContextID CmsContext, nEntries uint32, Values []uint16) *CmsToneCurve {
 
 	//fmt.Println("cmsBuildTabulatedToneCurve16(")
 
-	return AllocateToneCurveStruct(ContextID, nEntries, 0, nil, Values)
+	return AllocateToneCurveStruct(ar, ContextID, nEntries, 0, nil, Values)
 }
 
 // EntriesByGamma calculates the number of entries by gamma.
@@ -513,7 +516,7 @@ func EntriesByGamma(Gamma float64) uint32 {
 }
 
 // cmsBuildSegmentedToneCurve creates a segmented gamma curve and fills the table.
-func cmsBuildSegmentedToneCurve(ContextID CmsContext, nSegments uint32, Segments []cmsCurveSegment) *CmsToneCurve {
+func cmsBuildSegmentedToneCurve(ar *arena.Arena, ContextID CmsContext, nSegments uint32, Segments []cmsCurveSegment) *CmsToneCurve {
 	//fmt.Println("cmsBuildSegmentedToneCurve")
 
 	if Segments == nil {
@@ -526,7 +529,7 @@ func cmsBuildSegmentedToneCurve(ContextID CmsContext, nSegments uint32, Segments
 		nGridPoints = EntriesByGamma(Segments[0].Params[0])
 	}
 
-	g := AllocateToneCurveStruct(ContextID, nGridPoints, nSegments, Segments, nil)
+	g := AllocateToneCurveStruct(ar, ContextID, nGridPoints, nSegments, Segments, nil)
 	if g == nil {
 		return nil
 	}
@@ -542,7 +545,7 @@ func cmsBuildSegmentedToneCurve(ContextID CmsContext, nSegments uint32, Segments
 }
 
 // cmsBuildTabulatedToneCurveFloat uses a segmented curve to store the floating-point table.
-func cmsBuildTabulatedToneCurveFloat(ContextID CmsContext, nEntries uint32, values []float32) *CmsToneCurve {
+func cmsBuildTabulatedToneCurveFloat(ar *arena.Arena, ContextID CmsContext, nEntries uint32, values []float32) *CmsToneCurve {
 	var Seg [3]cmsCurveSegment
 
 	if nEntries == 0 || values == nil {
@@ -554,11 +557,11 @@ func cmsBuildTabulatedToneCurveFloat(ContextID CmsContext, nEntries uint32, valu
 	Seg[1] = cmsCurveSegment{X0: 0, X1: 1, Type: 0, NGridPoints: nEntries, SampledPoints: values}
 	Seg[2] = cmsCurveSegment{X0: 1, X1: math.MaxFloat32, Type: 6, Params: [10]float64{1, 0, 0, float64(values[nEntries-1]), 0}}
 
-	return cmsBuildSegmentedToneCurve(ContextID, 3, Seg[:])
+	return cmsBuildSegmentedToneCurve(ar, ContextID, 3, Seg[:])
 }
 
 // cmsBuildParametricToneCurve builds a parametric tone curve.
-func cmsBuildParametricToneCurve(ContextID CmsContext, Type int, Params []float64) *CmsToneCurve {
+func cmsBuildParametricToneCurve(ar *arena.Arena, ContextID CmsContext, Type int, Params []float64) *CmsToneCurve {
 	var Seg0 cmsCurveSegment
 	var Pos int
 	c := GetParametricCurveByType(ContextID, Type, &Pos)
@@ -577,7 +580,7 @@ func cmsBuildParametricToneCurve(ContextID CmsContext, Type int, Params []float6
 	size := c.ParameterCount[Pos]
 	MemmoveSlice(Seg0.Params[:], Params, int(size))
 
-	return cmsBuildSegmentedToneCurve(ContextID, 1, []cmsCurveSegment{Seg0})
+	return cmsBuildSegmentedToneCurve(ar, ContextID, 1, []cmsCurveSegment{Seg0})
 }
 
 // DefaultEvalParametricFn evaluates a parametric curve using floating point.
@@ -833,7 +836,7 @@ func EvalSegmentedFn(g *CmsToneCurve, R float64) float64 {
 	return math.Inf(-1) // MINUS_INF
 }
 
-func cmsReverseToneCurveEx(nResultSamples uint32, inCurve *CmsToneCurve) *CmsToneCurve {
+func cmsReverseToneCurveEx(ar *arena.Arena, nResultSamples uint32, inCurve *CmsToneCurve) *CmsToneCurve {
 	var a, b, y, x1, y1, x2, y2 float64
 	var i, j int
 	var ascending bool
@@ -847,13 +850,13 @@ func cmsReverseToneCurveEx(nResultSamples uint32, inCurve *CmsToneCurve) *CmsTon
 	if inCurve.nSegments == 1 && inCurve.Segments[0].Type > 0 &&
 		GetParametricCurveByType(inCurve.InterpParams.ContextID, int(inCurve.Segments[0].Type), nil) != nil {
 
-		return cmsBuildParametricToneCurve(inCurve.InterpParams.ContextID,
+		return cmsBuildParametricToneCurve(ar, inCurve.InterpParams.ContextID,
 			-int(inCurve.Segments[0].Type),
 			inCurve.Segments[0].Params[:])
 	}
 
 	// Create a new tone curve for the reversed result
-	out := cmsBuildTabulatedToneCurve16(inCurve.InterpParams.ContextID, nResultSamples, nil)
+	out := cmsBuildTabulatedToneCurve16(ar, inCurve.InterpParams.ContextID, nResultSamples, nil)
 	if out == nil {
 		return nil
 	}
@@ -899,14 +902,14 @@ func cmsReverseToneCurveEx(nResultSamples uint32, inCurve *CmsToneCurve) *CmsTon
 	return out
 }
 
-func cmsReverseToneCurve(inGamma *CmsToneCurve) *CmsToneCurve {
+func cmsReverseToneCurve(ar *arena.Arena, inGamma *CmsToneCurve) *CmsToneCurve {
 	// Ensure input curve is not nil
 	if inGamma == nil {
 		return nil
 	}
 
 	// Reverse using 4096 result samples
-	return cmsReverseToneCurveEx(4096, inGamma)
+	return cmsReverseToneCurveEx(ar, 4096, inGamma)
 }
 func GetInterval(In float64, LutTable []uint16, p *cmsInterpParams) int {
 	// A 1-point table is not allowed

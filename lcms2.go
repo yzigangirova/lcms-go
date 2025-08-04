@@ -4,6 +4,7 @@ import (
 	//"math"
 	//"reflect"
 	//"unsafe"
+	"arena"
 )
 
 // yuliana
@@ -991,9 +992,9 @@ type cmsCurveSegment struct {
 	SampledPoints []float32
 }
 
-type cmsSAMPLER16 func(In []uint16, Out []uint16, cargo interface{}) int32
+type cmsSAMPLER16 func(ar *arena.Arena,In []uint16, Out []uint16, cargo interface{}) int32
 
-type cmsSAMPLERFLOAT func(In []float32, Out []float32, cargo interface{}) int32
+type cmsSAMPLERFLOAT func(ar *arena.Arena,In []float32, Out []float32, cargo interface{}) int32
 
 // Use this flag to prevent changes being written to destination
 const SAMPLER_INSPECT = 0x01000000

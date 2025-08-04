@@ -1,6 +1,7 @@
 package golcms
 
 import (
+	"arena"
 	"fmt"
 	"math"
 	"unsafe"
@@ -82,9 +83,8 @@ func SearchIntent(ContextID CmsContext, Intent uint32) *cmsIntentsList {
 // - a = (bpout - D50) / (bpin - D50)
 // - b = -D50 * (bpout - bpin) / (bpin - D50)
 func ComputeBlackPointCompensation(BlackPointIn *cmsCIEXYZ, BlackPointOut *cmsCIEXYZ, m *cmsMAT3, off *cmsVEC3) {
-//	fmt.Println("start ComputeBlackPointCompensation")
+	//	fmt.Println("start ComputeBlackPointCompensation")
 	var ax, ay, az, bx, by, bz, tx, ty, tz float64
-
 
 	// Compute differences between black points and D50
 	tx = BlackPointIn.X - cmsD50_XYZ().X
@@ -109,7 +109,7 @@ func ComputeBlackPointCompensation(BlackPointIn *cmsCIEXYZ, BlackPointOut *cmsCI
 	// Initialize the offset vector
 	cmsVEC3init(off, bx, by, bz)
 
-//	fmt.Println("end ComputeBlackPointCompensation")
+	// fmt.Println("end ComputeBlackPointCompensation")
 }
 
 // Approximate a blackbody illuminant based on CHAD information
@@ -247,6 +247,7 @@ func ComputeAbsoluteIntent(
 // Default handler for ICC-style intents
 
 func DefaultICCintents(
+	ar *arena.Arena,
 	ContextID CmsContext,
 	nProfiles uint32,
 	TheIntents []uint32,
@@ -255,7 +256,7 @@ func DefaultICCintents(
 	AdaptationStates []float64,
 	dwFlags uint32,
 ) *cmsPipeline {
-//	fmt.Println("START DefaultICCintents")
+	//	fmt.Println("START DefaultICCintents")
 	var (
 		Lut               *cmsPipeline
 		Result            *cmsPipeline
@@ -274,7 +275,9 @@ func DefaultICCintents(
 	}
 
 	// Allocate an empty LUT for holding the result. 0 as channel count means 'undefined'
-	Result = cmsPipelineAlloc(ContextID, 0, 0)
+	Result = cmsPipelineAlloc(ar, ContextID, 0, 0)
+			fmt.Printf(" cmsPipelineAlloc pipeline ptr = %p\n", Result)
+
 	if Result == nil {
 		return nil
 	}
@@ -313,13 +316,13 @@ func DefaultICCintents(
 
 		// If devicelink or named color class
 		if lIsDeviceLink || (ClassSig == cmsSigNamedColorClass && nProfiles == 1) {
-			Lut = cmsReadDevicelinkLUT(hProfile, Intent)
+			Lut = cmsReadDevicelinkLUT(ar, hProfile, Intent)
 			if Lut == nil {
 				goto Error
 			}
 
 			if ClassSig == cmsSigAbstractClass && i > 0 {
-				if !ComputeConversion(i, hProfiles, Intent, BPC[i], AdaptationStates[i], &m, &off) {
+				if !ComputeConversion(ar,i, hProfiles, Intent, BPC[i], AdaptationStates[i], &m, &off) {
 					goto Error
 				}
 			} else {
@@ -327,36 +330,36 @@ func DefaultICCintents(
 				cmsVEC3init(&off, 0, 0, 0)
 			}
 
-			if !AddConversion(Result, CurrentColorSpace, ColorSpaceIn, &m, &off) {
+			if !AddConversion(ar,Result, CurrentColorSpace, ColorSpaceIn, &m, &off) {
 				goto Error
 			}
 		} else {
 			if lIsInput {
-				Lut = cmsReadInputLUT(hProfile, Intent)
+				Lut = cmsReadInputLUT(ar, hProfile, Intent)
 				if Lut == nil {
 					goto Error
 				}
 			} else {
-				Lut = cmsReadOutputLUT(hProfile, Intent)
+				Lut = cmsReadOutputLUT(ar, hProfile, Intent)
 				if Lut == nil {
 					goto Error
 				}
 
-				if !ComputeConversion(i, hProfiles, Intent, BPC[i], AdaptationStates[i], &m, &off) {
+				if !ComputeConversion(ar,i, hProfiles, Intent, BPC[i], AdaptationStates[i], &m, &off) {
 					goto Error
 				}
-				if !AddConversion(Result, CurrentColorSpace, ColorSpaceIn, &m, &off) {
+				if !AddConversion(ar,Result, CurrentColorSpace, ColorSpaceIn, &m, &off) {
 					goto Error
 				}
 			}
 		}
 
 		// Concatenate LUT
-		if !cmsPipelineCat(Result, Lut) {
+		if !cmsPipelineCat(ar,Result, Lut) {
 			goto Error
 		}
 
-		cmsPipelineFree(Lut)
+		cmsPipelineFree(ar,Lut)
 		Lut = nil
 		// Update current space
 		CurrentColorSpace = ColorSpaceOut
@@ -365,7 +368,7 @@ func DefaultICCintents(
 	// Handle non-negatives clip
 	if dwFlags&cmsFLAGS_NONEGATIVES != 0 {
 		if ColorSpaceOut == cmsSigGrayData || ColorSpaceOut == cmsSigRgbData || ColorSpaceOut == cmsSigCmykData {
-			clip := cmsStageClipNegatives(Result.ContextID, uint32(cmsChannelsOfColorSpace(ColorSpaceOut)))
+			clip := cmsStageClipNegatives(ar,Result.ContextID, uint32(cmsChannelsOfColorSpace(ColorSpaceOut)))
 			if clip == nil {
 				goto Error
 			}
@@ -375,17 +378,17 @@ func DefaultICCintents(
 			}
 		}
 	}
-//	fmt.Println("END DefaultICCintents")
+	//	fmt.Println("END DefaultICCintents")
 	//здесь появляется input channel 4 output 3 после cmsDoTransform перед третьим возвращением формы
 	return Result
 
 Error:
 
 	if Lut != nil {
-		cmsPipelineFree(Lut)
+		cmsPipelineFree(ar,Lut)
 	}
 	if Result != nil {
-		cmsPipelineFree(Result)
+		cmsPipelineFree(ar,Result)
 	}
 	return nil
 }
@@ -434,8 +437,8 @@ func IsEmptyLayer(m *cmsMAT3, off *cmsVEC3) bool {
 	return diff < 0.002
 }
 
-func ComputeConversion(i uint32, hProfiles []CmsHPROFILE, Intent uint32, BPC bool, AdaptationState float64, m *cmsMAT3, off *cmsVEC3) bool {
-//	fmt.Println("START ComputeConversion")
+func ComputeConversion(ar *arena.Arena,i uint32, hProfiles []CmsHPROFILE, Intent uint32, BPC bool, AdaptationState float64, m *cmsMAT3, off *cmsVEC3) bool {
+	//	fmt.Println("START ComputeConversion")
 	// Initialize m and off to identity
 	cmsMAT3identity(m)
 	cmsVEC3init(off, 0, 0, 0)
@@ -446,10 +449,10 @@ func ComputeConversion(i uint32, hProfiles []CmsHPROFILE, Intent uint32, BPC boo
 			ChromaticAdaptationMatrixIn, ChromaticAdaptationMatrixOut cmsMAT3
 		)
 
-		if !cmsReadMediaWhitePoint(&WhitePointIn, hProfiles[i-1]) || !cmsReadCHAD(&ChromaticAdaptationMatrixIn, hProfiles[i-1]) {
+		if !cmsReadMediaWhitePoint(ar,&WhitePointIn, hProfiles[i-1]) || !cmsReadCHAD(ar,&ChromaticAdaptationMatrixIn, hProfiles[i-1]) {
 			return false
 		}
-		if !cmsReadMediaWhitePoint(&WhitePointOut, hProfiles[i]) || !cmsReadCHAD(&ChromaticAdaptationMatrixOut, hProfiles[i]) {
+		if !cmsReadMediaWhitePoint(ar,&WhitePointOut, hProfiles[i]) || !cmsReadCHAD(ar,&ChromaticAdaptationMatrixOut, hProfiles[i]) {
 			return false
 		}
 		if !ComputeAbsoluteIntent(AdaptationState, &WhitePointIn, &ChromaticAdaptationMatrixIn, &WhitePointOut, &ChromaticAdaptationMatrixOut, m) {
@@ -460,8 +463,8 @@ func ComputeConversion(i uint32, hProfiles []CmsHPROFILE, Intent uint32, BPC boo
 			// Handle black point compensation
 			var BlackPointIn, BlackPointOut cmsCIEXYZ
 
-			cmsDetectBlackPoint(&BlackPointIn, hProfiles[i-1], Intent, 0)
-			cmsDetectDestinationBlackPoint(&BlackPointOut, hProfiles[i], Intent, 0)
+			cmsDetectBlackPoint(ar,&BlackPointIn, hProfiles[i-1], Intent, 0)
+			cmsDetectDestinationBlackPoint(ar,&BlackPointOut, hProfiles[i], Intent, 0)
 
 			// Skip if black points are equal
 
@@ -484,12 +487,12 @@ func ComputeConversion(i uint32, hProfiles []CmsHPROFILE, Intent uint32, BPC boo
 		off.N[k] /= MAX_ENCODEABLE_XYZ
 	}
 
-//	fmt.Println("END ComputeConversion")
+	//	fmt.Println("END ComputeConversion")
 
 	return true
 }
-func AddConversion(Result *cmsPipeline, InPCS cmsColorSpaceSignature, OutPCS cmsColorSpaceSignature, m *cmsMAT3, off *cmsVEC3) bool {
-//	fmt.Println("start AddConversion")
+func AddConversion(ar *arena.Arena,Result *cmsPipeline, InPCS cmsColorSpaceSignature, OutPCS cmsColorSpaceSignature, m *cmsMAT3, off *cmsVEC3) bool {
+	//	fmt.Println("start AddConversion")
 	mAsDbl := MatToSlice(*m)
 	offAsDbl := VecToSlice(*off)
 
@@ -499,17 +502,17 @@ func AddConversion(Result *cmsPipeline, InPCS cmsColorSpaceSignature, OutPCS cms
 		switch OutPCS {
 		case cmsSigXYZData: // XYZ -> XYZ
 			if !IsEmptyLayer(m, off) {
-				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
+				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(ar, Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
 					return false
 				}
 			}
 		case cmsSigLabData: // XYZ -> Lab
 			if !IsEmptyLayer(m, off) {
-				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
+				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(ar,Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
 					return false
 				}
 			}
-			if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocXYZ2Lab(Result.ContextID)) {
+			if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocXYZ2Lab(ar,Result.ContextID)) {
 				return false
 			}
 		default:
@@ -519,19 +522,19 @@ func AddConversion(Result *cmsPipeline, InPCS cmsColorSpaceSignature, OutPCS cms
 	case cmsSigLabData: // Input profile operates in Lab
 		switch OutPCS {
 		case cmsSigXYZData: // Lab -> XYZ
-			if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocLab2XYZ(Result.ContextID)) {
+			if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocLab2XYZ(ar,Result.ContextID)) {
 				return false
 			}
 			if !IsEmptyLayer(m, off) {
-				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
+				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(ar,Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
 					return false
 				}
 			}
 		case cmsSigLabData: // Lab -> Lab
 			if !IsEmptyLayer(m, off) {
-				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocLab2XYZ(Result.ContextID)) ||
-					!cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result.ContextID, 3, 3, mAsDbl, offAsDbl)) ||
-					!cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocXYZ2Lab(Result.ContextID)) {
+				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocLab2XYZ(ar,Result.ContextID)) ||
+					!cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(ar,Result.ContextID, 3, 3, mAsDbl, offAsDbl)) ||
+					!cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocXYZ2Lab(ar,Result.ContextID)) {
 					return false
 				}
 			}
@@ -546,7 +549,7 @@ func AddConversion(Result *cmsPipeline, InPCS cmsColorSpaceSignature, OutPCS cms
 		}
 	}
 
-//	fmt.Println("end AddConversion")
+	//	fmt.Println("end AddConversion")
 	return true
 }
 
@@ -571,6 +574,7 @@ func ColorSpaceIsCompatible(a, b cmsColorSpaceSignature) bool {
 	return false
 }
 func cmsDefaultICCintents(
+	ar *arena.Arena,
 	ContextID CmsContext,
 	nProfiles uint32,
 	TheIntents []uint32,
@@ -579,7 +583,7 @@ func cmsDefaultICCintents(
 	AdaptationStates []float64,
 	dwFlags uint32,
 ) *cmsPipeline {
-	return DefaultICCintents(ContextID, nProfiles, TheIntents, hProfiles, BPC, AdaptationStates, dwFlags)
+	return DefaultICCintents(ar, ContextID, nProfiles, TheIntents, hProfiles, BPC, AdaptationStates, dwFlags)
 }
 
 func TranslateNonICCIntents(Intent uint32) uint32 {
@@ -601,7 +605,7 @@ type GrayOnlyParams struct {
 }
 
 // BlackPreservingGrayOnlySampler preserves black-only CMYK transformations.
-func BlackPreservingGrayOnlySampler(In []uint16, Out []uint16, cargo interface{}) int32 {
+func BlackPreservingGrayOnlySampler(ar *arena.Arena, In []uint16, Out []uint16, cargo interface{}) int32 {
 	bp, ok := cargo.(*GrayOnlyParams)
 	if !ok {
 		fmt.Printf("Error: Interface data assertion error, not *GrayOnlyParams \n")
@@ -616,12 +620,13 @@ func BlackPreservingGrayOnlySampler(In []uint16, Out []uint16, cargo interface{}
 	}
 
 	// Keep normal transform for other colors
-	bp.Cmyk2Cmyk.Eval16Fn(In, Out, bp.Cmyk2Cmyk.Data)
+	bp.Cmyk2Cmyk.Eval16Fn(ar, In, Out, bp.Cmyk2Cmyk.Data)
 	return int32(1)
 }
 
 // BlackPreservingKOnlyIntents handles black-preserving K-only intents.
 func BlackPreservingKOnlyIntents(
+	ar *arena.Arena,
 	ContextID CmsContext,
 	nProfiles uint32,
 	TheIntents []uint32,
@@ -668,23 +673,23 @@ func BlackPreservingKOnlyIntents(
 	if CmsGetColorSpace(hProfiles[0]) != cmsSigCmykData ||
 		!(CmsGetColorSpace(hLastProfile) == cmsSigCmykData ||
 			cmsGetDeviceClass(hLastProfile) == cmsSigOutputClass) {
-		return DefaultICCintents(ContextID, nProfiles, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
+		return DefaultICCintents(ar, ContextID, nProfiles, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
 	}
 
 	// Allocate an empty LUT for holding the result
-	Result = cmsPipelineAlloc(ContextID, 4, 4)
+	Result = cmsPipelineAlloc(ar, ContextID, 4, 4)
 	if Result == nil {
 		return nil
 	}
 	var nGridPoints uint32
 	// Create a LUT holding normal ICC transform
-	bp.Cmyk2Cmyk = DefaultICCintents(ContextID, preservationProfilesCount, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
+	bp.Cmyk2Cmyk = DefaultICCintents(ar, ContextID, preservationProfilesCount, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
 	if bp.Cmyk2Cmyk == nil {
 		goto Error
 	}
 
 	// Compute the tone curve
-	bp.KTone = cmsBuildKToneCurve(ContextID, 4096, preservationProfilesCount, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
+	bp.KTone = cmsBuildKToneCurve(ar, ContextID, 4096, preservationProfilesCount, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
 	if bp.KTone == nil {
 		goto Error
 	}
@@ -693,7 +698,7 @@ func BlackPreservingKOnlyIntents(
 	nGridPoints = cmsReasonableGridpointsByColorspace(cmsSigCmykData, dwFlags)
 
 	// Create the CLUT
-	CLUT = cmsStageAllocCLut16bit(ContextID, nGridPoints, 4, 4, nil)
+	CLUT = cmsStageAllocCLut16bit(ar,ContextID, nGridPoints, 4, 4, nil)
 	if CLUT == nil {
 		goto Error
 	}
@@ -704,36 +709,36 @@ func BlackPreservingKOnlyIntents(
 	}
 
 	// Sample the CLUT
-	if !cmsStageSampleCLut16bit(CLUT, BlackPreservingGrayOnlySampler, &bp, 0) {
+	if !cmsStageSampleCLut16bit(ar,CLUT, BlackPreservingGrayOnlySampler, &bp, 0) {
 		goto Error
 	}
 
 	// Insert possible devicelinks at the end
 	for i := lastProfilePos + 1; i < nProfiles; i++ {
-		devlink := cmsReadDevicelinkLUT(hProfiles[i], ICCIntents[i])
+		devlink := cmsReadDevicelinkLUT(ar, hProfiles[i], ICCIntents[i])
 		if devlink == nil {
 			goto Error
 		}
 
-		if !cmsPipelineCat(Result, devlink) {
+		if !cmsPipelineCat(ar,Result, devlink) {
 			goto Error
 		}
 	}
 
 	// Free resources
-	cmsPipelineFree(bp.Cmyk2Cmyk)
+	cmsPipelineFree(ar,bp.Cmyk2Cmyk)
 	CmsFreeToneCurve(bp.KTone)
 	return Result
 
 Error:
 	if bp.Cmyk2Cmyk != nil {
-		cmsPipelineFree(bp.Cmyk2Cmyk)
+		cmsPipelineFree(ar,bp.Cmyk2Cmyk)
 	}
 	if bp.KTone != nil {
 		CmsFreeToneCurve(bp.KTone)
 	}
 	if Result != nil {
-		cmsPipelineFree(Result)
+		cmsPipelineFree(ar,Result)
 	}
 	return nil
 }
@@ -751,7 +756,7 @@ type PreserveKPlaneParams struct {
 }
 
 // BlackPreservingSampler performs sampling for K-plane preservation.
-func BlackPreservingSampler(In, Out []uint16, cargo interface{}) int32 {
+func BlackPreservingSampler(ar *arena.Arena, In, Out []uint16, cargo interface{}) int32 {
 	bp, ok := cargo.(*PreserveKPlaneParams)
 	if !ok {
 		fmt.Printf("Error: Interface data assertion error,not PreserveKPlaneParams\n")
@@ -777,7 +782,7 @@ func BlackPreservingSampler(In, Out []uint16, cargo interface{}) int32 {
 	}
 
 	// Try the original transform
-	cmsPipelineEvalFloat(Inf[:], Outf[:], bp.Cmyk2Cmyk)
+	cmsPipelineEvalFloat(ar, Inf[:], Outf[:], bp.Cmyk2Cmyk)
 
 	// Store a copy of the floating-point result into 16-bit
 	for i := 0; i < 4; i++ {
@@ -790,13 +795,13 @@ func BlackPreservingSampler(In, Out []uint16, cargo interface{}) int32 {
 	}
 
 	// Measure and keep Lab measurement for further usage
-	CmsDoTransform(bp.HProofOutput, Out, ColorimetricLab, 1)
+	CmsDoTransform(ar, bp.HProofOutput, Out, ColorimetricLab, 1)
 
 	// Transform to Lab
-	CmsDoTransform(bp.Cmyk2Lab, Outf, LabK, 1)
+	CmsDoTransform(ar,bp.Cmyk2Lab, Outf, LabK, 1)
 
 	// Reverse interpolation to obtain CMY with fixed K
-	if !cmsPipelineEvalReverseFloat(LabK[:], Outf[:], Outf[:], bp.LabK2Cmyk) {
+	if !cmsPipelineEvalReverseFloat(ar, LabK[:], Outf[:], Outf[:], bp.LabK2Cmyk) {
 		// Use colorimetric transform if reverse interpolation fails
 		return 1
 	}
@@ -823,7 +828,7 @@ func BlackPreservingSampler(In, Out []uint16, cargo interface{}) int32 {
 	Out[3] = cmsQuickSaturateWord(float64(Outf[3] * 65535.0))
 
 	// Estimate the error
-	CmsDoTransform(bp.HProofOutput, Out, BlackPreservingLab, 1)
+	CmsDoTransform(ar,bp.HProofOutput, Out, BlackPreservingLab, 1)
 	Error = cmsDeltaE(&ColorimetricLab, &BlackPreservingLab)
 	if Error > bp.MaxError {
 		bp.MaxError = Error
@@ -834,6 +839,7 @@ func BlackPreservingSampler(In, Out []uint16, cargo interface{}) int32 {
 
 // BlackPreservingKPlaneIntents handles black-plane preserving intents.
 func BlackPreservingKPlaneIntents(
+	ar *arena.Arena,
 	ContextID CmsContext,
 	nProfiles uint32,
 	TheIntents []uint32,
@@ -878,88 +884,88 @@ func BlackPreservingKPlaneIntents(
 	// Check for non-CMYK profiles
 	if CmsGetColorSpace(hProfiles[0]) != cmsSigCmykData ||
 		!(CmsGetColorSpace(hLastProfile) == cmsSigCmykData || cmsGetDeviceClass(hLastProfile) == cmsSigOutputClass) {
-		return DefaultICCintents(ContextID, nProfiles, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
+		return DefaultICCintents(ar, ContextID, nProfiles, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
 	}
 
 	// Allocate LUT
-	Result = cmsPipelineAlloc(ContextID, 4, 4)
+	Result = cmsPipelineAlloc(ar, ContextID, 4, 4)
 	if Result == nil {
 		return nil
 	}
 	var nGridPoints uint32
 	// Read input LUT
-	bp.LabK2Cmyk = cmsReadInputLUT(hLastProfile, INTENT_RELATIVE_COLORIMETRIC)
+	bp.LabK2Cmyk = cmsReadInputLUT(ar, hLastProfile, INTENT_RELATIVE_COLORIMETRIC)
 	if bp.LabK2Cmyk == nil {
 		goto Cleanup
 	}
 
 	// Get TAC
-	bp.MaxTAC = cmsDetectTAC(hLastProfile) / 100.0
+	bp.MaxTAC = cmsDetectTAC(ar, hLastProfile) / 100.0
 	if bp.MaxTAC <= 0 {
 		goto Cleanup
 	}
 
 	// Create ICC transform
-	bp.Cmyk2Cmyk = DefaultICCintents(ContextID, preservationProfilesCount, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
+	bp.Cmyk2Cmyk = DefaultICCintents(ar, ContextID, preservationProfilesCount, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
 	if bp.Cmyk2Cmyk == nil {
 		goto Cleanup
 	}
 
 	// Compute tone curve
-	bp.KTone = cmsBuildKToneCurve(ContextID, 4096, preservationProfilesCount, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
+	bp.KTone = cmsBuildKToneCurve(ar, ContextID, 4096, preservationProfilesCount, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
 	if bp.KTone == nil {
 		goto Cleanup
 	}
 
 	// Prepare proof output
-	hLab = cmsCreateLab4ProfileTHR(ContextID, nil)
-	bp.HProofOutput = cmsCreateTransformTHR(ContextID, hLastProfile, CHANNELS_SH(4)|BYTES_SH(2), hLab, TYPE_Lab_DBL, INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOCACHE|cmsFLAGS_NOOPTIMIZE)
+	hLab = cmsCreateLab4ProfileTHR(ar, ContextID, nil)
+	bp.HProofOutput = cmsCreateTransformTHR(ar,ContextID, hLastProfile, CHANNELS_SH(4)|BYTES_SH(2), hLab, TYPE_Lab_DBL, INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOCACHE|cmsFLAGS_NOOPTIMIZE)
 	if bp.HProofOutput == nil {
 		goto Cleanup
 	}
 
 	// Prepare CMYK to Lab
-	bp.Cmyk2Lab = cmsCreateTransformTHR(ContextID, hLastProfile, FLOAT_SH(1)|CHANNELS_SH(4)|BYTES_SH(4), hLab, FLOAT_SH(1)|CHANNELS_SH(3)|BYTES_SH(4), INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOCACHE|cmsFLAGS_NOOPTIMIZE)
+	bp.Cmyk2Lab = cmsCreateTransformTHR(ar,ContextID, hLastProfile, FLOAT_SH(1)|CHANNELS_SH(4)|BYTES_SH(4), hLab, FLOAT_SH(1)|CHANNELS_SH(3)|BYTES_SH(4), INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOCACHE|cmsFLAGS_NOOPTIMIZE)
 	if bp.Cmyk2Lab == nil {
 		goto Cleanup
 	}
-	CmsCloseProfile(hLab)
+	CmsCloseProfile(ar, hLab)
 
 	// Create CLUT
 	nGridPoints = cmsReasonableGridpointsByColorspace(cmsSigCmykData, dwFlags)
-	CLUT = cmsStageAllocCLut16bit(ContextID, nGridPoints, 4, 4, nil)
+	CLUT = cmsStageAllocCLut16bit(ar,ContextID, nGridPoints, 4, 4, nil)
 	if CLUT == nil {
 		goto Cleanup
 	}
 
 	// Insert and sample CLUT
-	if !cmsPipelineInsertStage(Result, cmsAT_BEGIN, CLUT) || !cmsStageSampleCLut16bit(CLUT, BlackPreservingSampler, &bp, 0) {
+	if !cmsPipelineInsertStage(Result, cmsAT_BEGIN, CLUT) || !cmsStageSampleCLut16bit(ar,CLUT, BlackPreservingSampler, &bp, 0) {
 		goto Cleanup
 	}
 
 	// Insert devicelinks
 	for i := lastProfilePos + 1; i < nProfiles; i++ {
-		devlink := cmsReadDevicelinkLUT(hProfiles[i], ICCIntents[i])
-		if devlink == nil || !cmsPipelineCat(Result, devlink) {
+		devlink := cmsReadDevicelinkLUT(ar, hProfiles[i], ICCIntents[i])
+		if devlink == nil || !cmsPipelineCat(ar,Result, devlink) {
 			goto Cleanup
 		}
 	}
 
 Cleanup:
 	if bp.Cmyk2Cmyk != nil {
-		cmsPipelineFree(bp.Cmyk2Cmyk)
+		cmsPipelineFree(ar,bp.Cmyk2Cmyk)
 	}
 	if bp.Cmyk2Lab != nil {
-		cmsDeleteTransform(bp.Cmyk2Lab)
+		cmsDeleteTransform(ar,bp.Cmyk2Lab)
 	}
 	if bp.HProofOutput != nil {
-		cmsDeleteTransform(bp.HProofOutput)
+		cmsDeleteTransform(ar,bp.HProofOutput)
 	}
 	if bp.KTone != nil {
 		CmsFreeToneCurve(bp.KTone)
 	}
 	if bp.LabK2Cmyk != nil {
-		cmsPipelineFree(bp.LabK2Cmyk)
+		cmsPipelineFree(ar,bp.LabK2Cmyk)
 	}
 
 	return Result
@@ -971,6 +977,7 @@ Cleanup:
 // for the first intent in chain. The handler may be user-defined. Is up to the handler to deal with the
 // rest of intents in chain. A maximum of 255 profiles at time are supported, which is pretty reasonable.
 func cmsLinkProfiles(
+	ar *arena.Arena,
 	ContextID CmsContext,
 	nProfiles uint32,
 	TheIntents []uint32,
@@ -1008,11 +1015,11 @@ func cmsLinkProfiles(
 	}
 
 	// Call the intent's handler to link profiles
-	return intent.Link(ContextID, nProfiles, TheIntents, hProfiles, BPC, AdaptationStates, dwFlags)
+	return intent.Link(ar, ContextID, nProfiles, TheIntents, hProfiles, BPC, AdaptationStates, dwFlags)
 }
 
 // cmsRegisterRenderingIntentPlugin registers a rendering intent plugin.
-func cmsRegisterRenderingIntentPlugin(id CmsContext, Data PluginIntrfc) bool {
+func cmsRegisterRenderingIntentPlugin(ar *arena.Arena, id CmsContext, Data PluginIntrfc) bool {
 	ctx := CmsContextGetClientChunk(id, IntentPlugin).(*cmsIntentsPluginChunkType)
 	// Reset custom intents if Data is nil.
 	if Data == nil {
@@ -1028,7 +1035,7 @@ func cmsRegisterRenderingIntentPlugin(id CmsContext, Data PluginIntrfc) bool {
 
 	// Allocate memory for the new intent node.
 	//fl := (*cmsIntentsList)(cmsPluginMalloc(id, uint32(unsafe.Sizeof(cmsIntentsList{}))))
-	fl := allocateStruct[cmsIntentsList]()
+	fl := allocateStruct[cmsIntentsList](ar)
 
 	/*	if fl == nil {
 		return false

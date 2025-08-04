@@ -1,6 +1,7 @@
 package golcms
 
 import (
+	"arena"
 	"fmt"
 	"log"
 	"math"
@@ -11,7 +12,7 @@ import (
 var cmsInterpPluginChunk = cmsInterpPluginChunkType{Interpolators: nil}
 
 // cmsAllocInterpPluginChunk allocates and duplicates the interpolation plug-in memory chunk.
-func cmsAllocInterpPluginChunk(ctx, src *CmsContextStruct) {
+func cmsAllocInterpPluginChunk(ar *arena.Arena, ctx, src *CmsContextStruct) {
 	var from cmsContextChunk
 
 	if src != nil {
@@ -22,7 +23,7 @@ func cmsAllocInterpPluginChunk(ctx, src *CmsContextStruct) {
 		from = &staticInterpPluginChunk
 	}
 
-	ctx.chunks[InterpPlugin] = cmsSubAllocDup(ctx.MemPool, from, uint32(unsafe.Sizeof(cmsInterpPluginChunkType{})))
+	ctx.chunks[InterpPlugin] = cmsSubAllocDup(ar, ctx.MemPool, from, uint32(unsafe.Sizeof(cmsInterpPluginChunkType{})))
 }
 
 // cmsRegisterInterpPlugin is the main entry for interpolation plug-in registration.
@@ -70,6 +71,7 @@ func cmsSetInterpolationRoutine(ContextID CmsContext, p *cmsInterpParams) bool {
 
 // cmsComputeInterpParamsEx precalculates parameters to speed up interpolation.
 func cmsComputeInterpParamsEx(
+	ar *arena.Arena,
 	ContextID CmsContext,
 	nSamples []uint32,
 	InputChan uint32,
@@ -88,7 +90,7 @@ func cmsComputeInterpParamsEx(
 	}
 
 	// Create an empty object
-	p := allocateStruct[cmsInterpParams]()
+	p := allocateStruct[cmsInterpParams](ar)
 	if p == nil {
 		return nil
 	}
@@ -124,6 +126,7 @@ func cmsComputeInterpParamsEx(
 
 // cmsComputeInterpParams is a wrapper assuming all directions have the same number of nodes.
 func cmsComputeInterpParams(
+	ar *arena.Arena,
 	ContextID CmsContext,
 	nSamples uint32,
 	InputChan uint32,
@@ -140,7 +143,7 @@ func cmsComputeInterpParams(
 	}
 
 	// Call the extended function
-	return cmsComputeInterpParamsEx(ContextID, Samples[:], InputChan, OutputChan, Table, dwFlags)
+	return cmsComputeInterpParamsEx(ar, ContextID, Samples[:], InputChan, OutputChan, Table, dwFlags)
 }
 
 // cmsFreeInterpParams frees all associated memory.
@@ -1009,12 +1012,12 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 	// Process K0
 
 	/*fmt.Println("got K0", K0)
-		fmt.Println("got X0", X0)
-		fmt.Println("got Y0", Y0)
-		fmt.Println("got Z0", Z0)
-		fmt.Println("got X1", X1)
-		fmt.Println("got Y1", Y1)
-		fmt.Println("got Z1", Z1)*/
+	fmt.Println("got X0", X0)
+	fmt.Println("got Y0", Y0)
+	fmt.Println("got Z0", Z0)
+	fmt.Println("got X1", X1)
+	fmt.Println("got Y1", Y1)
+	fmt.Println("got Z1", Z1)*/
 
 	LutTable, _ = p.Table.([]uint16) // Reset to original LUT
 	/*for i := 0; i < 20; i++ {
@@ -1024,8 +1027,8 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 
 	for outChan := uint32(0); outChan < uint32(TotalOut); outChan++ {
 		c0 := DENS(X0, Y0, Z0, outChan)
-	//	fmt.Printf("X0+Y0+Z0+int32(outChan) %d\n", X0+Y0+Z0+int32(outChan))
-	//	fmt.Printf("returning LutTable[X0+Y0+Z0+int32(outChan)] %d\n", LutTable[X0+Y0+Z0+int32(outChan)])
+		//	fmt.Printf("X0+Y0+Z0+int32(outChan) %d\n", X0+Y0+Z0+int32(outChan))
+		//	fmt.Printf("returning LutTable[X0+Y0+Z0+int32(outChan)] %d\n", LutTable[X0+Y0+Z0+int32(outChan)])
 		var c1, c2, c3 cmsS15Fixed16Number
 
 		if rx >= ry && ry >= rz {
@@ -1067,14 +1070,14 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 		}
 
 		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-	/*	fmt.Printf("c0 %d\n", c0)
-		fmt.Printf("c1 %d\n", c1)
-		fmt.Printf("c2 %d\n", c2)
-		fmt.Printf("c3 %d\n", c3)
-		fmt.Printf("rx %d\n", rx)
-		fmt.Printf("ry %d\n", ry)
-		fmt.Printf("rz %d\n", rz)
-		fmt.Printf("Rest %d\n", Rest)*/
+		/*	fmt.Printf("c0 %d\n", c0)
+			fmt.Printf("c1 %d\n", c1)
+			fmt.Printf("c2 %d\n", c2)
+			fmt.Printf("c3 %d\n", c3)
+			fmt.Printf("rx %d\n", rx)
+			fmt.Printf("ry %d\n", ry)
+			fmt.Printf("rz %d\n", rz)
+			fmt.Printf("Rest %d\n", Rest)*/
 
 		Tmp1[outChan] = uint16(c0 + ROUND_FIXED_TO_INT(cmsToFixedDomain(int(Rest))))
 

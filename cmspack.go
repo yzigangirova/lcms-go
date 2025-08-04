@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"unsafe"
+	"arena"
 )
 
 //FIRST HALF OF THE FILE SKIPPED YET
@@ -2820,7 +2821,7 @@ type cmsFormattersFactoryList struct {
 var cmsFormattersPluginChunk = cmsFormattersPluginChunkType{FactoryList: nil}
 
 // Duplicate the zone of memory used by the plugin in the new context
-func DupFormatterFactoryList(ctx CmsContext, src CmsContext) {
+func DupFormatterFactoryList(ar *arena.Arena, ctx CmsContext, src CmsContext) {
 	var newHead cmsFormattersPluginChunkType
 	var previousEntry *cmsFormattersFactoryList
 	head := (CmsContextStruct)(*src).chunks[FormattersPlugin].(*cmsFormattersPluginChunkType)
@@ -2831,7 +2832,7 @@ func DupFormatterFactoryList(ctx CmsContext, src CmsContext) {
 
 	// Walk the list and copy all nodes
 	for entry := head.FactoryList; entry != nil; entry = entry.Next {
-		newEntry := allocateStruct[cmsFormattersFactoryList]()
+		newEntry := allocateStruct[cmsFormattersFactoryList](ar)
 		if newEntry == nil {
 			return
 		}
@@ -2848,26 +2849,26 @@ func DupFormatterFactoryList(ctx CmsContext, src CmsContext) {
 		}
 	}
 
-	(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup((CmsContextStruct)(*ctx).MemPool, &newHead, uint32(unsafe.Sizeof(newHead)))
+	(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup(ar,(CmsContextStruct)(*ctx).MemPool, &newHead, uint32(unsafe.Sizeof(newHead)))
 }
 
 // Allocate and initialize the Formatters plugin chunk
-func cmsAllocFormattersPluginChunk(ctx CmsContext, src CmsContext) {
+func cmsAllocFormattersPluginChunk(ar *arena.Arena,ctx CmsContext, src CmsContext) {
 	if ctx == nil {
 		panic("Context is nil")
 	}
 
 	if src != nil {
 		// Duplicate the list
-		DupFormatterFactoryList(ctx, src)
+		DupFormatterFactoryList(ar,ctx, src)
 	} else {
 		staticChunk := cmsFormattersPluginChunkType{}
-		(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup((CmsContextStruct)(*ctx).MemPool, &staticChunk, uint32(unsafe.Sizeof(staticChunk)))
+		(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup(ar,(CmsContextStruct)(*ctx).MemPool, &staticChunk, uint32(unsafe.Sizeof(staticChunk)))
 	}
 }
 
 // Register formatters plugin
-func cmsRegisterFormattersPlugin(contextID CmsContext, Data PluginIntrfc) bool {
+func cmsRegisterFormattersPlugin(ar *arena.Arena,contextID CmsContext, Data PluginIntrfc) bool {
 	//ctx := (*cmsFormattersPluginChunkType)((CmsContextStruct)(*contextID).chunks[FormattersPlugin])
 	ctx := CmsContextGetClientChunk(contextID, FormattersPlugin).(*cmsFormattersPluginChunkType)
 	plugin, ok := Data.(*cmsPluginFormatters)
@@ -2881,7 +2882,7 @@ func cmsRegisterFormattersPlugin(contextID CmsContext, Data PluginIntrfc) bool {
 		return true
 	}
 	//newEntry := (*cmsFormattersFactoryList)(cmsPluginMalloc(contextID, uint32(unsafe.Sizeof(list))))
-	newEntry := allocateStruct[cmsFormattersFactoryList]()
+	newEntry := allocateStruct[cmsFormattersFactoryList](ar)
 
 	newEntry.Factory = plugin.FormattersFactory
 	newEntry.Next = ctx.FactoryList

@@ -1,6 +1,7 @@
 package golcms
 
 import (
+	"arena"
 	"fmt"
 	"math"
 	"unsafe"
@@ -72,21 +73,21 @@ type Curves16Data struct {
 }
 
 // _RemoveElement removes an element from the linked chain.
-func RemoveElement(head **cmsStage) {
+func RemoveElement(ar *arena.Arena, head **cmsStage) {
 	mpe := *head
 	next := mpe.Next
 	*head = next
-	cmsStageFree(mpe)
+	cmsStageFree(ar, mpe)
 }
 
 // _Remove1Op removes all identities in the chain.
-func Remove1Op(Lut *cmsPipeline, UnaryOp cmsStageSignature) bool {
+func Remove1Op(ar *arena.Arena, Lut *cmsPipeline, UnaryOp cmsStageSignature) bool {
 	pt := &Lut.Elements
 	anyOpt := false
 
 	for *pt != nil {
 		if (*pt).Implements == UnaryOp {
-			RemoveElement(pt)
+			RemoveElement(ar, pt)
 			anyOpt = true
 		} else {
 			pt = &(*pt).Next
@@ -96,7 +97,7 @@ func Remove1Op(Lut *cmsPipeline, UnaryOp cmsStageSignature) bool {
 }
 
 // _Remove2Op removes two adjacent elements if they match the specified types.
-func Remove2Op(Lut *cmsPipeline, Op1, Op2 cmsStageSignature) bool {
+func Remove2Op(ar *arena.Arena, Lut *cmsPipeline, Op1, Op2 cmsStageSignature) bool {
 	pt1 := &Lut.Elements
 	anyOpt := false
 
@@ -111,8 +112,8 @@ func Remove2Op(Lut *cmsPipeline, Op1, Op2 cmsStageSignature) bool {
 		}
 
 		if (*pt1).Implements == Op1 && (*pt2).Implements == Op2 {
-			RemoveElement(pt2)
-			RemoveElement(pt1)
+			RemoveElement(ar, pt2)
+			RemoveElement(ar, pt1)
 			anyOpt = true
 		} else {
 			pt1 = &(*pt1).Next
@@ -142,7 +143,7 @@ func isFloatMatrixIdentity(a *cmsMAT3) bool {
 }
 
 // _MultiplyMatrix simplifies two adjacent matrices by multiplying them.
-func _MultiplyMatrix(Lut *cmsPipeline) bool {
+func _MultiplyMatrix(ar *arena.Arena, Lut *cmsPipeline) bool {
 	//	fmt.Println("MultiplyMatrix")
 	pt1 := &Lut.Elements
 	anyOpt := false
@@ -174,11 +175,11 @@ func _MultiplyMatrix(Lut *cmsPipeline) bool {
 
 			res = cmsMAT3perFromSlices(m2.Double[:], m1.Double[:])
 			chain := (*pt2).Next
-			RemoveElement(pt2)
-			RemoveElement(pt1)
+			RemoveElement(ar, pt2)
+			RemoveElement(ar, pt1)
 
 			if !isFloatMatrixIdentity(&res) {
-				Multmat := cmsStageAllocMatrix(Lut.ContextID, 3, 3, MatToSlice(res), nil)
+				Multmat := cmsStageAllocMatrix(ar, Lut.ContextID, 3, 3, MatToSlice(res), nil)
 				if Multmat == nil {
 					return false
 				}
@@ -196,21 +197,21 @@ func _MultiplyMatrix(Lut *cmsPipeline) bool {
 }
 
 // PreOptimize performs various optimization steps on a pipeline.
-func PreOptimize(Lut *cmsPipeline) bool {
+func PreOptimize(ar *arena.Arena,Lut *cmsPipeline) bool {
 	var anyOpt, opt bool
 
 	for {
 		opt = false
 
 		// Optimization steps
-		opt = opt || Remove1Op(Lut, cmsSigIdentityElemType)
-		opt = opt || Remove2Op(Lut, cmsSigXYZ2LabElemType, cmsSigLab2XYZElemType)
-		opt = opt || Remove2Op(Lut, cmsSigLab2XYZElemType, cmsSigXYZ2LabElemType)
-		opt = opt || Remove2Op(Lut, cmsSigLabV4toV2, cmsSigLabV2toV4)
-		opt = opt || Remove2Op(Lut, cmsSigLabV2toV4, cmsSigLabV4toV2)
-		opt = opt || Remove2Op(Lut, cmsSigLab2FloatPCS, cmsSigFloatPCS2Lab)
-		opt = opt || Remove2Op(Lut, cmsSigXYZ2FloatPCS, cmsSigFloatPCS2XYZ)
-		opt = opt || _MultiplyMatrix(Lut)
+		opt = opt || Remove1Op(ar,Lut, cmsSigIdentityElemType)
+		opt = opt || Remove2Op(ar,Lut, cmsSigXYZ2LabElemType, cmsSigLab2XYZElemType)
+		opt = opt || Remove2Op(ar,Lut, cmsSigLab2XYZElemType, cmsSigXYZ2LabElemType)
+		opt = opt || Remove2Op(ar,Lut, cmsSigLabV4toV2, cmsSigLabV2toV4)
+		opt = opt || Remove2Op(ar,Lut, cmsSigLabV2toV4, cmsSigLabV4toV2)
+		opt = opt || Remove2Op(ar,Lut, cmsSigLab2FloatPCS, cmsSigFloatPCS2Lab)
+		opt = opt || Remove2Op(ar,Lut, cmsSigXYZ2FloatPCS, cmsSigFloatPCS2XYZ)
+		opt = opt || _MultiplyMatrix(ar,Lut)
 
 		if opt {
 			anyOpt = true
@@ -229,7 +230,7 @@ func Eval16nop1D(Input []uint16, Output []uint16, params *cmsInterpParams) {
 
 // PrelinEval16 implements the optimized interpolation for 16-bit input
 // PrelinEval16 implements the optimized interpolation for 16-bit input
-func PrelinEval16(Input []uint16, Output []uint16, D interface{}) {
+func PrelinEval16(ar *arena.Arena, Input []uint16, Output []uint16, D interface{}) {
 	p16, ok := D.(*Prelin16Data)
 	if !ok {
 		fmt.Printf("Error: Interface data assertion error, not *Prelin16Data\n")
@@ -290,9 +291,9 @@ func Prelin16dup(_ CmsContext, ptr interface{}) interface{} {
 
 // PrelinOpt16alloc allocates and initializes Prelin16Data
 // PrelinOpt16alloc allocates and initializes Prelin16Data
-func PrelinOpt16alloc(ContextID CmsContext, ColorMap *cmsInterpParams, nInputs uint32, In []*CmsToneCurve, nOutputs uint32, Out []*CmsToneCurve) *Prelin16Data {
+func PrelinOpt16alloc(ar *arena.Arena, ContextID CmsContext, ColorMap *cmsInterpParams, nInputs uint32, In []*CmsToneCurve, nOutputs uint32, Out []*CmsToneCurve) *Prelin16Data {
 	//fmt.Println(" PrelinOpt16alloc")
-	p16 := allocateStruct[Prelin16Data]()
+	p16 := allocateStruct[Prelin16Data](ar)
 	if p16 == nil {
 		return nil
 	}
@@ -344,7 +345,7 @@ func PrelinOpt16alloc(ContextID CmsContext, ColorMap *cmsInterpParams, nInputs u
 
 const PRELINEARIZATION_POINTS = 4096
 
-func XFormSampler16(In []uint16, Out []uint16, cargo interface{}) int32 {
+func XFormSampler16(ar *arena.Arena, In []uint16, Out []uint16, cargo interface{}) int32 {
 	//fmt.Println("XFormSampler16")
 	Lut, ok := cargo.(*cmsPipeline)
 	if !ok {
@@ -368,7 +369,7 @@ func XFormSampler16(In []uint16, Out []uint16, cargo interface{}) int32 {
 	//fmt.Println("Whole infloat ", InFloat)
 
 	// Evaluate in floating-point
-	cmsPipelineEvalFloat(InFloat[:], OutFloat[:], Lut)
+	cmsPipelineEvalFloat(ar, InFloat[:], OutFloat[:], Lut)
 
 	// Back to 16-bit representation
 	for i = 0; i < Lut.OutputChannels; i++ {
@@ -486,7 +487,7 @@ func WhitesAreEqual(n uint32, White1, White2 []uint16) bool {
 	}
 	return true
 }
-func FixWhiteMisalignment(Lut *cmsPipeline, EntryColorSpace, ExitColorSpace cmsColorSpaceSignature) bool {
+func FixWhiteMisalignment(ar *arena.Arena, Lut *cmsPipeline, EntryColorSpace, ExitColorSpace cmsColorSpaceSignature) bool {
 	var (
 		WhitePointIn, WhitePointOut    []uint16
 		WhiteIn, WhiteOut, ObtainedOut [cmsMAXCHANNELS]uint16
@@ -511,7 +512,7 @@ func FixWhiteMisalignment(Lut *cmsPipeline, EntryColorSpace, ExitColorSpace cmsC
 	}
 
 	// Evaluate the pipeline with the input white point.
-	cmsPipelineEval16(WhitePointIn, ObtainedOut[:], Lut)
+	cmsPipelineEval16(ar, WhitePointIn, ObtainedOut[:], Lut)
 
 	// If the output already matches the expected white point, return early.
 	//CHECK comparison!   WhitePointOut and ObtainedOut has different slice length!
@@ -543,7 +544,7 @@ func FixWhiteMisalignment(Lut *cmsPipeline, EntryColorSpace, ExitColorSpace cmsC
 	if PostLin != nil {
 		Curves := cmsStageGetPtrToCurveSet(PostLin)
 		for i := uint32(0); i < nOuts; i++ {
-			InversePostLin := cmsReverseToneCurve(Curves[i])
+			InversePostLin := cmsReverseToneCurve(ar, Curves[i])
 			if InversePostLin == nil {
 				WhiteOut[i] = WhitePointOut[i]
 			} else {
@@ -572,7 +573,7 @@ func FixWhiteMisalignment(Lut *cmsPipeline, EntryColorSpace, ExitColorSpace cmsC
 // This function should be used on 16-bits LUTS only, as floating point losses precision when simplified
 // -----------------------------------------------------------------------------------------------------------------------------------------------
 
-func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) bool {
+func OptimizeByResampling(ar *arena.Arena, Lut **cmsPipeline, Intent uint32, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) bool {
 	var (
 		Src              *cmsPipeline
 		Dest             *cmsPipeline
@@ -616,7 +617,7 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 
 	// Allocate an empty LUT
 	//Dest has a wrong table into one of his Elements
-	Dest = cmsPipelineAlloc(Src.ContextID, Src.InputChannels, Src.OutputChannels)
+	Dest = cmsPipelineAlloc(ar, Src.ContextID, Src.InputChannels, Src.OutputChannels)
 	if Dest == nil {
 		return false
 	}
@@ -635,11 +636,11 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		PreLin := cmsPipelineGetPtrToFirstStage(Src)
 		if PreLin != nil && PreLin.Type == cmsSigCurveSetElemType {
 			if !AllCurvesAreLinear(PreLin) {
-				NewPreLin = cmsStageDup(PreLin)
+				NewPreLin = cmsStageDup(ar, PreLin)
 				if NewPreLin == nil || !cmsPipelineInsertStage(Dest, cmsAT_BEGIN, NewPreLin) {
 					goto Error
 				}
-				cmsPipelineUnlinkStage(Src, cmsAT_BEGIN, &KeepPreLin)
+				cmsPipelineUnlinkStage(ar, Src, cmsAT_BEGIN, &KeepPreLin)
 			}
 		}
 	}
@@ -654,7 +655,7 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 
 		}*/
 	// Allocate the CLUT
-	CLUT = cmsStageAllocCLut16bit(Src.ContextID, nGridPoints, Src.InputChannels, Src.OutputChannels, nil)
+	CLUT = cmsStageAllocCLut16bit(ar, Src.ContextID, nGridPoints, Src.InputChannels, Src.OutputChannels, nil)
 	/*	if _, ok := CLUT.Data.(*cmsStageCLutData); ok {
 		fmt.Println("CLUT 1111 := CLUT.Data.(*cmsInterpParams), count ", count)
 		//table16 := CLUT.Data.(*cmsStageCLutData).Params.Table.([]uint16)
@@ -677,11 +678,11 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		PostLin := cmsPipelineGetPtrToLastStage(Src)
 		if PostLin != nil && cmsStageType(PostLin) == cmsSigCurveSetElemType {
 			if !AllCurvesAreLinear(PostLin) {
-				NewPostLin = cmsStageDup(PostLin)
+				NewPostLin = cmsStageDup(ar,PostLin)
 				if NewPostLin == nil || !cmsPipelineInsertStage(Dest, cmsAT_END, NewPostLin) {
 					goto Error
 				}
-				cmsPipelineUnlinkStage(Src, cmsAT_END, &KeepPostLin)
+				cmsPipelineUnlinkStage(ar,Src, cmsAT_END, &KeepPostLin)
 			}
 		}
 	}
@@ -693,7 +694,7 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		}
 	}*/
 	// Perform sampling
-	if !cmsStageSampleCLut16bit(CLUT, XFormSampler16, Src, 0) {
+	if !cmsStageSampleCLut16bit(ar,CLUT, XFormSampler16, Src, 0) {
 		goto Error
 	}
 	/*if _, ok := CLUT.Data.(*cmsStageCLutData); ok {
@@ -706,12 +707,12 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	/***********************************************/
 	// Cleanup after sampling
 	if KeepPreLin != nil {
-		cmsStageFree(KeepPreLin)
+		cmsStageFree(ar,KeepPreLin)
 	}
 	if KeepPostLin != nil {
-		cmsStageFree(KeepPostLin)
+		cmsStageFree(ar,KeepPostLin)
 	}
-	cmsPipelineFree(Src)
+	cmsPipelineFree(ar,Src)
 
 	DataCLUT, ok = CLUT.Data.(*cmsStageCLutData)
 	if !ok {
@@ -739,14 +740,14 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		//перед cmsPipelineSetOptimizationParameters  Dest приобретает неправильную таблицу и она потом присваивается Lut
 
 		cmsPipelineSetOptimizationParameters(Dest,
-			func(In, Out []uint16, Data interface{}) {
+			func(ar *arena.Arena, In, Out []uint16, Data interface{}) {
 				Data.(*cmsInterpParams).Interpolation.Lerp16(In, Out, Data.(*cmsInterpParams))
 			},
 			DataCLUT.Params, nil, nil)
 
 	} else {
 
-		p16 = PrelinOpt16alloc(Dest.ContextID, DataCLUT.Params, Dest.InputChannels, DataSetIn, Dest.OutputChannels, DataSetOut)
+		p16 = PrelinOpt16alloc(ar,Dest.ContextID, DataCLUT.Params, Dest.InputChannels, DataSetIn, Dest.OutputChannels, DataSetOut)
 		if p16 == nil {
 			goto Error
 		}
@@ -758,7 +759,7 @@ func OptimizeByResampling(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		*dwFlags |= cmsFLAGS_NOWHITEONWHITEFIXUP
 	}
 	if *dwFlags&cmsFLAGS_NOWHITEONWHITEFIXUP == 0 {
-		FixWhiteMisalignment(Dest, ColorSpace, OutputColorSpace)
+		FixWhiteMisalignment(ar,Dest, ColorSpace, OutputColorSpace)
 	}
 
 	*Lut = Dest
@@ -774,7 +775,7 @@ Error:
 	if KeepPostLin != nil {
 		cmsPipelineInsertStage(Src, cmsAT_END, KeepPostLin)
 	}
-	cmsPipelineFree(Dest)
+	cmsPipelineFree(ar,Dest)
 	return false
 }
 
@@ -817,8 +818,8 @@ func SlopeLimiting(g *CmsToneCurve) {
 	}
 }
 
-func PrelinOpt8alloc(ContextID CmsContext, p *cmsInterpParams, G [3]*CmsToneCurve) *Prelin8Data {
-	p8 := allocateStruct[Prelin8Data]()
+func PrelinOpt8alloc(ar *arena.Arena,ContextID CmsContext, p *cmsInterpParams, G [3]*CmsToneCurve) *Prelin8Data {
+	p8 := allocateStruct[Prelin8Data](ar)
 	if p8 == nil {
 		return nil
 	}
@@ -867,7 +868,7 @@ func Prelin8dup(ContextID CmsContext, ptr interface{}) interface{} {
 	return copied
 }
 
-func PrelinEval8(Input []uint16, Output []uint16, D interface{}) {
+func PrelinEval8(ar *arena.Arena, Input []uint16, Output []uint16, D interface{}) {
 	p8, ok := D.(*Prelin8Data)
 	if !ok {
 		fmt.Printf("Error: Interface data assertion error, not *Prelin8Data\n")
@@ -969,7 +970,7 @@ func IsDegenerated(g *CmsToneCurve) bool {
 	return false
 }
 
-func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFormat, OutputFormat, dwFlags *uint32) bool {
+func OptimizeByComputingLinearization(ar *arena.Arena,Lut **cmsPipeline, Intent uint32, InputFormat, OutputFormat, dwFlags *uint32) bool {
 	var (
 		OriginalLut      *cmsPipeline
 		ColorSpace       cmsColorSpaceSignature
@@ -1043,7 +1044,7 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 	}
 
 	for t := uint32(0); t < OriginalLut.InputChannels; t++ {
-		Trans[t] = cmsBuildTabulatedToneCurve16(OriginalLut.ContextID, PRELINEARIZATION_POINTS, nil)
+		Trans[t] = cmsBuildTabulatedToneCurve16(ar,OriginalLut.ContextID, PRELINEARIZATION_POINTS, nil)
 		if Trans[t] == nil {
 			goto Error
 		}
@@ -1054,7 +1055,7 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 		for t := uint32(0); t < OriginalLut.InputChannels; t++ {
 			In[t] = v
 		}
-		cmsPipelineEvalFloat(In[:], Out[:], OriginalLut)
+		cmsPipelineEvalFloat(ar, In[:], Out[:], OriginalLut)
 
 		for t := uint32(0); t < OriginalLut.InputChannels; t++ {
 			Trans[t].Table16[i] = cmsQuickSaturateWord(float64(Out[t]) * 65535.0)
@@ -1081,37 +1082,37 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 	}
 
 	for t := uint32(0); t < OriginalLut.InputChannels; t++ {
-		TransReverse[t] = cmsReverseToneCurveEx(PRELINEARIZATION_POINTS, Trans[t])
+		TransReverse[t] = cmsReverseToneCurveEx(ar,PRELINEARIZATION_POINTS, Trans[t])
 		if TransReverse[t] == nil {
 			goto Error
 		}
 	}
 
-	LutPlusCurves = cmsPipelineDup(OriginalLut)
+	LutPlusCurves = cmsPipelineDup(ar,OriginalLut)
 	if LutPlusCurves == nil {
 		goto Error
 	}
 
-	if !cmsPipelineInsertStage(LutPlusCurves, cmsAT_BEGIN, cmsStageAllocToneCurves(OriginalLut.ContextID, OriginalLut.InputChannels, TransReverse[:])) {
+	if !cmsPipelineInsertStage(LutPlusCurves, cmsAT_BEGIN, cmsStageAllocToneCurves(ar,OriginalLut.ContextID, OriginalLut.InputChannels, TransReverse[:])) {
 		goto Error
 	}
 
-	OptimizedLUT = cmsPipelineAlloc(OriginalLut.ContextID, OriginalLut.InputChannels, OriginalLut.OutputChannels)
+	OptimizedLUT = cmsPipelineAlloc(ar,OriginalLut.ContextID, OriginalLut.InputChannels, OriginalLut.OutputChannels)
 	if OptimizedLUT == nil {
 		goto Error
 	}
 
-	OptimizedPrelinMpe = cmsStageAllocToneCurves(OriginalLut.ContextID, OriginalLut.InputChannels, Trans[:])
+	OptimizedPrelinMpe = cmsStageAllocToneCurves(ar,OriginalLut.ContextID, OriginalLut.InputChannels, Trans[:])
 	if !cmsPipelineInsertStage(OptimizedLUT, cmsAT_BEGIN, OptimizedPrelinMpe) {
 		goto Error
 	}
 
-	OptimizedCLUTmpe = cmsStageAllocCLut16bit(OriginalLut.ContextID, nGridPoints, OriginalLut.InputChannels, OriginalLut.OutputChannels, nil)
+	OptimizedCLUTmpe = cmsStageAllocCLut16bit(ar,OriginalLut.ContextID, nGridPoints, OriginalLut.InputChannels, OriginalLut.OutputChannels, nil)
 	if !cmsPipelineInsertStage(OptimizedLUT, cmsAT_END, OptimizedCLUTmpe) {
 		goto Error
 	}
 
-	if !cmsStageSampleCLut16bit(OptimizedCLUTmpe, XFormSampler16, LutPlusCurves, 0) {
+	if !cmsStageSampleCLut16bit(ar,OptimizedCLUTmpe, XFormSampler16, LutPlusCurves, 0) {
 		goto Error
 	}
 
@@ -1124,7 +1125,7 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 		}
 	}
 
-	cmsPipelineFree(LutPlusCurves)
+	cmsPipelineFree(ar,LutPlusCurves)
 
 	OptimizedPrelinCurves = cmsStageGetPtrToCurveSet(OptimizedPrelinMpe)
 	OptimizedPrelinCLUT, ok = OptimizedCLUTmpe.Data.(*cmsStageCLutData)
@@ -1135,13 +1136,13 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 
 	if cmsFormatterIs8bit(*InputFormat) {
 
-		p8 := PrelinOpt8alloc(OptimizedLUT.ContextID, OptimizedPrelinCLUT.Params, ConvertToToneCurveArray(OptimizedPrelinCurves))
+		p8 := PrelinOpt8alloc(ar,OptimizedLUT.ContextID, OptimizedPrelinCLUT.Params, ConvertToToneCurveArray(OptimizedPrelinCurves))
 		if p8 == nil {
 			return false
 		}
 		cmsPipelineSetOptimizationParameters(OptimizedLUT, PrelinEval8, p8, Prelin8free, Prelin8dup)
 	} else {
-		p16 := PrelinOpt16alloc(OptimizedLUT.ContextID, OptimizedPrelinCLUT.Params, 3, OptimizedPrelinCurves, 3, nil)
+		p16 := PrelinOpt16alloc(ar,OptimizedLUT.ContextID, OptimizedPrelinCLUT.Params, 3, OptimizedPrelinCurves, 3, nil)
 		if p16 == nil {
 			return false
 		}
@@ -1153,12 +1154,12 @@ func OptimizeByComputingLinearization(Lut **cmsPipeline, Intent uint32, InputFor
 	}
 
 	if (*dwFlags & cmsFLAGS_NOWHITEONWHITEFIXUP) == 0 {
-		if !FixWhiteMisalignment(OptimizedLUT, ColorSpace, OutputColorSpace) {
+		if !FixWhiteMisalignment(ar,OptimizedLUT, ColorSpace, OutputColorSpace) {
 			return false
 		}
 	}
 
-	cmsPipelineFree(OriginalLut)
+	cmsPipelineFree(ar,OriginalLut)
 	*Lut = OptimizedLUT
 	return true
 
@@ -1173,10 +1174,10 @@ Error:
 	}
 
 	if LutPlusCurves != nil {
-		cmsPipelineFree(LutPlusCurves)
+		cmsPipelineFree(ar,LutPlusCurves)
 	}
 	if OptimizedLUT != nil {
-		cmsPipelineFree(OptimizedLUT)
+		cmsPipelineFree(ar,OptimizedLUT)
 	}
 
 	return false
@@ -1247,7 +1248,7 @@ func CurvesAlloc(ContextID CmsContext, nCurves, nElements uint32, G []*CmsToneCu
 	return c16
 }
 
-func FastEvaluateCurves8(In []uint16, Out []uint16, D interface{}) {
+func FastEvaluateCurves8(ar *arena.Arena, In []uint16, Out []uint16, D interface{}) {
 	data, ok := D.(*Curves16Data)
 	if !ok {
 		fmt.Printf("Error: not of the type *Curves16Data\n")
@@ -1276,7 +1277,7 @@ func FastEvaluateCurves8(In []uint16, Out []uint16, D interface{}) {
 	}
 }
 
-func FastEvaluateCurves16(In []uint16, Out []uint16, D interface{}) {
+func FastEvaluateCurves16(ar *arena.Arena, In []uint16, Out []uint16, D interface{}) {
 	data, ok := D.(*Curves16Data)
 	if !ok {
 		fmt.Printf("Error: not of the type *Curves16Data\n")
@@ -1300,7 +1301,7 @@ func FastEvaluateCurves16(In []uint16, Out []uint16, D interface{}) {
 		Out[i] = data.Curves[i][inValue]
 	}
 }
-func FastIdentity16(In []uint16, Out []uint16, D interface{}) {
+func FastIdentity16(ar *arena.Arena, In []uint16, Out []uint16, D interface{}) {
 	Lut, ok := D.(*cmsPipeline)
 	if !ok {
 		fmt.Printf("Error: not of the type *cmsPipeline\n")
@@ -1319,6 +1320,7 @@ func FastIdentity16(In []uint16, Out []uint16, D interface{}) {
 
 // cmsOPToptimizeFn defines the function type for optimizations.
 func OptimizeByJoiningCurves(
+	ar *arena.Arena,
 	Lut **cmsPipeline,
 	Intent uint32,
 	InputFormat *uint32,
@@ -1351,7 +1353,7 @@ func OptimizeByJoiningCurves(
 	}
 
 	// Allocate an empty LUT
-	Dest = cmsPipelineAlloc(Src.ContextID, Src.InputChannels, Src.OutputChannels)
+	Dest = cmsPipelineAlloc(ar,Src.ContextID, Src.InputChannels, Src.OutputChannels)
 	if Dest == nil {
 		return false
 	}
@@ -1361,7 +1363,7 @@ func OptimizeByJoiningCurves(
 
 	//  Initialize GammaTables using slice indexing
 	for i = 0; i < Src.InputChannels; i++ {
-		GammaTables[i] = cmsBuildTabulatedToneCurve16(Src.ContextID, PRELINEARIZATION_POINTS, nil)
+		GammaTables[i] = cmsBuildTabulatedToneCurve16(ar,Src.ContextID, PRELINEARIZATION_POINTS, nil)
 		if GammaTables[i] == nil {
 			goto Error
 		}
@@ -1373,7 +1375,7 @@ func OptimizeByJoiningCurves(
 			InFloat[j] = float32(float64(i) / float64(PRELINEARIZATION_POINTS-1))
 		}
 
-		cmsPipelineEvalFloat(InFloat[:], OutFloat[:], Src)
+		cmsPipelineEvalFloat(ar, InFloat[:], OutFloat[:], Src)
 		for j = 0; j < Src.InputChannels; j++ {
 			//  Access the tone curve directly using slice indexing
 			toneCurve := GammaTables[j]
@@ -1384,7 +1386,7 @@ func OptimizeByJoiningCurves(
 	}
 
 	//  Allocate obtained curves using slice
-	ObtainedCurves = cmsStageAllocToneCurves(Src.ContextID, Src.InputChannels, GammaTables)
+	ObtainedCurves = cmsStageAllocToneCurves(ar,Src.ContextID, Src.InputChannels, GammaTables)
 	if ObtainedCurves == nil {
 		goto Error
 	}
@@ -1424,10 +1426,10 @@ func OptimizeByJoiningCurves(
 			cmsPipelineSetOptimizationParameters(Dest, FastEvaluateCurves16, c16, CurvesFree, CurvesDup)
 		}
 	} else {
-		cmsStageFree(ObtainedCurves)
+		cmsStageFree(ar, ObtainedCurves)
 		ObtainedCurves = nil
 
-		if !cmsPipelineInsertStage(Dest, cmsAT_BEGIN, cmsStageAllocIdentity(Dest.ContextID, Src.InputChannels)) {
+		if !cmsPipelineInsertStage(Dest, cmsAT_BEGIN, cmsStageAllocIdentity(ar, Dest.ContextID, Src.InputChannels)) {
 			goto Error
 		}
 
@@ -1436,13 +1438,13 @@ func OptimizeByJoiningCurves(
 	}
 
 	//  Replace the source LUT with the optimized LUT
-	cmsPipelineFree(Src)
+	cmsPipelineFree(ar,Src)
 	*Lut = Dest
 	return true
 
 Error:
 	if ObtainedCurves != nil {
-		cmsStageFree(ObtainedCurves)
+		cmsStageFree(ar,ObtainedCurves)
 	}
 	if GammaTables != nil {
 		for i = 0; i < Src.InputChannels; i++ {
@@ -1452,7 +1454,7 @@ Error:
 		}
 	}
 	if Dest != nil {
-		cmsPipelineFree(Dest)
+		cmsPipelineFree(ar,Dest)
 	}
 	return false
 }
@@ -1471,7 +1473,7 @@ func DupMatShaper(ContextID CmsContext, Data interface{}) interface{} {
 	copied := *p // struct copy
 	return &copied
 }
-func MatShaperEval16(In []uint16, Out []uint16, D interface{}) {
+func MatShaperEval16(ar *arena.Arena, In []uint16, Out []uint16, D interface{}) {
 	p, ok := D.(*MatShaper8Data)
 	if !ok {
 		fmt.Printf("Error: not of the type *MatShaper8Data\n")
@@ -1555,9 +1557,9 @@ func FillSecondShaper(Table []uint16, Curve *CmsToneCurve, Is8BitsOutput bool) {
 	}
 }
 
-func SetMatShaper(Dest *cmsPipeline, Curve1 [3]*CmsToneCurve, Mat *cmsMAT3, Off *cmsVEC3, Curve2 [3]*CmsToneCurve, OutputFormat *uint32) bool {
+func SetMatShaper(ar *arena.Arena,Dest *cmsPipeline, Curve1 [3]*CmsToneCurve, Mat *cmsMAT3, Off *cmsVEC3, Curve2 [3]*CmsToneCurve, OutputFormat *uint32) bool {
 	//p := (*MatShaper8Data)(cmsMalloc(Dest.ContextID, uint32(unsafe.Sizeof(MatShaper8Data{}))))
-	p := allocateStruct[MatShaper8Data]()
+	p := allocateStruct[MatShaper8Data](ar)
 	if p == nil {
 		return false
 	}
@@ -1596,7 +1598,7 @@ func SetMatShaper(Dest *cmsPipeline, Curve1 [3]*CmsToneCurve, Mat *cmsMAT3, Off 
 	cmsPipelineSetOptimizationParameters(Dest, MatShaperEval16, p, FreeMatShaper, DupMatShaper)
 	return true
 }
-func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) bool {
+func OptimizeMatrixShaper(ar *arena.Arena,Lut **cmsPipeline, Intent uint32, InputFormat *uint32, OutputFormat *uint32, dwFlags *uint32) bool {
 	//	fmt.Println("OptimizeMatrixShaper")
 	var Curve1, Curve2 *cmsStage
 	var Matrix1, Matrix2 *cmsStage
@@ -1675,30 +1677,30 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 	}
 
 	// Allocate an empty LUT
-	Dest = cmsPipelineAlloc(Src.ContextID, Src.InputChannels, Src.OutputChannels)
+	Dest = cmsPipelineAlloc(ar,Src.ContextID, Src.InputChannels, Src.OutputChannels)
 	if Dest == nil {
 		return false
 	}
 	//var ressl []float64
 	// Assemble the new LUT
-	if !cmsPipelineInsertStage(Dest, cmsAT_BEGIN, cmsStageDup(Curve1)) {
+	if !cmsPipelineInsertStage(Dest, cmsAT_BEGIN, cmsStageDup(ar,Curve1)) {
 		goto Error
 	}
 	//ressl =
 
 	if !IdentityMat {
-		if !cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageAllocMatrix(Dest.ContextID, 3, 3, MatToSlice(res), Offset)) {
+		if !cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageAllocMatrix(ar,Dest.ContextID, 3, 3, MatToSlice(res), Offset)) {
 			goto Error
 		}
 	}
 	//res = SliceToMat(ressl)
-	if !cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageDup(Curve2)) {
+	if !cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageDup(ar,Curve2)) {
 		goto Error
 	}
 
 	// If identity matrix, optimize the curves further
 	if IdentityMat {
-		OptimizeByJoiningCurves(&Dest, Intent, InputFormat, OutputFormat, dwFlags)
+		OptimizeByJoiningCurves(ar,&Dest, Intent, InputFormat, OutputFormat, dwFlags)
 	} else {
 		mpeC1, ok := cmsStageData(Curve1).(*cmsStageToneCurvesData)
 		mpeC2, ok := cmsStageData(Curve2).(*cmsStageToneCurvesData)
@@ -1714,17 +1716,17 @@ func OptimizeMatrixShaper(Lut **cmsPipeline, Intent uint32, InputFormat *uint32,
 		if Offset != nil {
 			vec = SliceToVec(Offset[:])
 		}
-		SetMatShaper(Dest, ConvertToToneCurveArray(mpeC1.TheCurves), &res, &vec, ConvertToToneCurveArray(mpeC2.TheCurves), OutputFormat)
+		SetMatShaper(ar,Dest, ConvertToToneCurveArray(mpeC1.TheCurves), &res, &vec, ConvertToToneCurveArray(mpeC2.TheCurves), OutputFormat)
 	}
 
 	// Free the original pipeline and replace it with the optimized one
-	cmsPipelineFree(Src)
+	cmsPipelineFree(ar,Src)
 	*Lut = Dest
 	return true
 
 Error:
 	// Free the destination pipeline and leave the source unchanged
-	cmsPipelineFree(Dest)
+	cmsPipelineFree(ar,Dest)
 	return false
 }
 
@@ -1758,7 +1760,7 @@ func init() {
 var cmsOptimizationPluginChunk = cmsOptimizationPluginChunkType{OptimizationCollection: nil}
 
 // DupPluginOptimizationList duplicates the optimization list for a new context.
-func DupPluginOptimizationList(ctx CmsContext, src CmsContext) {
+func DupPluginOptimizationList(ar *arena.Arena,ctx CmsContext, src CmsContext) {
 	var newHead cmsOptimizationPluginChunkType
 	var entry, prev *cmsOptimizationCollection
 	head := src.chunks[OptimizationPlugin].(*cmsOptimizationPluginChunkType)
@@ -1769,7 +1771,7 @@ func DupPluginOptimizationList(ctx CmsContext, src CmsContext) {
 
 	// Walk the list and copy each node.
 	for entry = head.OptimizationCollection; entry != nil; entry = entry.Next {
-		newEntry := allocateStruct[cmsOptimizationCollection]()
+		newEntry := allocateStruct[cmsOptimizationCollection](ar)
 		if newEntry == nil {
 			return
 		}
@@ -1787,21 +1789,21 @@ func DupPluginOptimizationList(ctx CmsContext, src CmsContext) {
 		}
 	}
 
-	ctx.chunks[OptimizationPlugin] = cmsSubAllocDup(ctx.MemPool, &newHead, uint32(unsafe.Sizeof(newHead)))
+	ctx.chunks[OptimizationPlugin] = cmsSubAllocDup(ar, ctx.MemPool, &newHead, uint32(unsafe.Sizeof(newHead)))
 }
 
 // cmsAllocOptimizationPluginChunk allocates the optimization plugin chunk.
-func cmsAllocOptimizationPluginChunk(ctx CmsContext, src CmsContext) {
+func cmsAllocOptimizationPluginChunk(ar *arena.Arena,ctx CmsContext, src CmsContext) {
 	if src != nil {
-		DupPluginOptimizationList(ctx, src)
+		DupPluginOptimizationList(ar,ctx, src)
 	} else {
 		var defaultChunk cmsOptimizationPluginChunkType
-		ctx.chunks[OptimizationPlugin] = cmsSubAllocDup(ctx.MemPool, &defaultChunk, uint32(unsafe.Sizeof(defaultChunk)))
+		ctx.chunks[OptimizationPlugin] = cmsSubAllocDup(ar, ctx.MemPool, &defaultChunk, uint32(unsafe.Sizeof(defaultChunk)))
 	}
 }
 
 // cmsRegisterOptimizationPlugin registers a new optimization plugin.
-func cmsRegisterOptimizationPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
+func cmsRegisterOptimizationPlugin(ar *arena.Arena,ContextID CmsContext, Data PluginIntrfc) bool {
 	// Early nil check
 	ctx := ContextID.chunks[OptimizationPlugin].(*cmsOptimizationPluginChunkType)
 	if Data == nil {
@@ -1820,7 +1822,7 @@ func cmsRegisterOptimizationPlugin(ContextID CmsContext, Data PluginIntrfc) bool
 	}
 
 	//newNode = (*cmsOptimizationCollection)(cmsPluginMalloc(ContextID, uint32(unsafe.Sizeof(cmsOptimizationCollection{}))))
-	newNode = allocateStruct[cmsOptimizationCollection]()
+	newNode = allocateStruct[cmsOptimizationCollection](ar)
 
 	if newNode == nil {
 		return false
@@ -1835,7 +1837,7 @@ func cmsRegisterOptimizationPlugin(ContextID CmsContext, Data PluginIntrfc) bool
 }
 
 // cmsOptimizePipeline performs optimizations on a pipeline.
-func cmsOptimizePipeline(ContextID CmsContext, PtrLut **cmsPipeline, Intent uint32, InputFormat, OutputFormat, dwFlags *uint32) bool {
+func cmsOptimizePipeline(ar *arena.Arena,ContextID CmsContext, PtrLut **cmsPipeline, Intent uint32, InputFormat, OutputFormat, dwFlags *uint32) bool {
 	//fmt.Println("cmsOptimizePipeline")
 	ctx := CmsContextGetClientChunk(ContextID, OptimizationPlugin).(*cmsOptimizationPluginChunkType)
 	var AnySuccess bool
@@ -1843,8 +1845,8 @@ func cmsOptimizePipeline(ContextID CmsContext, PtrLut **cmsPipeline, Intent uint
 
 	// A CLUT is being asked, so force this specific optimization.
 	if *dwFlags&cmsFLAGS_FORCE_CLUT != 0 {
-		PreOptimize(*PtrLut)
-		return OptimizeByResampling(PtrLut, Intent, InputFormat, OutputFormat, dwFlags)
+		PreOptimize(ar,*PtrLut)
+		return OptimizeByResampling(ar,PtrLut, Intent, InputFormat, OutputFormat, dwFlags)
 	}
 
 	// Check if there's anything to optimize.
@@ -1861,7 +1863,7 @@ func cmsOptimizePipeline(ContextID CmsContext, PtrLut **cmsPipeline, Intent uint
 	}
 
 	// Pre-optimize and check for identity transformations.
-	AnySuccess = PreOptimize(*PtrLut)
+	AnySuccess = PreOptimize(ar,*PtrLut)
 	if (*PtrLut).Elements == nil {
 		cmsPipelineSetOptimizationParameters(*PtrLut, FastIdentity16, *PtrLut, nil, nil)
 		return true
@@ -1874,14 +1876,14 @@ func cmsOptimizePipeline(ContextID CmsContext, PtrLut **cmsPipeline, Intent uint
 
 	// Try plugin optimizations.
 	for opts := ctx.OptimizationCollection; opts != nil; opts = opts.Next {
-		if opts.OptimizePtr(PtrLut, Intent, InputFormat, OutputFormat, dwFlags) {
+		if opts.OptimizePtr(ar,PtrLut, Intent, InputFormat, OutputFormat, dwFlags) {
 			return true
 		}
 	}
 
 	// Try built-in optimizations.
 	for opts := &DefaultOptimization[0]; opts != nil; opts = opts.Next {
-		if opts.OptimizePtr(PtrLut, Intent, InputFormat, OutputFormat, dwFlags) {
+		if opts.OptimizePtr(ar,PtrLut, Intent, InputFormat, OutputFormat, dwFlags) {
 			return true
 		}
 	}

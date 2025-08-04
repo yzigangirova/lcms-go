@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	//"unsafe"
+	"arena"
 )
 
 func debugPrintCmsICCPROFILE(prefix string, p *cmsICCPROFILE) {
@@ -188,15 +189,15 @@ func decodeStageSignature(sig cmsStageSignature) string {
 }
 
 // CreateRoundtripXForm creates a PCS -> PCS round trip transform, always using relative intent on the device -> PCS.
-func CreateRoundtripXForm(hProfile CmsHPROFILE, nIntent uint32) CmsHTRANSFORM {
+func CreateRoundtripXForm(ar *arena.Arena,hProfile CmsHPROFILE, nIntent uint32) CmsHTRANSFORM {
 	ContextID := cmsGetProfileContextID(hProfile)
-	hLab := cmsCreateLab4ProfileTHR(ContextID, nil)
+	hLab := cmsCreateLab4ProfileTHR(ar,ContextID, nil)
 	var xform CmsHTRANSFORM
 	BPC := [4]bool{false, false, false, false}
 	States := [4]float64{1.0, 1.0, 1.0, 1.0}
 	hProfiles := [4]CmsHPROFILE{hLab, hProfile, hProfile, hLab}
 	Intents := [4]uint32{INTENT_RELATIVE_COLORIMETRIC, nIntent, INTENT_RELATIVE_COLORIMETRIC, INTENT_RELATIVE_COLORIMETRIC}
-	xform = CmsHTRANSFORM(cmsCreateExtendedTransform(
+	xform = CmsHTRANSFORM(cmsCreateExtendedTransform(ar,
 		ContextID, 4, hProfiles[:], BPC[:], Intents[:],
 		States[:], nil, 0, TYPE_Lab_DBL, TYPE_Lab_DBL, cmsFLAGS_NOCACHE|cmsFLAGS_NOOPTIMIZE,
 	))
@@ -207,13 +208,13 @@ func CreateRoundtripXForm(hProfile CmsHPROFILE, nIntent uint32) CmsHTRANSFORM {
 	// Debug output
 	//debugPrintCmsICCPROFILE("CreateRoundtripXForm", hlabProfile)
 	//debugPrintCmsTRANSFORM("CreateRoundtripXForm", xformTransform)
-	CmsCloseProfile(hLab)
+	CmsCloseProfile(ar,hLab)
 	return xform
 }
 
 // BlackPointAsDarkerColorant uses darker colorants to obtain the black point.
 // This works in the relative colorimetric intent and assumes more ink results in darker colors. No ink limit is assumed.
-func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *cmsCIEXYZ, dwFlags uint32) bool {
+func BlackPointAsDarkerColorant(ar *arena.Arena,hInput CmsHPROFILE, Intent uint32, BlackPoint *cmsCIEXYZ, dwFlags uint32) bool {
 	var Black []uint16
 	var xform CmsHTRANSFORM
 	var Lab cmsCIELab
@@ -255,7 +256,7 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 	}
 
 	// Use Lab as the output space, avoiding recursion with Lab2.
-	hLab := cmsCreateLab2ProfileTHR(ContextID, nil)
+	hLab := cmsCreateLab2ProfileTHR(ar,ContextID, nil)
 	if hLab == nil {
 		if BlackPoint != nil {
 			BlackPoint.X, BlackPoint.Y, BlackPoint.Z = 0.0, 0.0, 0.0
@@ -264,12 +265,12 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 	}
 
 	// Create the transform.
-	xform = cmsCreateTransformTHR(
+	xform = cmsCreateTransformTHR(ar,
 		ContextID, hInput, dwFormat, hLab, TYPE_Lab_DBL,
 		Intent, cmsFLAGS_NOOPTIMIZE|cmsFLAGS_NOCACHE,
 	)
 
-	CmsCloseProfile(hLab)
+	CmsCloseProfile(ar,hLab)
 
 	if xform == nil {
 		if BlackPoint != nil {
@@ -280,7 +281,7 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 
 	// Convert black to Lab.
 	LabSlice := LabToSlice(Lab)
-	CmsDoTransform(xform, Black, LabSlice, 1)
+	CmsDoTransform(ar,xform, Black, LabSlice, 1)
 	Lab = SliceToLab(LabSlice)
 
 	// Force it to be neutral; check for inconsistencies.
@@ -291,7 +292,7 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 	}
 
 	// Free the resources.
-	cmsDeleteTransform(xform)
+	cmsDeleteTransform(ar,xform)
 
 	// Convert from Lab (now clipped) to XYZ.
 	cmsLab2XYZ(nil, &BlackXYZ, &Lab)
@@ -308,7 +309,7 @@ func BlackPointAsDarkerColorant(hInput CmsHPROFILE, Intent uint32, BlackPoint *c
 // discounting any ink-limiting embedded in the profile.
 // The process involves a roundtrip transformation using perceptual intent:
 // Lab (0, 0, 0) -> [Perceptual] Profile -> CMYK -> [Rel. Colorimetric] Profile -> Lab.
-func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE) bool {
+func BlackPointUsingPerceptualBlack(ar *arena.Arena,BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE) bool {
 	//fmt.Println("START BlackPointUsingPerceptualBlack BlackPoint.X %.7f, BlackPoint.Y %.7f, BlackPoint.Z %.7f\n ", (*BlackPoint).X, (*BlackPoint).Y, (*BlackPoint).Z)
 	var LabIn, LabOut cmsCIELab
 	var BlackXYZ cmsCIEXYZ
@@ -322,7 +323,7 @@ func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE)
 	}
 
 	// Create a roundtrip transformation using perceptual intent
-	hRoundTrip := CreateRoundtripXForm(hProfile, INTENT_PERCEPTUAL)
+	hRoundTrip := CreateRoundtripXForm(ar,hProfile, INTENT_PERCEPTUAL)
 	if hRoundTrip == nil {
 		if BlackPoint != nil {
 			BlackPoint.X, BlackPoint.Y, BlackPoint.Z = 0.0, 0.0, 0.0
@@ -332,7 +333,7 @@ func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE)
 
 	// Perform the roundtrip transformation
 	LabOutSlice := LabToSlice(LabOut)
-	CmsDoTransform(hRoundTrip, []float64{LabIn.L, LabIn.a, LabIn.b}, LabOutSlice, 1)
+	CmsDoTransform(ar,hRoundTrip, []float64{LabIn.L, LabIn.a, LabIn.b}, LabOutSlice, 1)
 	LabOut = SliceToLab(LabOutSlice)
 	// Clip Lab values to reasonable limits
 	if LabOut.L > 50 {
@@ -341,7 +342,7 @@ func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE)
 	LabOut.a, LabOut.b = 0, 0
 
 	// Free the transformation resource
-	cmsDeleteTransform(hRoundTrip)
+	cmsDeleteTransform(ar,hRoundTrip)
 
 	// Convert the output Lab to XYZ
 	cmsLab2XYZ(nil, &BlackXYZ, &LabOut)
@@ -358,7 +359,7 @@ func BlackPointUsingPerceptualBlack(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE)
 // cmsDetectBlackPoint detects the black point for a given profile and intent.
 // This function attempts to address the issues with broken black point tags in profiles.
 // It ensures the chromaticity of the black point is neutral to avoid tints during compensation.
-func cmsDetectBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE, Intent, dwFlags uint32) bool {
+func cmsDetectBlackPoint(ar *arena.Arena,BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE, Intent, dwFlags uint32) bool {
 	//	fmt.Println("START cmsDetectBlackPoint")
 
 	// Ensure the device class is adequate
@@ -389,7 +390,7 @@ func cmsDetectBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE, Intent, dw
 
 		// Use matrix shaper for relative colorimetric intent if applicable
 		if cmsIsMatrixShaper(hProfile) {
-			return BlackPointAsDarkerColorant(hProfile, INTENT_RELATIVE_COLORIMETRIC, BlackPoint, 0)
+			return BlackPointAsDarkerColorant(ar,hProfile, INTENT_RELATIVE_COLORIMETRIC, BlackPoint, 0)
 		}
 
 		// Use the fixed perceptual black for v4 profiles
@@ -405,11 +406,11 @@ func cmsDetectBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE, Intent, dw
 	if Intent == INTENT_RELATIVE_COLORIMETRIC &&
 		cmsGetDeviceClass(hProfile) == cmsSigOutputClass &&
 		CmsGetColorSpace(hProfile) == cmsSigCmykData {
-		return BlackPointUsingPerceptualBlack(BlackPoint, hProfile)
+		return BlackPointUsingPerceptualBlack(ar,BlackPoint, hProfile)
 	}
 
 	// Compute black point using the current intent
-	return BlackPointAsDarkerColorant(hProfile, Intent, BlackPoint, dwFlags)
+	return BlackPointAsDarkerColorant(ar,hProfile, Intent, BlackPoint, dwFlags)
 }
 
 // RootOfLeastSquaresFitQuadraticCurve calculates the root of a least squares fit quadratic curve to data.
@@ -482,7 +483,7 @@ func RootOfLeastSquaresFitQuadraticCurve(n int, x []float64, y []float64) float6
 
 // cmsDetectDestinationBlackPoint calculates the black point of a destination profile.
 // This algorithm comes from the Adobe paper disclosing its black point compensation method.
-func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE, Intent, dwFlags uint32) bool {
+func cmsDetectDestinationBlackPoint(ar *arena.Arena,BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE, Intent, dwFlags uint32) bool {
 	//fmt.Printf("start cmsDetectDestinationBlackPoint\n")
 	var ColorSpace cmsColorSpaceSignature
 	var hRoundTrip CmsHTRANSFORM
@@ -518,7 +519,7 @@ func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE,
 		(Intent == INTENT_PERCEPTUAL || Intent == INTENT_SATURATION) {
 
 		if cmsIsMatrixShaper(hProfile) {
-			return BlackPointAsDarkerColorant(hProfile, INTENT_RELATIVE_COLORIMETRIC, BlackPoint, 0)
+			return BlackPointAsDarkerColorant(ar,hProfile, INTENT_RELATIVE_COLORIMETRIC, BlackPoint, 0)
 		}
 
 		if BlackPoint != nil {
@@ -535,13 +536,13 @@ func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE,
 		(ColorSpace != cmsSigGrayData &&
 			ColorSpace != cmsSigRgbData &&
 			ColorSpace != cmsSigCmykData) {
-		return cmsDetectBlackPoint(BlackPoint, hProfile, Intent, dwFlags)
+		return cmsDetectBlackPoint(ar,BlackPoint, hProfile, Intent, dwFlags)
 	}
 
 	// Set an initial guess
 	if Intent == INTENT_RELATIVE_COLORIMETRIC {
 		var IniXYZ cmsCIEXYZ
-		if !cmsDetectBlackPoint(&IniXYZ, hProfile, Intent, dwFlags) {
+		if !cmsDetectBlackPoint(ar,&IniXYZ, hProfile, Intent, dwFlags) {
 			return false
 		}
 		cmsXYZ2Lab(nil, &InitialLab, &IniXYZ)
@@ -550,7 +551,7 @@ func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE,
 	}
 
 	// Create a roundtrip transform
-	hRoundTrip = CreateRoundtripXForm(hProfile, Intent)
+	hRoundTrip = CreateRoundtripXForm(ar,hProfile, Intent)
 	if hRoundTrip == nil {
 		return false
 	}
@@ -563,7 +564,7 @@ func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE,
 		/*  fmt.Printf("Lab.L %.7f\n", Lab.L)
 		    fmt.Printf("Lab.a %.7f\n", Lab.a)
 		    fmt.Printf("Lab.b %.7f\n", Lab.b)*/
-		CmsDoTransform(hRoundTrip, &Lab, &destLab, 1)
+		CmsDoTransform(ar,hRoundTrip, &Lab, &destLab, 1)
 
 		inRamp[l] = Lab.L
 		outRamp[l] = destLab.L
@@ -576,7 +577,7 @@ func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE,
 
 	// Validate monotonicity
 	if !(outRamp[0] < outRamp[255]) {
-		cmsDeleteTransform(hRoundTrip)
+		cmsDeleteTransform(ar,hRoundTrip)
 		if BlackPoint != nil {
 			BlackPoint.X, BlackPoint.Y, BlackPoint.Z = 0.0, 0.0, 0.0
 		}
@@ -596,7 +597,7 @@ func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE,
 
 		if NearlyStraightMidrange {
 			cmsLab2XYZ(nil, BlackPoint, &InitialLab)
-			cmsDeleteTransform(hRoundTrip)
+			cmsDeleteTransform(ar,hRoundTrip)
 			return true
 		}
 	}
@@ -625,7 +626,7 @@ func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE,
 
 	// Validate points
 	if n < 3 {
-		cmsDeleteTransform(hRoundTrip)
+		cmsDeleteTransform(ar,hRoundTrip)
 		if BlackPoint != nil {
 			BlackPoint.X, BlackPoint.Y, BlackPoint.Z = 0.0, 0.0, 0.0
 		}
@@ -642,7 +643,7 @@ func cmsDetectDestinationBlackPoint(BlackPoint *cmsCIEXYZ, hProfile CmsHPROFILE,
 	Lab.b = InitialLab.b
 	cmsLab2XYZ(nil, BlackPoint, &Lab)
 
-	cmsDeleteTransform(hRoundTrip)
+	cmsDeleteTransform(ar,hRoundTrip)
 	//fmt("end cmsDetectDestinationBlackPoint\n")
 
 	return true

@@ -1,6 +1,7 @@
 package golcms
 
 import (
+	"arena"
 	"fmt"
 )
 
@@ -37,7 +38,7 @@ var (
 
 // Factors to convert from 1.15 fixed point to 0..1.0 range and vice-versa
 const (
-	InpAdj  = float64(1.0 / MAX_ENCODEABLE_XYZ)// (65536.0 / (65535.0 * 2.0))
+	InpAdj  = float64(1.0 / MAX_ENCODEABLE_XYZ) // (65536.0 / (65535.0 * 2.0))
 	OutpAdj = float64(MAX_ENCODEABLE_XYZ)       // ((2.0 * 65535.0) / 65536.0)
 )
 
@@ -65,14 +66,14 @@ var (
 )
 
 // cmsReadMediaWhitePoint retrieves the media white point and addresses issues in old profiles.
-func cmsReadMediaWhitePoint(Dest *cmsCIEXYZ, hProfile CmsHPROFILE) bool {
+func cmsReadMediaWhitePoint(ar *arena.Arena,Dest *cmsCIEXYZ, hProfile CmsHPROFILE) bool {
 	// Ensure Dest is not nil
 	if Dest == nil {
 		return false
 	}
 
 	// Read the media white point tag
-	Tag, ok := cmsReadTag(hProfile, cmsSigMediaWhitePointTag).(*cmsCIEXYZ)
+	Tag, ok := cmsReadTag(ar,hProfile, cmsSigMediaWhitePointTag).(*cmsCIEXYZ)
 	// If no white point, use D50 as default
 	if Tag == nil {
 		*Dest = *cmsD50_XYZ()
@@ -96,13 +97,13 @@ func cmsReadMediaWhitePoint(Dest *cmsCIEXYZ, hProfile CmsHPROFILE) bool {
 	*Dest = *Tag
 	return true
 }
-func cmsReadCHAD(Dest *cmsMAT3, hProfile CmsHPROFILE) bool {
+func cmsReadCHAD(ar *arena.Arena,Dest *cmsMAT3, hProfile CmsHPROFILE) bool {
 	if Dest == nil {
 		panic("Destination matrix cannot be nil") // Replace cmsAssert
 	}
 
 	// Attempt to read the Chromatic Adaptation Tag
-	Tag, ok := cmsReadTag(hProfile, cmsSigChromaticAdaptationTag).(*cmsMAT3)
+	Tag, ok := cmsReadTag(ar,hProfile, cmsSigChromaticAdaptationTag).(*cmsMAT3)
 	if Tag != nil {
 		*Dest = *Tag
 		return true
@@ -118,7 +119,7 @@ func cmsReadCHAD(Dest *cmsMAT3, hProfile CmsHPROFILE) bool {
 	// For V2 display profiles, ensure D50 as the white point
 	if cmsGetEncodedICCversion(hProfile) < 0x4000000 {
 		if cmsGetDeviceClass(hProfile) == cmsSigDisplayClass {
-			White, ok := cmsReadTag(hProfile, cmsSigMediaWhitePointTag).(*cmsCIEXYZ)
+			White, ok := cmsReadTag(ar,hProfile, cmsSigMediaWhitePointTag).(*cmsCIEXYZ)
 			if White == nil {
 				cmsMAT3identity(Dest)
 				return true
@@ -133,12 +134,12 @@ func cmsReadCHAD(Dest *cmsMAT3, hProfile CmsHPROFILE) bool {
 
 	return true
 }
-func cmsReadFloatDevicelinkTag(hProfile CmsHPROFILE, tagFloat cmsTagSignature) *cmsPipeline {
+func cmsReadFloatDevicelinkTag(ar *arena.Arena, hProfile CmsHPROFILE, tagFloat cmsTagSignature) *cmsPipeline {
 	// Get the profile's context ID
 	ContextID := cmsGetProfileContextID(hProfile)
 
 	// Duplicate the LUT pipeline from the specified tag
-	pl, ok := cmsReadTag(hProfile, tagFloat).(*cmsPipeline)
+	pl, ok := cmsReadTag(ar,hProfile, tagFloat).(*cmsPipeline)
 	if pl == nil {
 		return nil
 	}
@@ -146,7 +147,7 @@ func cmsReadFloatDevicelinkTag(hProfile CmsHPROFILE, tagFloat cmsTagSignature) *
 		fmt.Printf("Error: tag is not of the type *cmsPipeline\n")
 		return nil
 	}
-	Lut := cmsPipelineDup(pl)
+	Lut := cmsPipelineDup(ar, pl)
 	if Lut == nil {
 		return nil
 	}
@@ -157,24 +158,24 @@ func cmsReadFloatDevicelinkTag(hProfile CmsHPROFILE, tagFloat cmsTagSignature) *
 
 	// Check if the source color space is Lab and adjust encoding
 	if spc == cmsSigLabData {
-		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageNormalizeToLabFloat(ContextID)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageNormalizeToLabFloat(ar, ContextID)) {
 			goto Error
 		}
 	} else if spc == cmsSigXYZData {
 		// Check if the source color space is XYZ and adjust encoding
-		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageNormalizeToXyzFloat(ContextID)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageNormalizeToXyzFloat(ar, ContextID)) {
 			goto Error
 		}
 	}
 
 	// Check if the PCS is Lab and adjust encoding
 	if PCS == cmsSigLabData {
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageNormalizeFromLabFloat(ContextID)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageNormalizeFromLabFloat(ar, ContextID)) {
 			goto Error
 		}
 	} else if PCS == cmsSigXYZData {
 		// Check if the PCS is XYZ and adjust encoding
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageNormalizeFromXyzFloat(ContextID)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageNormalizeFromXyzFloat(ar, ContextID)) {
 			goto Error
 		}
 	}
@@ -184,11 +185,11 @@ func cmsReadFloatDevicelinkTag(hProfile CmsHPROFILE, tagFloat cmsTagSignature) *
 
 Error:
 	// Free the LUT pipeline if an error occurs
-	cmsPipelineFree(Lut)
+	cmsPipelineFree(ar, Lut)
 	return nil
 }
 
-func cmsReadDevicelinkLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
+func cmsReadDevicelinkLUT(ar *arena.Arena, hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 	ContextID := cmsGetProfileContextID(hProfile)
 
 	if Intent > INTENT_ABSOLUTE_COLORIMETRIC {
@@ -200,7 +201,7 @@ func cmsReadDevicelinkLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 
 	// Handle named color profiles
 	if cmsGetDeviceClass(hProfile) == cmsSigNamedColorClass {
-		nc, ok := cmsReadTag(hProfile, cmsSigNamedColor2Tag).(*cmsNAMEDCOLORLIST)
+		nc, ok := cmsReadTag(ar,hProfile, cmsSigNamedColor2Tag).(*cmsNAMEDCOLORLIST)
 		if nc == nil {
 			return nil
 		}
@@ -209,17 +210,17 @@ func cmsReadDevicelinkLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 			return nil
 		}
 
-		Lut := cmsPipelineAlloc(ContextID, 0, 0)
+		Lut := cmsPipelineAlloc(ar, ContextID, 0, 0)
 		if Lut == nil {
 			goto Error
 		}
 
-		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageAllocNamedColor(nc, false)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageAllocNamedColor(ar, nc, false)) {
 			goto Error
 		}
 
 		if CmsGetColorSpace(hProfile) == cmsSigLabData {
-			if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocLabV2ToV4(ContextID)) {
+			if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocLabV2ToV4(ar, ContextID)) {
 				goto Error
 			}
 		}
@@ -227,18 +228,18 @@ func cmsReadDevicelinkLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 		return Lut
 
 	Error:
-		cmsPipelineFree(Lut)
+		cmsPipelineFree(ar, Lut)
 		return nil
 	}
 
 	// Handle floating point LUTs
 	if cmsIsTag(hProfile, tagFloat) {
-		return cmsReadFloatDevicelinkTag(hProfile, tagFloat)
+		return cmsReadFloatDevicelinkTag(ar, hProfile, tagFloat)
 	}
 
 	tagFloat = Device2PCSFloat[0]
 	if cmsIsTag(hProfile, tagFloat) {
-		pl, ok := cmsReadTag(hProfile, tagFloat).(*cmsPipeline)
+		pl, ok := cmsReadTag(ar,hProfile, tagFloat).(*cmsPipeline)
 		if pl == nil {
 			return nil
 		}
@@ -246,7 +247,7 @@ func cmsReadDevicelinkLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 			fmt.Printf("Error: tag is not of the type *cmsPipeline\n")
 			return nil
 		}
-		return cmsPipelineDup(pl)
+		return cmsPipelineDup(ar, pl)
 	}
 
 	// Check for 16-bit LUTs
@@ -258,7 +259,7 @@ func cmsReadDevicelinkLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 	}
 
 	// Read the tag
-	Lut, ok := cmsReadTag(hProfile, tag16).(*cmsPipeline)
+	Lut, ok := cmsReadTag(ar,hProfile, tag16).(*cmsPipeline)
 	if Lut == nil {
 		return nil
 	}
@@ -267,7 +268,7 @@ func cmsReadDevicelinkLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 		return nil
 	}
 	// Duplicate the pipeline as the profile owns the original
-	Lut = cmsPipelineDup(Lut)
+	Lut = cmsPipelineDup(ar, Lut)
 	if Lut == nil {
 		return nil
 	}
@@ -286,13 +287,13 @@ func cmsReadDevicelinkLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 	}
 
 	if CmsGetColorSpace(hProfile) == cmsSigLabData {
-		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageAllocLabV4ToV2(ContextID)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageAllocLabV4ToV2(ar, ContextID)) {
 			goto Error2
 		}
 	}
 
 	if cmsGetPCS(hProfile) == cmsSigLabData {
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocLabV2ToV4(ContextID)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocLabV2ToV4(ar, ContextID)) {
 			goto Error2
 		}
 	}
@@ -300,17 +301,17 @@ func cmsReadDevicelinkLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 	return Lut
 
 Error2:
-	cmsPipelineFree(Lut)
+	cmsPipelineFree(ar, Lut)
 	return nil
 }
 
 // ReadICCMatrixRGB2XYZ translates the given function
-func ReadICCMatrixRGB2XYZ(r *cmsMAT3, hProfile CmsHPROFILE) bool {
+func ReadICCMatrixRGB2XYZ(ar *arena.Arena,r *cmsMAT3, hProfile CmsHPROFILE) bool {
 	if r == nil {
 		panic("r cannot be nil") // Equivalent to `_cmsAssert`
 	}
 
-	PtrRed, ok := cmsReadTag(hProfile, cmsSigRedColorantTag).(*cmsCIEXYZ)
+	PtrRed, ok := cmsReadTag(ar,hProfile, cmsSigRedColorantTag).(*cmsCIEXYZ)
 	if PtrRed == nil {
 		return false
 	}
@@ -318,7 +319,7 @@ func ReadICCMatrixRGB2XYZ(r *cmsMAT3, hProfile CmsHPROFILE) bool {
 		fmt.Printf("Error: tag is not of the type *cmsCIEXYZ\n")
 		return false
 	}
-	PtrGreen, ok := cmsReadTag(hProfile, cmsSigGreenColorantTag).(*cmsCIEXYZ)
+	PtrGreen, ok := cmsReadTag(ar,hProfile, cmsSigGreenColorantTag).(*cmsCIEXYZ)
 	if PtrGreen == nil {
 		return false
 	}
@@ -326,7 +327,7 @@ func ReadICCMatrixRGB2XYZ(r *cmsMAT3, hProfile CmsHPROFILE) bool {
 		fmt.Printf("Error: tag is not of the type *cmsCIEXYZ\n")
 		return false
 	}
-	PtrBlue, ok := cmsReadTag(hProfile, cmsSigBlueColorantTag).(*cmsCIEXYZ)
+	PtrBlue, ok := cmsReadTag(ar,hProfile, cmsSigBlueColorantTag).(*cmsCIEXYZ)
 	if PtrBlue == nil {
 		return false
 	}
@@ -343,9 +344,9 @@ func ReadICCMatrixRGB2XYZ(r *cmsMAT3, hProfile CmsHPROFILE) bool {
 }
 
 // BuildGrayInputMatrixPipeline translates the first function
-func BuildGrayInputMatrixPipeline(hProfile CmsHPROFILE) *cmsPipeline {
+func BuildGrayInputMatrixPipeline(ar *arena.Arena, hProfile CmsHPROFILE) *cmsPipeline {
 	ContextID := cmsGetProfileContextID(hProfile)
-	GrayTRC, ok := cmsReadTag(hProfile, cmsSigGrayTRCTag).(*CmsToneCurve)
+	GrayTRC, ok := cmsReadTag(ar,hProfile, cmsSigGrayTRCTag).(*CmsToneCurve)
 	if GrayTRC == nil {
 		return nil
 	}
@@ -353,30 +354,30 @@ func BuildGrayInputMatrixPipeline(hProfile CmsHPROFILE) *cmsPipeline {
 		fmt.Printf("Error: tag is not of the type *cmsToneCurve\n")
 		return nil
 	}
-	Lut := cmsPipelineAlloc(ContextID, 1, 3)
+	Lut := cmsPipelineAlloc(ar, ContextID, 1, 3)
 	if Lut == nil {
 		goto Error
 	}
 
 	if cmsGetPCS(hProfile) == cmsSigLabData {
 		Zero := [2]uint16{0x8080, 0x8080}
-		EmptyTab := cmsBuildTabulatedToneCurve16(ContextID, 2, Zero[:])
+		EmptyTab := cmsBuildTabulatedToneCurve16(ar, ContextID, 2, Zero[:])
 		if EmptyTab == nil {
 			goto Error
 		}
 
 		LabCurves := [3]*CmsToneCurve{GrayTRC, EmptyTab, EmptyTab}
 
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 1, OneToThreeInputMatrix, nil)) ||
-			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 3, LabCurves[:])) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ar, ContextID, 3, 1, OneToThreeInputMatrix, nil)) ||
+			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ar, ContextID, 3, LabCurves[:])) {
 			CmsFreeToneCurve(EmptyTab)
 			goto Error
 		}
 
 		CmsFreeToneCurve(EmptyTab)
 	} else {
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 1, []*CmsToneCurve{GrayTRC})) ||
-			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 1, GrayInputMatrix, nil)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ar, ContextID, 1, []*CmsToneCurve{GrayTRC})) ||
+			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ar, ContextID, 3, 1, GrayInputMatrix, nil)) {
 			goto Error
 		}
 	}
@@ -384,16 +385,16 @@ func BuildGrayInputMatrixPipeline(hProfile CmsHPROFILE) *cmsPipeline {
 	return Lut
 
 Error:
-	cmsPipelineFree(Lut)
+	cmsPipelineFree(ar, Lut)
 	return nil
 }
-func BuildRGBInputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
+func BuildRGBInputMatrixShaper(ar *arena.Arena, hProfile CmsHPROFILE) *cmsPipeline {
 	//fmt.Println("START BuildRGBInputMatrixShaper")
 
 	ContextID := cmsGetProfileContextID(hProfile)
 	var Mat cmsMAT3
 
-	if !ReadICCMatrixRGB2XYZ(&Mat, hProfile) {
+	if !ReadICCMatrixRGB2XYZ(ar,&Mat, hProfile) {
 		return nil
 	}
 
@@ -403,9 +404,9 @@ func BuildRGBInputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
 			Mat.V[i].N[j] *= InpAdj
 		}
 	}
-	rtag, ok := cmsReadTag(hProfile, cmsSigRedTRCTag).(*CmsToneCurve)
-	grtag, ok := cmsReadTag(hProfile, cmsSigGreenTRCTag).(*CmsToneCurve)
-	bltag, ok := cmsReadTag(hProfile, cmsSigBlueTRCTag).(*CmsToneCurve)
+	rtag, ok := cmsReadTag(ar,hProfile, cmsSigRedTRCTag).(*CmsToneCurve)
+	grtag, ok := cmsReadTag(ar,hProfile, cmsSigGreenTRCTag).(*CmsToneCurve)
+	bltag, ok := cmsReadTag(ar,hProfile, cmsSigBlueTRCTag).(*CmsToneCurve)
 
 	// Load tone curves
 	Shapes := [3]*CmsToneCurve{rtag, grtag, bltag}
@@ -477,15 +478,15 @@ func BuildRGBInputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
 	}*/
 
 	// Build pipeline
-	Lut := cmsPipelineAlloc(ContextID, 3, 3)
+	Lut := cmsPipelineAlloc(ar, ContextID, 3, 3)
 	if Lut != nil {
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 3, Shapes[:])) ||
-			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 3, MatToSlice(Mat), nil)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ar, ContextID, 3, Shapes[:])) ||
+			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ar, ContextID, 3, 3, MatToSlice(Mat), nil)) {
 			goto Error
 		}
 
 		if cmsGetPCS(hProfile) == cmsSigLabData {
-			if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocXYZ2Lab(ContextID)) {
+			if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocXYZ2Lab(ar, ContextID)) {
 				goto Error
 			}
 		}
@@ -494,14 +495,14 @@ func BuildRGBInputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
 	return Lut
 
 Error:
-	cmsPipelineFree(Lut)
+	cmsPipelineFree(ar, Lut)
 	return nil
 }
 
 // cmsReadFloatInputTag translates the first function
-func cmsReadFloatInputTag(hProfile CmsHPROFILE, tagFloat cmsTagSignature) *cmsPipeline {
+func cmsReadFloatInputTag(ar *arena.Arena, hProfile CmsHPROFILE, tagFloat cmsTagSignature) *cmsPipeline {
 	ContextID := cmsGetProfileContextID(hProfile)
-	pl, ok := cmsReadTag(hProfile, tagFloat).(*cmsPipeline)
+	pl, ok := cmsReadTag(ar,hProfile, tagFloat).(*cmsPipeline)
 	if pl == nil {
 		return nil
 	}
@@ -509,7 +510,7 @@ func cmsReadFloatInputTag(hProfile CmsHPROFILE, tagFloat cmsTagSignature) *cmsPi
 		fmt.Printf("Error: tag is not of the type *cmsPipeline\n")
 		return nil
 	}
-	Lut := cmsPipelineDup(pl)
+	Lut := cmsPipelineDup(ar, pl)
 	spc := CmsGetColorSpace(hProfile)
 	PCS := cmsGetPCS(hProfile)
 
@@ -518,21 +519,21 @@ func cmsReadFloatInputTag(hProfile CmsHPROFILE, tagFloat cmsTagSignature) *cmsPi
 	}
 
 	if spc == cmsSigLabData {
-		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageNormalizeToLabFloat(ContextID)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageNormalizeToLabFloat(ar, ContextID)) {
 			goto Error
 		}
 	} else if spc == cmsSigXYZData {
-		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageNormalizeToXyzFloat(ContextID)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageNormalizeToXyzFloat(ar, ContextID)) {
 			goto Error
 		}
 	}
 
 	if PCS == cmsSigLabData {
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageNormalizeFromLabFloat(ContextID)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageNormalizeFromLabFloat(ar, ContextID)) {
 			goto Error
 		}
 	} else if PCS == cmsSigXYZData {
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageNormalizeFromXyzFloat(ContextID)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageNormalizeFromXyzFloat(ar, ContextID)) {
 			goto Error
 		}
 	}
@@ -540,16 +541,16 @@ func cmsReadFloatInputTag(hProfile CmsHPROFILE, tagFloat cmsTagSignature) *cmsPi
 	return Lut
 
 Error:
-	cmsPipelineFree(Lut)
+	cmsPipelineFree(ar, Lut)
 	return nil
 }
 
 // cmsReadInputLUT translates the second function
-func cmsReadInputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
+func cmsReadInputLUT(ar *arena.Arena, hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 	ContextID := cmsGetProfileContextID(hProfile)
 
 	if cmsGetDeviceClass(hProfile) == cmsSigNamedColorClass {
-		nc, ok := cmsReadTag(hProfile, cmsSigNamedColor2Tag).(*cmsNAMEDCOLORLIST)
+		nc, ok := cmsReadTag(ar,hProfile, cmsSigNamedColor2Tag).(*cmsNAMEDCOLORLIST)
 		if nc == nil {
 			return nil
 		}
@@ -557,14 +558,14 @@ func cmsReadInputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 			fmt.Printf("Error: Interface data assertion error, not *cmsNAMEDCOLORLIST\n")
 			return nil
 		}
-		Lut := cmsPipelineAlloc(ContextID, 0, 0)
+		Lut := cmsPipelineAlloc(ar, ContextID, 0, 0)
 		if Lut == nil {
 			return nil
 		}
 
-		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageAllocNamedColor(nc, true)) ||
-			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocLabV2ToV4(ContextID)) {
-			cmsPipelineFree(Lut)
+		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageAllocNamedColor(ar, nc, true)) ||
+			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocLabV2ToV4(ar, ContextID)) {
+			cmsPipelineFree(ar, Lut)
 			return nil
 		}
 		return Lut
@@ -579,7 +580,7 @@ func cmsReadInputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 		// Floating point LUT are always V4, but the encoding range is no
 		// longer 0..1.0, so we need to add an stage depending on the color space
 		if cmsIsTag(hProfile, tagFloat) {
-			return cmsReadFloatInputTag(hProfile, tagFloat)
+			return cmsReadFloatInputTag(ar, hProfile, tagFloat)
 		}
 
 		if !cmsIsTag(hProfile, tag16) {
@@ -587,7 +588,7 @@ func cmsReadInputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 		}
 
 		if cmsIsTag(hProfile, tag16) {
-			Lut, ok := cmsReadTag(hProfile, tag16).(*cmsPipeline)
+			Lut, ok := cmsReadTag(ar,hProfile, tag16).(*cmsPipeline)
 			if Lut == nil {
 				return nil
 			}
@@ -597,20 +598,20 @@ func cmsReadInputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 			}
 
 			OriginalType := cmsGetTagTrueType(hProfile, tag16)
-			Lut = cmsPipelineDup(Lut)
+			Lut = cmsPipelineDup(ar, Lut)
 
 			if OriginalType != cmsSigLut16Type || cmsGetPCS(hProfile) != cmsSigLabData {
 				return Lut
 			}
 
 			if CmsGetColorSpace(hProfile) == cmsSigLabData &&
-				!cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageAllocLabV4ToV2(ContextID)) {
-				cmsPipelineFree(Lut)
+				!cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageAllocLabV4ToV2(ar, ContextID)) {
+				cmsPipelineFree(ar, Lut)
 				return nil
 			}
 
-			if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocLabV2ToV4(ContextID)) {
-				cmsPipelineFree(Lut)
+			if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocLabV2ToV4(ar, ContextID)) {
+				cmsPipelineFree(ar, Lut)
 				return nil
 			}
 			return Lut
@@ -618,9 +619,9 @@ func cmsReadInputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 	}
 
 	if CmsGetColorSpace(hProfile) == cmsSigGrayData {
-		return BuildGrayInputMatrixPipeline(hProfile)
+		return BuildGrayInputMatrixPipeline(ar, hProfile)
 	}
-	return BuildRGBInputMatrixShaper(hProfile)
+	return BuildRGBInputMatrixShaper(ar, hProfile)
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -630,9 +631,9 @@ func cmsReadInputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 // given by Y on XYZ PCS and by L* on Lab PCS, Both across inverse TRC curve.
 // The complete pipeline on XYZ is Matrix[3:1]. Tone curve and in Lab Matrix[3:1]. Tone Curve as well.
 
-func BuildGrayOutputPipeline(hProfile CmsHPROFILE) *cmsPipeline {
+func BuildGrayOutputPipeline(ar *arena.Arena, hProfile CmsHPROFILE) *cmsPipeline {
 	ContextID := cmsGetProfileContextID(hProfile)
-	GrayTRC, ok := cmsReadTag(hProfile, cmsSigGrayTRCTag).(*CmsToneCurve)
+	GrayTRC, ok := cmsReadTag(ar,hProfile, cmsSigGrayTRCTag).(*CmsToneCurve)
 	if GrayTRC == nil {
 		return nil
 	}
@@ -642,34 +643,34 @@ func BuildGrayOutputPipeline(hProfile CmsHPROFILE) *cmsPipeline {
 		return nil
 	}
 
-	RevGrayTRC := cmsReverseToneCurve(GrayTRC)
+	RevGrayTRC := cmsReverseToneCurve(ar, GrayTRC)
 	if RevGrayTRC == nil {
 		return nil
 	}
 
-	Lut := cmsPipelineAlloc(ContextID, 3, 1)
+	Lut := cmsPipelineAlloc(ar, ContextID, 3, 1)
 	if Lut == nil {
 		CmsFreeToneCurve(RevGrayTRC)
 		return nil
 	}
 
 	if cmsGetPCS(hProfile) == cmsSigLabData {
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 1, 3, PickLstarMatrix, nil)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ar, ContextID, 1, 3, PickLstarMatrix, nil)) {
 			CmsFreeToneCurve(RevGrayTRC)
-			cmsPipelineFree(Lut)
+			cmsPipelineFree(ar, Lut)
 			return nil
 		}
 	} else {
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 1, 3, PickYMatrix, nil)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ar, ContextID, 1, 3, PickYMatrix, nil)) {
 			CmsFreeToneCurve(RevGrayTRC)
-			cmsPipelineFree(Lut)
+			cmsPipelineFree(ar, Lut)
 			return nil
 		}
 	}
 
-	if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 1, []*CmsToneCurve{RevGrayTRC})) {
+	if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ar, ContextID, 1, []*CmsToneCurve{RevGrayTRC})) {
 		CmsFreeToneCurve(RevGrayTRC)
-		cmsPipelineFree(Lut)
+		cmsPipelineFree(ar, Lut)
 		return nil
 	}
 
@@ -678,13 +679,13 @@ func BuildGrayOutputPipeline(hProfile CmsHPROFILE) *cmsPipeline {
 }
 
 // BuildRGBOutputMatrixShaper translates the given function
-func BuildRGBOutputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
+func BuildRGBOutputMatrixShaper(ar *arena.Arena, hProfile CmsHPROFILE) *cmsPipeline {
 	//fmt.Println("BuildRGBOutputMatrixShaper")
 	ContextID := cmsGetProfileContextID(hProfile)
 	var Mat, Inv cmsMAT3
 	var Shapes, InvShapes [3]*CmsToneCurve
 
-	if !ReadICCMatrixRGB2XYZ(&Mat, hProfile) {
+	if !ReadICCMatrixRGB2XYZ(ar,&Mat, hProfile) {
 		return nil
 	}
 
@@ -698,9 +699,9 @@ func BuildRGBOutputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
 			Inv.V[i].N[j] *= OutpAdj
 		}
 	}
-	rtag, ok := cmsReadTag(hProfile, cmsSigRedTRCTag).(*CmsToneCurve)
-	grtag, ok := cmsReadTag(hProfile, cmsSigGreenTRCTag).(*CmsToneCurve)
-	bltag, ok := cmsReadTag(hProfile, cmsSigBlueTRCTag).(*CmsToneCurve)
+	rtag, ok := cmsReadTag(ar,hProfile, cmsSigRedTRCTag).(*CmsToneCurve)
+	grtag, ok := cmsReadTag(ar,hProfile, cmsSigGreenTRCTag).(*CmsToneCurve)
+	bltag, ok := cmsReadTag(ar,hProfile, cmsSigBlueTRCTag).(*CmsToneCurve)
 
 	// Load tone curves
 	Shapes = [3]*CmsToneCurve{rtag, grtag, bltag}
@@ -714,25 +715,25 @@ func BuildRGBOutputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
 		return nil
 	}
 
-	InvShapes[0] = cmsReverseToneCurve(Shapes[0])
-	InvShapes[1] = cmsReverseToneCurve(Shapes[1])
-	InvShapes[2] = cmsReverseToneCurve(Shapes[2])
+	InvShapes[0] = cmsReverseToneCurve(ar, Shapes[0])
+	InvShapes[1] = cmsReverseToneCurve(ar, Shapes[1])
+	InvShapes[2] = cmsReverseToneCurve(ar, Shapes[2])
 
 	if InvShapes[0] == nil || InvShapes[1] == nil || InvShapes[2] == nil {
 		return nil
 	}
 
-	Lut := cmsPipelineAlloc(ContextID, 3, 3)
+	Lut := cmsPipelineAlloc(ar, ContextID, 3, 3)
 	if Lut != nil {
 		// Handle profiles with Lab PCS
 		if cmsGetPCS(hProfile) == cmsSigLabData {
-			if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocLab2XYZ(ContextID)) {
+			if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocLab2XYZ(ar, ContextID)) {
 				goto Error
 			}
 		}
 
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 3, MatToSlice(Inv), nil)) ||
-			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 3, InvShapes[:])) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ar, ContextID, 3, 3, MatToSlice(Inv), nil)) ||
+			!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ar, ContextID, 3, InvShapes[:])) {
 			goto Error
 		}
 	}
@@ -742,7 +743,7 @@ func BuildRGBOutputMatrixShaper(hProfile CmsHPROFILE) *cmsPipeline {
 
 Error:
 	cmsFreeToneCurveTriple(InvShapes)
-	cmsPipelineFree(Lut)
+	cmsPipelineFree(ar, Lut)
 	return nil
 }
 
@@ -758,9 +759,9 @@ func ChangeInterpolationToTrilinear(Lut *cmsPipeline) {
 }
 
 // _cmsReadFloatOutputTag translates the given function
-func cmsReadFloatOutputTag(hProfile CmsHPROFILE, tagFloat cmsTagSignature) *cmsPipeline {
+func cmsReadFloatOutputTag(ar *arena.Arena, hProfile CmsHPROFILE, tagFloat cmsTagSignature) *cmsPipeline {
 	ContextID := cmsGetProfileContextID(hProfile)
-	pl, ok := cmsReadTag(hProfile, tagFloat).(*cmsPipeline)
+	pl, ok := cmsReadTag(ar,hProfile, tagFloat).(*cmsPipeline)
 
 	if pl == nil {
 		return nil
@@ -769,7 +770,7 @@ func cmsReadFloatOutputTag(hProfile CmsHPROFILE, tagFloat cmsTagSignature) *cmsP
 		fmt.Printf("Error: tag is not of the type *CmsToneCurve\n")
 		return nil
 	}
-	Lut := cmsPipelineDup(pl)
+	Lut := cmsPipelineDup(ar, pl)
 
 	if Lut == nil {
 		return nil
@@ -779,22 +780,22 @@ func cmsReadFloatOutputTag(hProfile CmsHPROFILE, tagFloat cmsTagSignature) *cmsP
 
 	// If PCS is Lab or XYZ, adjust normalization at the beginning of the pipeline
 	if PCS == cmsSigLabData {
-		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageNormalizeToLabFloat(ContextID)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageNormalizeToLabFloat(ar, ContextID)) {
 			goto Error
 		}
 	} else if PCS == cmsSigXYZData {
-		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageNormalizeToXyzFloat(ContextID)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageNormalizeToXyzFloat(ar, ContextID)) {
 			goto Error
 		}
 	}
 
 	// If the output is Lab or XYZ, normalization is needed at the end of the pipeline
 	if dataSpace == cmsSigLabData {
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageNormalizeFromLabFloat(ContextID)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageNormalizeFromLabFloat(ar, ContextID)) {
 			goto Error
 		}
 	} else if dataSpace == cmsSigXYZData {
-		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageNormalizeFromXyzFloat(ContextID)) {
+		if !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageNormalizeFromXyzFloat(ar, ContextID)) {
 			goto Error
 		}
 	}
@@ -802,11 +803,11 @@ func cmsReadFloatOutputTag(hProfile CmsHPROFILE, tagFloat cmsTagSignature) *cmsP
 	return Lut
 
 Error:
-	cmsPipelineFree(Lut)
+	cmsPipelineFree(ar, Lut)
 	return nil
 }
 
-func cmsReadOutputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
+func cmsReadOutputLUT(ar *arena.Arena, hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 	//	fmt.Println("cmsReadOutputLUT")
 	ContextID := cmsGetProfileContextID(hProfile)
 
@@ -815,7 +816,7 @@ func cmsReadOutputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 		tagFloat := PCS2DeviceFloat[Intent]
 
 		if cmsIsTag(hProfile, tagFloat) {
-			return cmsReadFloatOutputTag(hProfile, tagFloat)
+			return cmsReadFloatOutputTag(ar, hProfile, tagFloat)
 		}
 
 		if !cmsIsTag(hProfile, tag16) {
@@ -823,7 +824,7 @@ func cmsReadOutputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 		}
 
 		if cmsIsTag(hProfile, tag16) {
-			Lut, ok := cmsReadTag(hProfile, tag16).(*cmsPipeline)
+			Lut, ok := cmsReadTag(ar,hProfile, tag16).(*cmsPipeline)
 			if Lut == nil {
 				return nil
 			}
@@ -833,7 +834,7 @@ func cmsReadOutputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 			}
 
 			OriginalType := cmsGetTagTrueType(hProfile, tag16)
-			Lut = cmsPipelineDup(Lut)
+			Lut = cmsPipelineDup(ar, Lut)
 
 			if cmsGetPCS(hProfile) == cmsSigLabData {
 				ChangeInterpolationToTrilinear(Lut)
@@ -843,14 +844,14 @@ func cmsReadOutputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 				return Lut
 			}
 
-			if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageAllocLabV4ToV2(ContextID)) {
-				cmsPipelineFree(Lut)
+			if !cmsPipelineInsertStage(Lut, cmsAT_BEGIN, cmsStageAllocLabV4ToV2(ar, ContextID)) {
+				cmsPipelineFree(ar, Lut)
 				return nil
 			}
 
 			if CmsGetColorSpace(hProfile) == cmsSigLabData &&
-				!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocLabV2ToV4(ContextID)) {
-				cmsPipelineFree(Lut)
+				!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocLabV2ToV4(ar, ContextID)) {
+				cmsPipelineFree(ar, Lut)
 				return nil
 			}
 
@@ -859,10 +860,10 @@ func cmsReadOutputLUT(hProfile CmsHPROFILE, Intent uint32) *cmsPipeline {
 	}
 
 	if CmsGetColorSpace(hProfile) == cmsSigGrayData {
-		return BuildGrayOutputPipeline(hProfile)
+		return BuildGrayOutputPipeline(ar, hProfile)
 	}
 
-	return BuildRGBOutputMatrixShaper(hProfile)
+	return BuildRGBOutputMatrixShaper(ar, hProfile)
 }
 func cmsIsMatrixShaper(hProfile CmsHPROFILE) bool {
 	switch CmsGetColorSpace(hProfile) {
@@ -930,24 +931,24 @@ func cmsIsIntentSupported(hProfile CmsHPROFILE, Intent uint32, UsedDirection uin
 // then combines them into a unique structure holding both.
 
 // cmsReadProfileSequence translates the provided function
-func cmsReadProfileSequence(hProfile CmsHPROFILE) *cmsSEQ {
+func cmsReadProfileSequence(ar *arena.Arena, hProfile CmsHPROFILE) *cmsSEQ {
 	var ProfileSeq, ProfileId, NewSeq *cmsSEQ
 
 	// Take profile sequence description first
-	ProfileSeq, ok := cmsReadTag(hProfile, cmsSigProfileSequenceDescTag).(*cmsSEQ)
+	ProfileSeq, ok := cmsReadTag(ar,hProfile, cmsSigProfileSequenceDescTag).(*cmsSEQ)
 
 	// Take profile sequence ID
-	ProfileId, ok = cmsReadTag(hProfile, cmsSigProfileSequenceIdTag).(*cmsSEQ)
+	ProfileId, ok = cmsReadTag(ar,hProfile, cmsSigProfileSequenceIdTag).(*cmsSEQ)
 
 	// Handle cases where either or both are NULL
 	if ProfileSeq == nil && ProfileId == nil {
 		return nil
 	}
 	if ProfileSeq == nil {
-		return cmsDupProfileSequenceDescription(ProfileId)
+		return cmsDupProfileSequenceDescription(ar, ProfileId)
 	}
 	if ProfileId == nil {
-		return cmsDupProfileSequenceDescription(ProfileSeq)
+		return cmsDupProfileSequenceDescription(ar, ProfileSeq)
 	}
 	if !ok {
 		fmt.Printf("Error: tag is not of the type *cmsSEQ\n")
@@ -956,18 +957,18 @@ func cmsReadProfileSequence(hProfile CmsHPROFILE) *cmsSEQ {
 
 	// Check if sequence lengths match; otherwise, duplicate the description sequence
 	if ProfileSeq.n != ProfileId.n {
-		return cmsDupProfileSequenceDescription(ProfileSeq)
+		return cmsDupProfileSequenceDescription(ar, ProfileSeq)
 	}
 
 	// Duplicate the profile sequence description
-	NewSeq = cmsDupProfileSequenceDescription(ProfileSeq)
+	NewSeq = cmsDupProfileSequenceDescription(ar, ProfileSeq)
 
 	// Mix profile sequence ID into the new sequence
 	// Ok, proceed to the mixing
 	if NewSeq != nil {
 		for i := uint32(0); i < ProfileSeq.n; i++ {
 			copy(NewSeq.seq[i].ProfileID[:], ProfileId.seq[i].ProfileID[:])
-			NewSeq.seq[i].Description = cmsMLUdup(ProfileId.seq[i].Description)
+			NewSeq.seq[i].Description = cmsMLUdup(ar, ProfileId.seq[i].Description)
 		}
 	}
 
@@ -975,15 +976,15 @@ func cmsReadProfileSequence(hProfile CmsHPROFILE) *cmsSEQ {
 }
 
 // cmsWriteProfileSequence dumps the contents of the profile sequence in both tags (if v4 is available).
-func cmsWriteProfileSequence(hProfile CmsHPROFILE, seq *cmsSEQ) bool {
+func cmsWriteProfileSequence(ar *arena.Arena,hProfile CmsHPROFILE, seq *cmsSEQ) bool {
 	// Write the profile sequence description tag
-	if !cmsWriteTag(hProfile, cmsSigProfileSequenceDescTag, seq) {
+	if !cmsWriteTag(ar,hProfile, cmsSigProfileSequenceDescTag, seq) {
 		return false
 	}
 
 	// If the profile is version 4 or later, write the profile sequence ID tag
 	if cmsGetEncodedICCversion(hProfile) >= 0x4000000 {
-		if !cmsWriteTag(hProfile, cmsSigProfileSequenceIdTag, seq) {
+		if !cmsWriteTag(ar,hProfile, cmsSigProfileSequenceIdTag, seq) {
 			return false
 		}
 	}
@@ -992,8 +993,8 @@ func cmsWriteProfileSequence(hProfile CmsHPROFILE, seq *cmsSEQ) bool {
 }
 
 // GetMLUFromProfile reads and duplicates an MLU tag from the profile if found.
-func GetMLUFromProfile(h CmsHPROFILE, sig cmsTagSignature) *cmsMLU {
-	mlu, ok := cmsReadTag(h, sig).(*cmsMLU)
+func GetMLUFromProfile(ar *arena.Arena, h CmsHPROFILE, sig cmsTagSignature) *cmsMLU {
+	mlu, ok := cmsReadTag(ar,h, sig).(*cmsMLU)
 	if mlu == nil {
 		return nil
 	}
@@ -1002,12 +1003,12 @@ func GetMLUFromProfile(h CmsHPROFILE, sig cmsTagSignature) *cmsMLU {
 		return nil
 	}
 
-	return cmsMLUdup(mlu)
+	return cmsMLUdup(ar, mlu)
 }
 
-func cmsCompileProfileSequence(ContextID CmsContext, nProfiles uint32, hProfiles []CmsHPROFILE) *cmsSEQ {
+func cmsCompileProfileSequence(ar *arena.Arena, ContextID CmsContext, nProfiles uint32, hProfiles []CmsHPROFILE) *cmsSEQ {
 	// Allocate a profile sequence description
-	seq := cmsAllocProfileSequenceDescription(ContextID, nProfiles)
+	seq := cmsAllocProfileSequenceDescription(ar, ContextID, nProfiles)
 	if seq == nil {
 		return nil
 	}
@@ -1025,7 +1026,7 @@ func cmsCompileProfileSequence(ContextID CmsContext, nProfiles uint32, hProfiles
 		ps.deviceModel = cmsSignature(cmsGetHeaderModel(h))
 
 		// Retrieve technology tag
-		techpt, ok := cmsReadTag(h, cmsSigTechnologyTag).(*cmsTechnologySignature)
+		techpt, ok := cmsReadTag(ar,h, cmsSigTechnologyTag).(*cmsTechnologySignature)
 		if techpt == nil {
 			ps.technology = cmsTechnologySignature(0)
 		} else if !ok {
@@ -1036,15 +1037,15 @@ func cmsCompileProfileSequence(ContextID CmsContext, nProfiles uint32, hProfiles
 		}
 
 		// Retrieve MLU tags
-		ps.Manufacturer = GetMLUFromProfile(h, cmsSigDeviceMfgDescTag)
-		ps.Model = GetMLUFromProfile(h, cmsSigDeviceModelDescTag)
-		ps.Description = GetMLUFromProfile(h, cmsSigProfileDescriptionTag)
+		ps.Manufacturer = GetMLUFromProfile(ar, h, cmsSigDeviceMfgDescTag)
+		ps.Model = GetMLUFromProfile(ar, h, cmsSigDeviceModelDescTag)
+		ps.Description = GetMLUFromProfile(ar, h, cmsSigProfileDescriptionTag)
 	}
 
 	return seq
 }
-func GetInfo(hProfile CmsHPROFILE, Info CmsInfoType) *cmsMLU {
-//	fmt.Println("GetInfo for info ", Info)
+func GetInfo(ar *arena.Arena,hProfile CmsHPROFILE, Info CmsInfoType) *cmsMLU {
+	//	fmt.Println("GetInfo for info ", Info)
 	var sig cmsTagSignature
 
 	switch Info {
@@ -1059,7 +1060,7 @@ func GetInfo(hProfile CmsHPROFILE, Info CmsInfoType) *cmsMLU {
 	default:
 		return nil
 	}
-	mlu, ok := cmsReadTag(hProfile, sig).(*cmsMLU)
+	mlu, ok := cmsReadTag(ar,hProfile, sig).(*cmsMLU)
 	if mlu == nil {
 		return nil
 	}
@@ -1069,11 +1070,11 @@ func GetInfo(hProfile CmsHPROFILE, Info CmsInfoType) *cmsMLU {
 	}
 	return mlu
 }
-func cmsGetProfileInfo(hProfile CmsHPROFILE, Info CmsInfoType,
+func cmsGetProfileInfo(ar *arena.Arena,hProfile CmsHPROFILE, Info CmsInfoType,
 	LanguageCode string, CountryCode string,
 	Buffer []uint16, BufferSize uint32) uint32 {
 
-	mlu := GetInfo(hProfile, Info)
+	mlu := GetInfo(ar,hProfile, Info)
 	if mlu == nil {
 		return 0
 	}
@@ -1081,15 +1082,15 @@ func cmsGetProfileInfo(hProfile CmsHPROFILE, Info CmsInfoType,
 	return cmsMLUgetWide(mlu, LanguageCode, CountryCode, Buffer, BufferSize)
 }
 
-func CmsGetProfileInfoASCII(hProfile CmsHPROFILE, Info CmsInfoType,
+func CmsGetProfileInfoASCII(ar *arena.Arena,hProfile CmsHPROFILE, Info CmsInfoType,
 	LanguageCode string, CountryCode string,
 	Buffer []byte, BufferSize uint32) uint32 {
-//	fmt.Println("start CmsGetProfileInfoASCII info type ", Info)
-	mlu := GetInfo(hProfile, Info)
+	//	fmt.Println("start CmsGetProfileInfoASCII info type ", Info)
+	mlu := GetInfo(ar,hProfile, Info)
 	if mlu == nil {
 		return 0
 	}
-//	fmt.Println("got mlu and mlu.Entries[0].Len ", mlu, mlu.Entries[0].Len)
+	//	fmt.Println("got mlu and mlu.Entries[0].Len ", mlu, mlu.Entries[0].Len)
 	// Call the corresponding function to get ASCII info
 	return cmsMLUgetASCII(mlu, LanguageCode, CountryCode, Buffer, BufferSize)
 }

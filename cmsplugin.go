@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"unsafe"
+	"arena"
 )
 
 // Check if the platform is little-endian
@@ -412,12 +413,12 @@ func cmsWriteAlignment(io *cmsIOHANDLER) bool {
 }*/
 
 // Main plugin dispatcher
-func cmsPlugin(plugin PluginIntrfc) bool {
-	return cmsPluginTHR(nil, plugin)
+func cmsPlugin(ar *arena.Arena,plugin PluginIntrfc) bool {
+	return cmsPluginTHR(ar,nil, plugin)
 }
 
 // Plugin dispatcher for a specific thread
-func cmsPluginTHR(contextID CmsContext, plugin PluginIntrfc) bool {
+func cmsPluginTHR(ar *arena.Arena,contextID CmsContext, plugin PluginIntrfc) bool {
 	currentPlugin, ok := plugin.(*cmsPluginBase)
 	if !ok {
 		fmt.Printf("Error: Plugin is not of the type cmsPluginBase\n")
@@ -444,35 +445,35 @@ func cmsPluginTHR(contextID CmsContext, plugin PluginIntrfc) bool {
 				return false
 			}
 		case cmsPluginTagTypeSig:
-			if !cmsRegisterTagTypePlugin(contextID, currentPlugin) {
+			if !cmsRegisterTagTypePlugin(ar,contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginTagSig:
-			if !cmsRegisterTagPlugin(contextID, currentPlugin) {
+			if !cmsRegisterTagPlugin(ar,contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginFormattersSig:
-			if !cmsRegisterFormattersPlugin(contextID, currentPlugin) {
+			if !cmsRegisterFormattersPlugin(ar,contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginRenderingIntentSig:
-			if !cmsRegisterRenderingIntentPlugin(contextID, currentPlugin) {
+			if !cmsRegisterRenderingIntentPlugin(ar,contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginParametricCurveSig:
-			if !cmsRegisterParametricCurvesPlugin(contextID, currentPlugin) {
+			if !cmsRegisterParametricCurvesPlugin(ar,contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginMultiProcessElementSig:
-			if !cmsRegisterMultiProcessElementPlugin(contextID, currentPlugin) {
+			if !cmsRegisterMultiProcessElementPlugin(ar,contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginOptimizationSig:
-			if !cmsRegisterOptimizationPlugin(contextID, currentPlugin) {
+			if !cmsRegisterOptimizationPlugin(ar,contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginTransformSig:
-			if !cmsRegisterTransformPlugin(contextID, currentPlugin) {
+			if !cmsRegisterTransformPlugin(ar,contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginMutexSig:
@@ -496,8 +497,8 @@ func cmsPluginTHR(contextID CmsContext, plugin PluginIntrfc) bool {
 }
 
 // Revert all plugins to default
-func cmsUnregisterPlugins() {
-	cmsUnregisterPluginsTHR(nil)
+func cmsUnregisterPlugins(ar *arena.Arena,) {
+	cmsUnregisterPluginsTHR(ar,nil)
 }
 
 /* C-code The context pool (linked list head)  NOT IMPEMENTED NEEDS FURTHER CONSIDERATION
@@ -600,17 +601,17 @@ func cmsGetContext(ContextID CmsContext) CmsContext {
 // plug-in, as a single call to cmsPluginTHR() function may register
 // many different plug-ins simultaneously, then there is no way to
 // identify which plug-in to unregister.
-func cmsUnregisterPluginsTHR(ContextID CmsContext) {
+func cmsUnregisterPluginsTHR(ar *arena.Arena,ContextID CmsContext) {
 	cmsRegisterMemHandlerPlugin(ContextID, nil)
 	cmsRegisterInterpPlugin(ContextID, nil)
-	cmsRegisterTagTypePlugin(ContextID, nil)
-	cmsRegisterTagPlugin(ContextID, nil)
-	cmsRegisterFormattersPlugin(ContextID, nil)
-	cmsRegisterRenderingIntentPlugin(ContextID, nil)
-	cmsRegisterParametricCurvesPlugin(ContextID, nil)
-	cmsRegisterMultiProcessElementPlugin(ContextID, nil)
-	cmsRegisterOptimizationPlugin(ContextID, nil)
-	cmsRegisterTransformPlugin(ContextID, nil)
+	cmsRegisterTagTypePlugin(ar,ContextID, nil)
+	cmsRegisterTagPlugin(ar,ContextID, nil)
+	cmsRegisterFormattersPlugin(ar,ContextID, nil)
+	cmsRegisterRenderingIntentPlugin(ar,ContextID, nil)
+	cmsRegisterParametricCurvesPlugin(ar,ContextID, nil)
+	cmsRegisterMultiProcessElementPlugin(ar,ContextID, nil)
+	cmsRegisterOptimizationPlugin(ar,ContextID, nil)
+	cmsRegisterTransformPlugin(ar,ContextID, nil)
 	cmsRegisterMutexPlugin(ContextID, nil)
 	cmsRegisterParallelizationPlugin(ContextID, nil)
 

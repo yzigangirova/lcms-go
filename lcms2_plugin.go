@@ -2,6 +2,7 @@ package golcms
 
 import (
 	//"unsafe"
+	"arena"
 )
 
 // Constants
@@ -39,9 +40,9 @@ const (
 )
 
 // Tag Base
-type cmsTagTypeSignature  uint32
+type cmsTagTypeSignature uint32
 
-type cmsTagSignature  uint32
+type cmsTagSignature uint32
 
 // Constants for interpolation flags
 const (
@@ -123,6 +124,7 @@ type cmsPluginMultiProcessElement struct {
 
 // cmsIntentFn defines the function type for custom intents.
 type cmsIntentFn func(
+	ar *arena.Arena,
 	ContextID CmsContext, // Context ID
 	nProfiles uint32, // Number of profiles
 	Intents []uint32, // Array of intents
@@ -165,10 +167,10 @@ type cmsPluginParametricCurves struct {
 // _cmsIOHandler represents the internal structure.
 type cms_io_handler struct {
 	Stream       interface{} // Associated stream, implemented differently based on media
-	ContextID    CmsContext     // Context ID
-	UsedSpace    uint32         // Used space in the stream
-	ReportedSize uint32         // Reported size of the stream
-	PhysicalFile string         // Physical file path
+	ContextID    CmsContext  // Context ID
+	UsedSpace    uint32      // Used space in the stream
+	ReportedSize uint32      // Reported size of the stream
+	PhysicalFile string      // Physical file path
 	//	Read         func(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32
 	Read  func(iohandler *cms_io_handler, buffer interface{}, size, count uint32) uint32
 	Seek  func(iohandler *cms_io_handler, offset uint32) bool
@@ -248,7 +250,7 @@ type cmsFormatterFloat func(CMMcargo *cmsTRANSFORM, Values []float32, Buffer []u
 type cmsTransformFn func(CMMcargo *cmsTRANSFORM, InputBuffer,
 	OutputBuffer any, Size uint32, Stride uint32)
 
-type cmsTransform2Fn func(CMMcargo *cmsTRANSFORM, InputBuffer,
+type cmsTransform2Fn func(ar *arena.Arena, CMMcargo *cmsTRANSFORM, InputBuffer,
 	OutputBuffer any, PixelsPerLine uint32, LineCount uint32, Stride *cmsStride)
 
 type cmsTransformFactory func(xform *cmsTransformFn, UserData *interface{},
@@ -294,6 +296,7 @@ type cmsStageCLutData struct {
 // _cmsOPToptimizeFn is a function type for optimization strategies.
 // Returns true if any optimization is done on the LUT, false otherwise.
 type cmsOPToptimizeFn func(
+	ar *arena.Arena,
 	Lut **cmsPipeline,
 	Intent uint32,
 	InputFormat *uint32,
@@ -303,6 +306,7 @@ type cmsOPToptimizeFn func(
 
 // _cmsPipelineEval16Fn is a function type for evaluating the pipeline in 16-bit precision.
 type cmsPipelineEval16Fn func(
+	ar *arena.Arena,
 	In []uint16, // Input array
 	Out []uint16, // Output array
 	Data interface{}, // Arbitrary data
@@ -310,6 +314,7 @@ type cmsPipelineEval16Fn func(
 
 // _cmsPipelineEvalFloatFn is a function type for evaluating the pipeline in floating-point precision.
 type cmsPipelineEvalFloatFn func(
+	ar *arena.Arena,
 	In []float32, // Input array
 	Out []float32, // Output array
 	Data interface{}, // Arbitrary data

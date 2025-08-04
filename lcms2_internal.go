@@ -2,6 +2,7 @@ package golcms
 
 import (
 	//"fmt"
+	"arena"
 	"bytes"
 	"encoding/binary"
 	"math"
@@ -285,9 +286,9 @@ type cmsStage struct {
 
 // Pipelines, Multi Process Elements.
 // Define function pointer types
-type cmsStageEvalFn func(In []float32, Out []float32, mpe *cmsStage)
-type cmsStageDupElemFn func(mpe *cmsStage) interface{}
-type cmsStageFreeElemFn func(mpe *cmsStage)
+type cmsStageEvalFn func(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage)
+type cmsStageDupElemFn func(ar *arena.Arena, mpe *cmsStage) interface{}
+type cmsStageFreeElemFn func(ar *arena.Arena, mpe *cmsStage)
 
 type cmsPipeline struct {
 	Elements       *cmsStage // Points to elements chain

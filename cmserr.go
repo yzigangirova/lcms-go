@@ -2,6 +2,7 @@ package golcms
 
 //import "C"
 import (
+	"arena"
 	"bytes"
 	"encoding/binary"
 	"fmt"
@@ -66,8 +67,13 @@ func allocateMemory(size uintptr) []byte {
 	return mem
 }
 
-func allocateStruct[T any]() *T {
-	return new(T) // Allocates and returns a pointer to type T
+func allocateStruct[T any](ar *arena.Arena) *T {
+	if(ar != nil){
+	   return arena.New[T](ar)
+	}else{
+	   return new(T) // Allocates and returns a pointer to type T
+	}
+
 }
 
 // freeMemory frees manually allocated memory. (No-op in Go)
@@ -297,12 +303,12 @@ func cmsDupMemSlice[T any](src []T) []T {
 // I prefer this method over realloc due to the big impact on xput realloc may have if
 // memory is being swapped to disk. This approach is safer (although that may not be true on all platforms)
 // Create a new suballocation chunk
-func cmsCreateSubAllocChunk(contextID CmsContext, initial uint32) *cmsSubAllocatorChunk {
+func cmsCreateSubAllocChunk(ar *arena.Arena, contextID CmsContext, initial uint32) *cmsSubAllocatorChunk {
 	if initial == 0 {
 		initial = 20 * 1024 // Default to 20KB
 	}
 
-	chunk := allocateStruct[cmsSubAllocatorChunk]()
+	chunk := allocateStruct[cmsSubAllocatorChunk](ar)
 	if chunk == nil {
 		return nil
 	}
@@ -321,14 +327,14 @@ func cmsCreateSubAllocChunk(contextID CmsContext, initial uint32) *cmsSubAllocat
 }
 
 // Create a new suballocator
-func cmsCreateSubAlloc(contextID CmsContext, initial uint32) *cmsSubAllocator {
-	sub := allocateStruct[cmsSubAllocator]()
+func cmsCreateSubAlloc(ar *arena.Arena, contextID CmsContext, initial uint32) *cmsSubAllocator {
+	sub := allocateStruct[cmsSubAllocator](ar)
 	if sub == nil {
 		return nil
 	}
 
 	sub.ContextID = (CmsContext)(contextID)
-	sub.Head = cmsCreateSubAllocChunk(contextID, initial)
+	sub.Head = cmsCreateSubAllocChunk(ar, contextID, initial)
 	if sub.Head == nil {
 		cmsFree(contextID, sub)
 		return nil
@@ -352,7 +358,7 @@ func cmsSubAllocDestroy(sub *cmsSubAllocator) {
 }
 
 // Allocate memory from the suballocator
-func cmsSubAlloc(sub *cmsSubAllocator, size uint32) []byte {
+func cmsSubAlloc(ar *arena.Arena, sub *cmsSubAllocator, size uint32) []byte {
 	size = uint32(cmsALIGNMEM((uintptr(size))))
 
 	freeSpace := sub.Head.BlockSize - sub.Head.Used
@@ -362,7 +368,7 @@ func cmsSubAlloc(sub *cmsSubAllocator, size uint32) []byte {
 			newSize = size
 		}
 
-		newChunk := cmsCreateSubAllocChunk(sub.ContextID, newSize)
+		newChunk := cmsCreateSubAllocChunk(ar, sub.ContextID, newSize)
 		if newChunk == nil {
 			return nil
 		}
@@ -377,12 +383,12 @@ func cmsSubAlloc(sub *cmsSubAllocator, size uint32) []byte {
 	return ptr
 }
 
-func cmsSubAllocDup(sub *cmsSubAllocator, ptr interface{}, size uint32) []byte {
+func cmsSubAllocDup(ar *arena.Arena, sub *cmsSubAllocator, ptr interface{}, size uint32) []byte {
 	if ptr == nil {
 		return nil
 	}
 
-	newPtr := cmsSubAlloc(sub, size)
+	newPtr := cmsSubAlloc(ar, sub, size)
 	if newPtr == nil {
 		return nil
 	}
@@ -665,7 +671,6 @@ func bytesToUint16Slice(b []uint8) []uint16 {
 	return u16
 }
 
-
 func bytesToLab(b []byte) cmsCIELab {
 	var lab cmsCIELab
 	buf := bytes.NewReader(b)
@@ -674,6 +679,7 @@ func bytesToLab(b []byte) cmsCIELab {
 	binary.Read(buf, binary.LittleEndian, &lab.b)
 	return lab
 }
+
 /*import (
 	"bytes"
 	"encoding/binary"

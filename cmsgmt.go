@@ -2,12 +2,13 @@ package golcms
 
 import (
 	//"unsafe"
+	"arena"
 	"fmt"
 )
 
 // Append a Lab identity after the given sequence of profiles and return the transform.
 // Lab profile is closed, rest of the profiles are kept open.
-func cmsChain2Lab(ContextID CmsContext,
+func cmsChain2Lab(ar *arena.Arena, ContextID CmsContext,
 	nProfiles uint32,
 	InputFormat uint32,
 	OutputFormat uint32,
@@ -22,7 +23,7 @@ func cmsChain2Lab(ContextID CmsContext,
 	}
 
 	// Create Lab profile
-	hLab := cmsCreateLab4ProfileTHR(ContextID, nil)
+	hLab := cmsCreateLab4ProfileTHR(ar,ContextID, nil)
 	if hLab == nil {
 		return nil
 	}
@@ -48,7 +49,7 @@ func cmsChain2Lab(ContextID CmsContext,
 	IntentList[nProfiles] = INTENT_RELATIVE_COLORIMETRIC
 
 	// Create the transform
-	xform := cmsCreateExtendedTransform(ContextID, nProfiles+1, ProfileList[:],
+	xform := cmsCreateExtendedTransform(ar,ContextID, nProfiles+1, ProfileList[:],
 		BPCList[:],
 		IntentList[:],
 		AdaptationList[:],
@@ -57,13 +58,13 @@ func cmsChain2Lab(ContextID CmsContext,
 		OutputFormat,
 		dwFlags)
 
-	CmsCloseProfile(hLab)
+	CmsCloseProfile(ar, hLab)
 	return CmsHTRANSFORM(xform)
 }
 
 // Compute K -> L* relationship. Flags may include black point compensation.
 // In this case, the relationship is assumed from the profile with BPC to a black point zero.
-func ComputeKToLstar(ContextID CmsContext,
+func ComputeKToLstar(ar *arena.Arena, ContextID CmsContext,
 	nPoints uint32,
 	nProfiles uint32,
 	Intents []uint32,
@@ -72,7 +73,7 @@ func ComputeKToLstar(ContextID CmsContext,
 	AdaptationStates []float64,
 	dwFlags uint32) *CmsToneCurve {
 
-	xform := cmsChain2Lab(ContextID, nProfiles, TYPE_CMYK_FLT, TYPE_Lab_DBL, Intents, hProfiles, BPC, AdaptationStates, dwFlags)
+	xform := cmsChain2Lab(ar, ContextID, nProfiles, TYPE_CMYK_FLT, TYPE_Lab_DBL, Intents, hProfiles, BPC, AdaptationStates, dwFlags)
 	if xform == nil {
 		return nil
 	}
@@ -82,21 +83,21 @@ func ComputeKToLstar(ContextID CmsContext,
 	for i := uint32(0); i < nPoints; i++ {
 		cmyk := [4]float32{0, 0, 0, float32((float64(i) * 100.0) / float64(nPoints-1))}
 		var Lab cmsCIELab
-		CmsDoTransform(xform, cmyk, Lab, 1)
+		CmsDoTransform(ar,xform, cmyk, Lab, 1)
 
 		// Calculate the offset for the current index and assign the value
 		SampledPoints[i] = float32(1.0 - Lab.L/100.0) // Negate K for easier operation
 	}
 
-	out := cmsBuildTabulatedToneCurveFloat(ContextID, nPoints, SampledPoints)
-	cmsDeleteTransform(xform)
+	out := cmsBuildTabulatedToneCurveFloat(ar, ContextID, nPoints, SampledPoints)
+	cmsDeleteTransform(ar,xform)
 	return out
 }
 
 // Compute Black tone curve on a CMYK -> CMYK transform. This is done by
 // using the proof direction on both profiles to find K->L* relationship
 // then joining both curves. dwFlags may include black point compensation.
-func cmsBuildKToneCurve(ContextID CmsContext,
+func cmsBuildKToneCurve(ar *arena.Arena, ContextID CmsContext,
 	nPoints uint32,
 	nProfiles uint32,
 	Intents []uint32,
@@ -116,12 +117,12 @@ func cmsBuildKToneCurve(ContextID CmsContext,
 	}
 
 	// Compute K->L* relationships for the input and output
-	in := ComputeKToLstar(ContextID, nPoints, nProfiles-1, Intents, hProfiles, BPC, AdaptationStates, dwFlags)
+	in := ComputeKToLstar(ar, ContextID, nPoints, nProfiles-1, Intents, hProfiles, BPC, AdaptationStates, dwFlags)
 	if in == nil {
 		return nil
 	}
 
-	out := ComputeKToLstar(ContextID, nPoints, 1,
+	out := ComputeKToLstar(ar, ContextID, nPoints, 1,
 		Intents[nProfiles-1:nProfiles],
 		hProfiles[nProfiles-1:nProfiles],
 		BPC[nProfiles-1:nProfiles],
@@ -133,7 +134,7 @@ func cmsBuildKToneCurve(ContextID CmsContext,
 	}
 
 	// Join the input and output curves
-	KTone := cmsJoinToneCurve(ContextID, in, out, nPoints)
+	KTone := cmsJoinToneCurve(ar, ContextID, in, out, nPoints)
 	CmsFreeToneCurve(in)
 	CmsFreeToneCurve(out)
 
@@ -158,7 +159,7 @@ type cmsTACestimator struct {
 }
 
 // EstimateTAC is the callback function to calculate maximum TAC.
-func EstimateTAC(in []uint16, out []uint16, cargo interface{}) int32 {
+func EstimateTAC(ar *arena.Arena, in []uint16, out []uint16, cargo interface{}) int32 {
 	bp, ok := cargo.(*cmsTACestimator)
 	if !ok {
 		fmt.Printf("Error: Interface data assertion error, not *cmsTACestimator\n")
@@ -168,7 +169,7 @@ func EstimateTAC(in []uint16, out []uint16, cargo interface{}) int32 {
 	var sum float32
 
 	// Evaluate the transform
-	CmsDoTransform(bp.hRoundTrip, in, roundTrip, 1)
+	CmsDoTransform(ar,bp.hRoundTrip, in, roundTrip, 1)
 
 	// Sum all amounts of ink
 	for i := 0; i < int(bp.nOutputChans); i++ {
@@ -187,7 +188,7 @@ func EstimateTAC(in []uint16, out []uint16, cargo interface{}) int32 {
 }
 
 // cmsDetectTAC detects the total area coverage (TAC) of the profile.
-func cmsDetectTAC(hProfile CmsHPROFILE) float64 {
+func cmsDetectTAC(ar *arena.Arena, hProfile CmsHPROFILE) float64 {
 	var bp cmsTACestimator
 	var dwFormatter uint32
 	var gridPoints [MAX_INPUT_DIMENSIONS]uint32
@@ -215,13 +216,13 @@ func cmsDetectTAC(hProfile CmsHPROFILE) float64 {
 		return 0
 	}
 
-	hLab := cmsCreateLab4ProfileTHR(contextID, nil)
+	hLab := cmsCreateLab4ProfileTHR(ar,contextID, nil)
 	if hLab == nil {
 		return 0
 	}
 
 	// Setup a roundtrip on perceptual intent in output profile for TAC estimation
-	bp.hRoundTrip = cmsCreateTransformTHR(
+	bp.hRoundTrip = cmsCreateTransformTHR(ar,
 		contextID,
 		hLab,
 		TYPE_Lab_16,
@@ -230,7 +231,7 @@ func cmsDetectTAC(hProfile CmsHPROFILE) float64 {
 		INTENT_PERCEPTUAL,
 		cmsFLAGS_NOOPTIMIZE|cmsFLAGS_NOCACHE,
 	)
-	CmsCloseProfile(hLab)
+	CmsCloseProfile(ar, hLab)
 
 	if bp.hRoundTrip == nil {
 		return 0
@@ -241,11 +242,11 @@ func cmsDetectTAC(hProfile CmsHPROFILE) float64 {
 	gridPoints[1] = 74
 	gridPoints[2] = 74
 
-	if !cmsSliceSpace16(3, gridPoints[:], EstimateTAC, &bp) {
+	if !cmsSliceSpace16(ar, 3, gridPoints[:], EstimateTAC, &bp) {
 		bp.MaxTAC = 0
 	}
 
-	cmsDeleteTransform(bp.hRoundTrip)
+	cmsDeleteTransform(ar,bp.hRoundTrip)
 
 	// Results in %
 	return float64(bp.MaxTAC)
@@ -269,7 +270,7 @@ const ERR_THRESHOLD = 5
 
 // GamutSampler computes gamut boundaries by comparing original values with a transform
 // going back and forth. Values above ERR_THRESHOLD are considered out of gamut.
-func GamutSampler(In []uint16, Out []uint16, cargo interface{}) int32 {
+func GamutSampler(ar *arena.Arena, In []uint16, Out []uint16, cargo interface{}) int32 {
 	t, ok := cargo.(*GAMUTCHAIN)
 	if !ok {
 		fmt.Printf("Error: Interface data assertion error, not *GAMUTCHAIN\n")
@@ -287,14 +288,14 @@ func GamutSampler(In []uint16, Out []uint16, cargo interface{}) int32 {
 	// Convert input to Lab
 	//CmsDoTransform(t.hInput, In,LabIn1, 1)
 	LabIn1Slice := LabToSlice(LabIn1)
-	CmsDoTransform(t.hInput, In, LabIn1Slice, 1)
+	CmsDoTransform(ar,t.hInput, In, LabIn1Slice, 1)
 
 	// Convert from PCS to colorant. This always returns in-gamut values.
-	CmsDoTransform(t.hForward, LabIn1Slice, Proof[:], 1)
+	CmsDoTransform(ar,t.hForward, LabIn1Slice, Proof[:], 1)
 
 	// Convert from colorant to PCS.
 	LabOut1Slice := LabToSlice(LabOut1)
-	CmsDoTransform(t.hReverse, Proof[:], LabOut1Slice, 1)
+	CmsDoTransform(ar,t.hReverse, Proof[:], LabOut1Slice, 1)
 
 	// Copy LabOut1 to LabIn2
 
@@ -304,9 +305,9 @@ func GamutSampler(In []uint16, Out []uint16, cargo interface{}) int32 {
 	LabIn1 = SliceToLab(LabIn1Slice)
 	LabIn2 = SliceToLab(LabIn2Slice)
 	// Forward and reverse transform again, using LabOut1 as input
-	CmsDoTransform(t.hForward, LabOut1Slice, Proof2[:], 1)
+	CmsDoTransform(ar,t.hForward, LabOut1Slice, Proof2[:], 1)
 	LabOut2Slice := LabToSlice(LabOut2)
-	CmsDoTransform(t.hReverse, Proof2[:], LabOut2Slice, 1)
+	CmsDoTransform(ar,t.hReverse, Proof2[:], LabOut2Slice, 1)
 	LabOut2 = SliceToLab(LabOut2Slice)
 	LabOut1 = SliceToLab(LabOut1Slice)
 
@@ -348,6 +349,7 @@ func GamutSampler(In []uint16, Out []uint16, cargo interface{}) int32 {
 // of course, many perceptual and saturation intents does not work in such way, but relativ. ones should.
 // Used by gamut & softproofing
 func cmsCreateGamutCheckPipeline(
+	ar *arena.Arena,
 	ContextID CmsContext,
 	hProfiles []CmsHPROFILE,
 	BPC []bool,
@@ -376,7 +378,7 @@ func cmsCreateGamutCheckPipeline(
 		return nil
 	}
 
-	hLab = cmsCreateLab4ProfileTHR(ContextID, nil)
+	hLab = cmsCreateLab4ProfileTHR(ar,ContextID, nil)
 	if hLab == nil {
 		return nil
 	}
@@ -408,7 +410,7 @@ func cmsCreateGamutCheckPipeline(
 	dwFormat = CHANNELS_SH(uint32(nChannels)) | BYTES_SH(2)
 
 	// Create the input transform
-	Chain.hInput = CmsHTRANSFORM(cmsCreateExtendedTransform(
+	Chain.hInput = CmsHTRANSFORM(cmsCreateExtendedTransform(ar,
 		ContextID,
 		nGamutPCSposition+1,
 		ProfileList[:],
@@ -423,7 +425,7 @@ func cmsCreateGamutCheckPipeline(
 	))
 
 	// Create the forward step
-	Chain.hForward = cmsCreateTransformTHR(
+	Chain.hForward = cmsCreateTransformTHR(ar,
 		ContextID,
 		hLab, TYPE_Lab_DBL,
 		hGamut, dwFormat,
@@ -432,7 +434,7 @@ func cmsCreateGamutCheckPipeline(
 	)
 
 	// Create the backwards step
-	Chain.hReverse = cmsCreateTransformTHR(
+	Chain.hReverse = cmsCreateTransformTHR(ar,
 		ContextID,
 		hGamut, dwFormat,
 		hLab, TYPE_Lab_DBL,
@@ -443,14 +445,14 @@ func cmsCreateGamutCheckPipeline(
 	// Verify all steps are created successfully
 	if Chain.hInput != nil && Chain.hForward != nil && Chain.hReverse != nil {
 		// Compute gamut LUT
-		Gamut = cmsPipelineAlloc(ContextID, 3, 1)
+		Gamut = cmsPipelineAlloc(ar, ContextID, 3, 1)
 		if Gamut != nil {
-			CLUT = cmsStageAllocCLut16bit(ContextID, nGridpoints, uint32(nChannels), 1, nil)
+			CLUT = cmsStageAllocCLut16bit(ar,ContextID, nGridpoints, uint32(nChannels), 1, nil)
 			if !cmsPipelineInsertStage(Gamut, cmsAT_BEGIN, CLUT) {
-				cmsPipelineFree(Gamut)
+				cmsPipelineFree(ar,Gamut)
 				Gamut = nil
 			} else {
-				cmsStageSampleCLut16bit(CLUT, GamutSampler, &Chain, 0)
+				cmsStageSampleCLut16bit(ar,CLUT, GamutSampler, &Chain, 0)
 			}
 		}
 	} else {
@@ -459,16 +461,16 @@ func cmsCreateGamutCheckPipeline(
 
 	// Free resources
 	if Chain.hInput != nil {
-		cmsDeleteTransform(Chain.hInput)
+		cmsDeleteTransform(ar,Chain.hInput)
 	}
 	if Chain.hForward != nil {
-		cmsDeleteTransform(Chain.hForward)
+		cmsDeleteTransform(ar,Chain.hForward)
 	}
 	if Chain.hReverse != nil {
-		cmsDeleteTransform(Chain.hReverse)
+		cmsDeleteTransform(ar,Chain.hReverse)
 	}
 	if hLab != nil {
-		CmsCloseProfile(hLab)
+		CmsCloseProfile(ar, hLab)
 	}
 
 	// Return the computed LUT
@@ -478,7 +480,7 @@ func cmsCreateGamutCheckPipeline(
 // cmsDetectRGBProfileGamma detects whether a given ICC profile works in linear (gamma 1.0) space.
 // It uses least squares fitting to estimate gamma for a synthetic gray (R=G=B).
 // If gamma is close to 1.0, RGB is linear. On unsupported profiles, -1 is returned.
-func cmsDetectRGBProfileGamma(hProfile CmsHPROFILE, threshold float64) float64 {
+func cmsDetectRGBProfileGamma(ar *arena.Arena, hProfile CmsHPROFILE, threshold float64) float64 {
 	var (
 		ContextID   CmsContext
 		hXYZ        CmsHPROFILE
@@ -505,17 +507,17 @@ func cmsDetectRGBProfileGamma(hProfile CmsHPROFILE, threshold float64) float64 {
 
 	// Obtain the context ID and create an XYZ profile
 	ContextID = cmsGetProfileContextID(hProfile)
-	hXYZ = cmsCreateXYZProfileTHR(ContextID)
+	hXYZ = cmsCreateXYZProfileTHR(ar,ContextID)
 	if hXYZ == nil {
 		return -1
 	}
 
 	// Create a transform from RGB to XYZ
-	xform = cmsCreateTransformTHR(ContextID, hProfile, TYPE_RGB_16, hXYZ, TYPE_XYZ_DBL,
+	xform = cmsCreateTransformTHR(ar,ContextID, hProfile, TYPE_RGB_16, hXYZ, TYPE_XYZ_DBL,
 		INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOOPTIMIZE)
 
 	if xform == nil {
-		CmsCloseProfile(hXYZ)
+		CmsCloseProfile(ar, hXYZ)
 		return -1
 	}
 
@@ -527,11 +529,11 @@ func cmsDetectRGBProfileGamma(hProfile CmsHPROFILE, threshold float64) float64 {
 	}
 
 	// Perform the transform
-	CmsDoTransform(xform, rgb[:], XYZ[:], 256)
+	CmsDoTransform(ar,xform, rgb[:], XYZ[:], 256)
 
 	// Clean up the transform and XYZ profile
-	cmsDeleteTransform(xform)
-	CmsCloseProfile(hXYZ)
+	cmsDeleteTransform(ar,xform)
+	CmsCloseProfile(ar, hXYZ)
 
 	// Normalize the Y component
 	for i := 0; i < 256; i++ {
@@ -539,7 +541,7 @@ func cmsDetectRGBProfileGamma(hProfile CmsHPROFILE, threshold float64) float64 {
 	}
 
 	// Build a tone curve from the normalized Y values
-	YCurve = cmsBuildTabulatedToneCurveFloat(ContextID, 256, YNormalized[:])
+	YCurve = cmsBuildTabulatedToneCurveFloat(ar, ContextID, 256, YNormalized[:])
 	if YCurve == nil {
 		return -1
 	}
