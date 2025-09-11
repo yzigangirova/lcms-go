@@ -5,10 +5,11 @@ import (
 	"arena"
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"math"
 	"unicode"
 	"unsafe"
+	"fmt"
+	"os"
 )
 
 // ---------------------------------------------------------------------------------------------------------
@@ -43,8 +44,9 @@ func DefaultLogErrorHandlerFunction(ContextID CmsContext, ErrorCode uint32, text
 }
 
 // cmsSignalError simulates error signaling
-func cmsSignalError(id interface{}, code int, message string) {
-	fmt.Printf("Error: %s (code %d)\n", message, code)
+func cmsSignalError(id interface{}, code int, message string, args ...any) {
+	msg := fmt.Sprintf(message, args...)
+	fmt.Fprintf(os.Stderr, "Error GOLCMS (%d) %s\n", code, msg)
 	/* not translated in Go yet
 		 // Check for the context, if specified go there. If not, go for the global
 	    lhg = (cmsLogErrorChunkType*) CmsContextGetClientChunk(ContextID, Logger);
@@ -68,10 +70,10 @@ func allocateMemory(size uintptr) []byte {
 }
 
 func allocateStruct[T any](ar *arena.Arena) *T {
-	if(ar != nil){
-	   return arena.New[T](ar)
-	}else{
-	   return new(T) // Allocates and returns a pointer to type T
+	if ar != nil {
+		return arena.New[T](ar)
+	} else {
+		return new(T) // Allocates and returns a pointer to type T
 	}
 
 }
@@ -210,7 +212,8 @@ func cmsRegisterMemHandlerPlugin(context CmsContext, Data PluginIntrfc) bool {
 
 	plugin, ok := Data.(*cmsPluginMemHandler)
 	if !ok {
-		fmt.Printf("Error: Plugin is not of the type cmsPluginMemHandler\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginMemHandler")
+
 		return false
 	}
 	// Check for required callbacks
@@ -237,7 +240,7 @@ func cmsMalloc(contextID CmsContext, size uint32) []byte {
 	return ptr.MallocPtr(contextID, size)
 }
 
-// Generic allocate & zero
+// Generic allocate & zero replaced with allocStruct
 /*func cmsMallocZero(contextID CmsContext, size uint32) unsafe.Pointer {
 	ptr := (*cmsMemPluginChunkType)(CmsContextGetClientChunk(contextID, MemPlugin))
 	return ptr.MallocZeroPtr(contextID, size)
@@ -266,7 +269,7 @@ func cmsFree(contextID CmsContext, oldPtr interface{}) {
 	if oldPtr != nil {
 		ptr, ok := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
 		if !ok || ptr != nil && ptr.FreePtr != nil {
-			ptr.FreePtr(contextID, oldPtr, 0) //have to thing about freeing memory and size variable
+			ptr.FreePtr(contextID, oldPtr, 0) //have to think about freeing memory and size variable
 		}
 	}
 }
@@ -467,7 +470,7 @@ func defMtxUnlock(mtx *cmsMutex) {
 func cmsRegisterMutexPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
 	ctx, ok := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not cmsMutexPluginChunkType\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, " Interface data assertion error, not cmsMutexPluginChunkType\n")
 		return false
 	}
 	// If Data is nil, reset the mutex pointers to nil and return true.
@@ -481,7 +484,7 @@ func cmsRegisterMutexPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
 
 	plugin, ok := Data.(*cmsPluginMutex)
 	if !ok {
-		fmt.Printf("Error: Plugin is not of the type cmsPluginMutex\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, " Plugin is not of the type cmsPluginMutex\n")
 		return false
 	}
 	// Ensure all required callback functions are provided.
@@ -508,12 +511,12 @@ func cmsRegisterParallelizationPlugin(ContextID CmsContext, Data interface{}) bo
 
 	Plugin, ok := Data.(*cmsPluginParalellization)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not cmsPluginParalellization\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not cmsPluginParalellization\n")
 		return false
 	}
 	ctx, ok := CmsContextGetClientChunk(ContextID, ParallelizationPlugin).(*cmsParallelizationPluginChunkType)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error not cmsParallelizationPluginChunkType\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error not cmsParallelizationPluginChunkType\n")
 		return false
 	}
 	if Data == nil {
@@ -541,7 +544,7 @@ func cmsCreateMutex(ContextID CmsContext) *cmsMutex {
 
 	ptr, ok := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not cmsMutexPluginChunkType\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not cmsMutexPluginChunkType\n")
 		return nil
 	}
 	if ptr.CreateMutexPtr == nil {
@@ -556,7 +559,7 @@ func cmsDestroyMutex(ContextID CmsContext, mtx *cmsMutex) {
 
 	ptr, ok := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not cmsMutexPluginChunkType\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not cmsMutexPluginChunkType\n")
 	}
 	if ptr.DestroyMutexPtr != nil {
 
@@ -569,7 +572,7 @@ func cmsLockMutex(ContextID CmsContext, mtx *cmsMutex) bool {
 
 	ptr, ok := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not cmsMutexPluginChunkType\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not cmsMutexPluginChunkType\n")
 		return false
 	}
 	if ptr.LockMutexPtr == nil {
@@ -583,24 +586,13 @@ func cmsLockMutex(ContextID CmsContext, mtx *cmsMutex) bool {
 func cmsUnlockMutex(ContextID CmsContext, mtx *cmsMutex) {
 	ptr, ok := CmsContextGetClientChunk(ContextID, MutexPlugin).(*cmsMutexPluginChunkType)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not cmsMutexPluginChunkType\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not cmsMutexPluginChunkType\n")
 	}
 	if ptr.UnlockMutexPtr != nil {
 
 		ptr.UnlockMutexPtr(mtx)
 	}
 }
-
-// Utility function to print signatures
-/*func cmsTagSignature2String(sig cmsTagSignature) string {
-	be := cmsAdjustEndianess32(uint32(sig))
-	return string([]byte{
-		byte(be >> 24),
-		byte(be >> 16),
-		byte(be >> 8),
-		byte(be),
-	})
-}*/
 
 func cmsTagSignature2String(sig cmsTagSignature) string {
 	return string([]byte{
@@ -679,39 +671,3 @@ func bytesToLab(b []byte) cmsCIELab {
 	binary.Read(buf, binary.LittleEndian, &lab.b)
 	return lab
 }
-
-/*import (
-	"bytes"
-	"encoding/binary"
-	"fmt"
-)
-// Convert []float32 to []byte
-func float32SliceToBytes(floats []float32) []byte {
-	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.LittleEndian, floats) // Change to binary.BigEndian if needed
-	if err != nil {
-		panic("Error converting float32 slice to bytes: " + err.Error())
-	}
-	return buf.Bytes()
-}
-
-// Convert []float64 to []byte
-func float64SliceToBytes(floats []float64) []byte {
-	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.LittleEndian, floats)
-	if err != nil {
-		panic("Error converting float64 slice to bytes: " + err.Error())
-	}
-	return buf.Bytes()
-}
-
-// Convert []uint16 to []byte
-func uint16SliceToBytes(ints []uint16) []byte {
-	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.LittleEndian, ints)
-	if err != nil {
-		panic("Error converting uint16 slice to bytes: " + err.Error())
-	}
-	return buf.Bytes()
-}
-*/

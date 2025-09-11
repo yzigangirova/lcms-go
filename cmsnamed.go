@@ -1,14 +1,11 @@
 package golcms
 
 import (
-	//"encoding/binary"
-	//"unsafe"
-	"fmt"
 	"arena"
 )
 
 // cmsMLUalloc allocates an empty multi-localized unicode object.
-func cmsMLUalloc(ar *arena.Arena,ContextID CmsContext, nItems uint32) *cmsMLU {
+func cmsMLUalloc(ar *arena.Arena, ContextID CmsContext, nItems uint32) *cmsMLU {
 	if nItems <= 0 {
 		nItems = 2
 	}
@@ -191,12 +188,12 @@ func cmsMLUsetWide(mlu *cmsMLU, Language, Country string, WideString []uint16) b
 }
 
 // cmsMLUdup duplicates an MLU.
-func cmsMLUdup(ar *arena.Arena,mlu *cmsMLU) *cmsMLU {
+func cmsMLUdup(ar *arena.Arena, mlu *cmsMLU) *cmsMLU {
 	if mlu == nil {
 		return nil
 	}
 
-	newMLU := cmsMLUalloc(ar,mlu.ContextID, mlu.UsedEntries)
+	newMLU := cmsMLUalloc(ar, mlu.ContextID, mlu.UsedEntries)
 	if newMLU == nil {
 		return nil
 	}
@@ -466,7 +463,7 @@ func GrowNamedColorList(v *cmsNAMEDCOLORLIST) bool {
 }
 
 // cmsAllocNamedColorList allocates a list for n elements.
-func cmsAllocNamedColorList(ar *arena.Arena,ContextID CmsContext, n, ColorantCount uint32, Prefix, Suffix string) *cmsNAMEDCOLORLIST {
+func cmsAllocNamedColorList(ar *arena.Arena, ContextID CmsContext, n, ColorantCount uint32, Prefix, Suffix string) *cmsNAMEDCOLORLIST {
 	if ColorantCount > cmsMAXCHANNELS {
 		return nil
 	}
@@ -508,12 +505,12 @@ func cmsFreeNamedColorList(v *cmsNAMEDCOLORLIST) {
 }
 
 // cmsDupNamedColorList duplicates a named color list.
-func cmsDupNamedColorList(ar *arena.Arena,v *cmsNAMEDCOLORLIST) *cmsNAMEDCOLORLIST {
+func cmsDupNamedColorList(ar *arena.Arena, v *cmsNAMEDCOLORLIST) *cmsNAMEDCOLORLIST {
 	if v == nil {
 		return nil
 	}
 
-	newNC := cmsAllocNamedColorList(ar,v.ContextID, v.nColors, v.ColorantCount, string(v.Prefix[:]), string(v.Suffix[:]))
+	newNC := cmsAllocNamedColorList(ar, v.ContextID, v.nColors, v.ColorantCount, string(v.Prefix[:]), string(v.Suffix[:]))
 	if newNC == nil {
 		return nil
 	}
@@ -539,19 +536,19 @@ func cmsDupNamedColorList(ar *arena.Arena,v *cmsNAMEDCOLORLIST) *cmsNAMEDCOLORLI
 }
 
 // FreeNamedColorList releases the resources for the named color list.
-func FreeNamedColorList(ar *arena.Arena,mpe *cmsStage) {
+func FreeNamedColorList(ar *arena.Arena, mpe *cmsStage) {
 	list := mpe.Data.(*cmsNAMEDCOLORLIST)
 	cmsFreeNamedColorList(list)
 }
 
 // DupNamedColorList duplicates the named color list.
-func DupNamedColorList(ar *arena.Arena,mpe *cmsStage) interface{} {
+func DupNamedColorList(ar *arena.Arena, mpe *cmsStage) interface{} {
 	list, ok := mpe.Data.(*cmsNAMEDCOLORLIST)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsNAMEDCOLORLIST\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsNAMEDCOLORLIST\n")
 		return nil
 	}
-	return cmsDupNamedColorList(ar,list)
+	return cmsDupNamedColorList(ar, list)
 }
 
 // EvalNamedColorPCS evaluates the named color in PCS (Profile Connection Space).
@@ -560,14 +557,14 @@ func DupNamedColorList(ar *arena.Arena,mpe *cmsStage) interface{} {
 func EvalNamedColorPCS(ar *arena.Arena, in []float32, out []float32, mpe *cmsStage) {
 	NamedColorList, ok := mpe.Data.(*cmsNAMEDCOLORLIST)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsNAMEDCOLORLIST\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsNAMEDCOLORLIST\n")
 		return
 	}
 	index := uint16(cmsQuickSaturateWord(float64(in[0]) * 65535.0))
 	// Interpret the `List` pointer as a slice of cmsNAMEDCOLOR.
 
 	if uint32(index) >= NamedColorList.nColors {
-		cmsSignalError(NamedColorList.ContextID, cmsERROR_RANGE, "Color %d out of range")
+		cmsSignalError(NamedColorList.ContextID, cmsERROR_RANGE, "Color %d out of range", index)
 		out[0] = 0.0
 		out[1] = 0.0
 		out[2] = 0.0
@@ -584,7 +581,7 @@ func EvalNamedColorPCS(ar *arena.Arena, in []float32, out []float32, mpe *cmsSta
 func EvalNamedColor(ar *arena.Arena, in []float32, out []float32, mpe *cmsStage) {
 	namedColorList, ok := mpe.Data.(*cmsNAMEDCOLORLIST)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsNAMEDCOLORLIST\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsNAMEDCOLORLIST\n")
 		return
 	}
 	index := uint16(cmsQuickSaturateWord(float64(in[0]) * 65535.0))
@@ -606,7 +603,7 @@ func EvalNamedColor(ar *arena.Arena, in []float32, out []float32, mpe *cmsStage)
 
 // Named color lookup element
 // _cmsStageAllocNamedColor allocates a named color lookup element.
-func cmsStageAllocNamedColor(ar *arena.Arena,namedColorList *cmsNAMEDCOLORLIST, usePCS bool) *cmsStage {
+func cmsStageAllocNamedColor(ar *arena.Arena, namedColorList *cmsNAMEDCOLORLIST, usePCS bool) *cmsStage {
 	// Determine the output channel count based on the `usePCS` condition.
 	outputChannels := uint32(1)
 	if usePCS {
@@ -627,12 +624,12 @@ func cmsStageAllocNamedColor(ar *arena.Arena,namedColorList *cmsNAMEDCOLORLIST, 
 	return cmsStageAllocPlaceholder(ar,
 		namedColorList.ContextID,
 		cmsSigNamedColorElemType,
-		1,                                    // Input channels are always 1.
-		outputChannels,                       // Output channels depend on `usePCS`.
-		evalFunc,                             // Evaluation function depends on `usePCS`.
-		DupNamedColorList,                    // Duplication function.
-		FreeNamedColorList,                   // Freeing function.
-		cmsDupNamedColorList(ar,namedColorList), // Duplicate the named color list.
+		1,                                        // Input channels are always 1.
+		outputChannels,                           // Output channels depend on `usePCS`.
+		evalFunc,                                 // Evaluation function depends on `usePCS`.
+		DupNamedColorList,                        // Duplication function.
+		FreeNamedColorList,                       // Freeing function.
+		cmsDupNamedColorList(ar, namedColorList), // Duplicate the named color list.
 	)
 }
 
@@ -737,7 +734,7 @@ func cmsNamedColorIndex(namedColorList *cmsNAMEDCOLORLIST, name *byte) int32 {
 }
 
 // cmsAllocProfileSequenceDescription allocates memory for a profile sequence description.
-func cmsAllocProfileSequenceDescription(ar *arena.Arena,ContextID CmsContext, n uint32) *cmsSEQ {
+func cmsAllocProfileSequenceDescription(ar *arena.Arena, ContextID CmsContext, n uint32) *cmsSEQ {
 	if n == 0 || n > 255 {
 		return nil // Invalid input
 	}
@@ -791,7 +788,7 @@ func cmsFreeProfileSequenceDescription(pseq *cmsSEQ) {
 }
 
 // cmsDupProfileSequenceDescription duplicates a profile sequence description.
-func cmsDupProfileSequenceDescription(ar *arena.Arena,pseq *cmsSEQ) *cmsSEQ {
+func cmsDupProfileSequenceDescription(ar *arena.Arena, pseq *cmsSEQ) *cmsSEQ {
 	if pseq == nil {
 		return nil
 	}
@@ -823,8 +820,8 @@ func cmsDupProfileSequenceDescription(ar *arena.Arena,pseq *cmsSEQ) *cmsSEQ {
 		dstEntry.technology = srcEntry.technology
 
 		// Duplicate MLU fields
-		dstEntry.Manufacturer = cmsMLUdup(ar,srcEntry.Manufacturer)
-		dstEntry.Model = cmsMLUdup(ar,srcEntry.Model)
+		dstEntry.Manufacturer = cmsMLUdup(ar, srcEntry.Manufacturer)
+		dstEntry.Model = cmsMLUdup(ar, srcEntry.Model)
 		dstEntry.Description = cmsMLUdup(ar, srcEntry.Description)
 	}
 
@@ -850,7 +847,7 @@ func cmsDictFree(hDict CmsHANDLE) {
 		return
 	}
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsDICT\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsDICT\n")
 		return
 	}
 	entry := dict.head
@@ -880,10 +877,10 @@ func DupWcs(contextID CmsContext, ptr []uint16) []uint16 {
 }
 
 // Add a new entry to the linked list
-func cmsDictAddEntry(ar *arena.Arena,hDict CmsHANDLE, name string, value string, displayName *cmsMLU, displayValue *cmsMLU) bool {
+func cmsDictAddEntry(ar *arena.Arena, hDict CmsHANDLE, name string, value string, displayName *cmsMLU, displayValue *cmsMLU) bool {
 	dict, ok := hDict.(*cmsDICT)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsDICT\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsDICT\n")
 		return false
 	}
 	if dict == nil || name == "" {
@@ -895,8 +892,8 @@ func cmsDictAddEntry(ar *arena.Arena,hDict CmsHANDLE, name string, value string,
 		return false
 	}
 
-	entry.DisplayName = cmsMLUdup(ar,displayName)
-	entry.DisplayValue = cmsMLUdup(ar,displayValue)
+	entry.DisplayName = cmsMLUdup(ar, displayName)
+	entry.DisplayValue = cmsMLUdup(ar, displayValue)
 	entry.Name = name
 	entry.Value = value
 	entry.Next = dict.head
@@ -906,17 +903,17 @@ func cmsDictAddEntry(ar *arena.Arena,hDict CmsHANDLE, name string, value string,
 }
 
 // Duplicate an existing dictionary
-func cmsDictDup(ar *arena.Arena,hDict CmsHANDLE) CmsHANDLE {
+func cmsDictDup(ar *arena.Arena, hDict CmsHANDLE) CmsHANDLE {
 	oldDict, ok := hDict.(*cmsDICT)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsDICT\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsDICT\n")
 		return nil
 	}
 	if oldDict == nil {
 		return nil
 	}
 
-	newDict := cmsDictAlloc(ar,oldDict.ContextID)
+	newDict := cmsDictAlloc(ar, oldDict.ContextID)
 	if newDict == nil {
 		return nil
 	}
@@ -937,7 +934,7 @@ func cmsDictDup(ar *arena.Arena,hDict CmsHANDLE) CmsHANDLE {
 func cmsDictGetEntryList(hDict CmsHANDLE) *cmsDICTentry {
 	dict, ok := hDict.(*cmsDICT)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsDICT\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsDICT\n")
 		return nil
 	}
 	if dict == nil {

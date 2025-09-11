@@ -22,7 +22,7 @@ func TestCmsD50_xyY(t *testing.T) {
 func TestCmsWhitePointFromTemp_Valid(t *testing.T) {
 	var wp CmsCIExyY
 	err := cmsWhitePointFromTemp(&wp, 6500)
-	if err != nil {
+	if err == false {
 		t.Errorf("cmsWhitePointFromTemp failed: %v", err)
 	}
 	if wp.X_small <= 0 || wp.Y_small <= 0 {
@@ -33,7 +33,7 @@ func TestCmsWhitePointFromTemp_Valid(t *testing.T) {
 func TestCmsWhitePointFromTemp_Invalid(t *testing.T) {
 	var wp CmsCIExyY
 	err := cmsWhitePointFromTemp(&wp, 3000)
-	if err == nil {
+	if err == true {
 		t.Errorf("Expected error for invalid temperature")
 	}
 }
@@ -41,7 +41,7 @@ func TestCmsWhitePointFromTemp_Invalid(t *testing.T) {
 func TestCmsTempFromWhitePoint_Roundtrip(t *testing.T) {
 	var wp CmsCIExyY
 	err := cmsWhitePointFromTemp(&wp, 6500)
-	if err != nil {
+	if err == false {
 		t.Fatalf("Temp -> WhitePoint failed: %v", err)
 	}
 

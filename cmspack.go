@@ -3,11 +3,11 @@ package golcms
 import (
 	"encoding/binary"
 	//"errors"
+	"arena"
 	"bytes"
-	"fmt"
+	//"fmt"
 	"math"
 	"unsafe"
-	"arena"
 )
 
 //FIRST HALF OF THE FILE SKIPPED YET
@@ -696,7 +696,7 @@ func UnrollLabDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride
 		buf := bytes.NewReader(accum[:24])
 		_ = binary.Read(buf, binary.LittleEndian, &Lab)
 		if len(wIn) < 3 {
-			fmt.Errorf("wIn lenght is less than 3")
+			cmsSignalError(nil, cmsERROR_UNDEFINED, "wIn lenght is less than 3")
 			return accum
 		}
 		cmsFloat2LabEncoded(wIn, &Lab)
@@ -720,7 +720,7 @@ func UnrollLabFloatTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride 
 		Lab.b = (float64)(posb[0])
 
 		if len(wIn) < 3 {
-			fmt.Errorf("wIn lenght is less than 3")
+			cmsSignalError(nil, cmsERROR_UNDEFINED, "wIn lenght is less than 3")
 			return accum
 		}
 		cmsFloat2LabEncoded(wIn, &Lab)
@@ -731,7 +731,7 @@ func UnrollLabFloatTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride 
 		Lab.b = (float64)(accum[8])
 
 		if len(wIn) < 3 {
-			fmt.Errorf("wIn lenght is less than 3")
+			cmsSignalError(nil, cmsERROR_UNDEFINED, "wIn lenght is less than 3")
 			return accum
 		}
 		cmsFloat2LabEncoded(wIn, &Lab)
@@ -2849,31 +2849,31 @@ func DupFormatterFactoryList(ar *arena.Arena, ctx CmsContext, src CmsContext) {
 		}
 	}
 
-	(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup(ar,(CmsContextStruct)(*ctx).MemPool, &newHead, uint32(unsafe.Sizeof(newHead)))
+	(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup(ar, (CmsContextStruct)(*ctx).MemPool, &newHead, uint32(unsafe.Sizeof(newHead)))
 }
 
 // Allocate and initialize the Formatters plugin chunk
-func cmsAllocFormattersPluginChunk(ar *arena.Arena,ctx CmsContext, src CmsContext) {
+func cmsAllocFormattersPluginChunk(ar *arena.Arena, ctx CmsContext, src CmsContext) {
 	if ctx == nil {
 		panic("Context is nil")
 	}
 
 	if src != nil {
 		// Duplicate the list
-		DupFormatterFactoryList(ar,ctx, src)
+		DupFormatterFactoryList(ar, ctx, src)
 	} else {
 		staticChunk := cmsFormattersPluginChunkType{}
-		(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup(ar,(CmsContextStruct)(*ctx).MemPool, &staticChunk, uint32(unsafe.Sizeof(staticChunk)))
+		(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup(ar, (CmsContextStruct)(*ctx).MemPool, &staticChunk, uint32(unsafe.Sizeof(staticChunk)))
 	}
 }
 
 // Register formatters plugin
-func cmsRegisterFormattersPlugin(ar *arena.Arena,contextID CmsContext, Data PluginIntrfc) bool {
+func cmsRegisterFormattersPlugin(ar *arena.Arena, contextID CmsContext, Data PluginIntrfc) bool {
 	//ctx := (*cmsFormattersPluginChunkType)((CmsContextStruct)(*contextID).chunks[FormattersPlugin])
 	ctx := CmsContextGetClientChunk(contextID, FormattersPlugin).(*cmsFormattersPluginChunkType)
 	plugin, ok := Data.(*cmsPluginFormatters)
 	if !ok {
-		fmt.Printf("Error: Plugin is not of the type cmsPluginFormatters\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginFormatters\n")
 		return false
 	}
 	if Data == nil {

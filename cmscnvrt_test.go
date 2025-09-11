@@ -145,10 +145,10 @@ func TestAddConversion_XYZtoLab(t *testing.T) {
 	cmsMAT3identity(&m)
 	cmsVEC3init(&v, 0, 0, 0)
 
-	p := cmsPipelineAlloc(nil, 3, 3)
-	defer cmsPipelineFree(p)
+	p := cmsPipelineAlloc(nil, nil, 3, 3)
+	defer cmsPipelineFree(nil, p)
 
-	ok := AddConversion(p, cmsSigXYZData, cmsSigLabData, &m, &v)
+	ok := AddConversion(nil, p, cmsSigXYZData, cmsSigLabData, &m, &v)
 	if !ok {
 		t.Errorf("AddConversion failed for XYZ → Lab")
 	}
@@ -160,10 +160,10 @@ func TestAddConversion_LabToLabWithMatrix(t *testing.T) {
 	cmsMAT3identity(&m)
 	cmsVEC3init(&v, 1.0, 0.0, -1.0)
 
-	p := cmsPipelineAlloc(nil, 3, 3)
-	defer cmsPipelineFree(p)
+	p := cmsPipelineAlloc(nil, nil, 3, 3)
+	defer cmsPipelineFree(nil, p)
 
-	ok := AddConversion(p, cmsSigLabData, cmsSigLabData, &m, &v)
+	ok := AddConversion(nil, p, cmsSigLabData, cmsSigLabData, &m, &v)
 	if !ok {
 		t.Errorf("AddConversion failed for Lab → Lab with matrix")
 	}
@@ -173,52 +173,52 @@ func TestComputeConversion_BPCEqualPoints(t *testing.T) {
 	var m cmsMAT3
 	var v cmsVEC3
 
-	profiles := []CmsHPROFILE{CmsCreate_sRGBProfile(), CmsCreate_sRGBProfile()}
-	defer CmsCloseProfile(profiles[0])
-	defer CmsCloseProfile(profiles[1])
+	profiles := []CmsHPROFILE{CmsCreate_sRGBProfile(nil), CmsCreate_sRGBProfile(nil), CmsCreate_sRGBProfile(nil)}
+	defer CmsCloseProfile(nil, profiles[0])
+	defer CmsCloseProfile(nil, profiles[1])
 
-	ok := ComputeConversion(1, profiles, INTENT_RELATIVE_COLORIMETRIC, true, 1.0, &m, &v)
+	ok := ComputeConversion(nil, 1, profiles, INTENT_RELATIVE_COLORIMETRIC, true, 1.0, &m, &v)
 	if !ok {
 		t.Errorf("ComputeConversion failed on sRGB self-transform")
 	}
 }
 
 func TestCmsLinkProfiles_Basic(t *testing.T) {
-	profiles := []CmsHPROFILE{CmsCreate_sRGBProfile(), CmsCreate_sRGBProfile()}
-	defer CmsCloseProfile(profiles[0])
-	defer CmsCloseProfile(profiles[1])
+	profiles := []CmsHPROFILE{CmsCreate_sRGBProfile(nil), CmsCreate_sRGBProfile(nil)}
+	defer CmsCloseProfile(nil, profiles[0])
+	defer CmsCloseProfile(nil, profiles[1])
 
 	intents := []uint32{INTENT_PERCEPTUAL, INTENT_PERCEPTUAL}
 	bpc := []bool{false, false}
 	adapt := []float64{1.0, 1.0}
 
-	p := cmsLinkProfiles(nil, 2, intents, profiles, bpc, adapt, 0)
+	p := cmsLinkProfiles(nil, nil, 2, intents, profiles, bpc, adapt, 0)
 	if p == nil {
 		t.Errorf("cmsLinkProfiles returned nil unexpectedly")
 	} else {
-		cmsPipelineFree(p)
+		cmsPipelineFree(nil, p)
 	}
 }
 
 func TestCmsRegisterRenderingIntentPlugin_Reset(t *testing.T) {
-	ok := cmsRegisterRenderingIntentPlugin(nil, nil)
+	ok := cmsRegisterRenderingIntentPlugin(nil, nil, nil)
 	if !ok {
 		t.Errorf("cmsRegisterRenderingIntentPlugin(nil) should return true")
 	}
 }
 func TestCmsDefaultICCintents_SimpleSRGB(t *testing.T) {
-	profiles := []CmsHPROFILE{CmsCreate_sRGBProfile()}
-	defer CmsCloseProfile(profiles[0])
+	profiles := []CmsHPROFILE{CmsCreate_sRGBProfile(nil)}
+	defer CmsCloseProfile(nil, profiles[0])
 
 	intents := []uint32{INTENT_PERCEPTUAL}
 	bpc := []bool{false}
 	adapt := []float64{1.0}
 
-	p := cmsDefaultICCintents(nil, 1, intents, profiles, bpc, adapt, 0)
+	p := cmsDefaultICCintents(nil, nil, 1, intents, profiles, bpc, adapt, 0)
 	if p == nil {
 		t.Errorf("cmsDefaultICCintents returned nil on sRGB profile")
 	} else {
-		cmsPipelineFree(p)
+		cmsPipelineFree(nil, p)
 	}
 }
 
@@ -226,7 +226,7 @@ func TestBlackPreservingGrayOnlySampler_KOnly(t *testing.T) {
 	var out = make([]uint16, 4)
 	var in = []uint16{0, 0, 0, 32768} // K-only input
 
-	kTone := CmsBuildGamma(nil, 1.0)
+	kTone := CmsBuildGamma(nil, nil, 1.0)
 	defer CmsFreeToneCurve(kTone)
 
 	p := &GrayOnlyParams{
@@ -234,7 +234,7 @@ func TestBlackPreservingGrayOnlySampler_KOnly(t *testing.T) {
 		KTone:     kTone,
 	}
 
-	ok := BlackPreservingGrayOnlySampler(in, out, p)
+	ok := BlackPreservingGrayOnlySampler(nil, in, out, p)
 	if ok != 1 {
 		t.Errorf("BlackPreservingGrayOnlySampler returned %d; want 1", ok)
 	}
@@ -244,18 +244,18 @@ func TestBlackPreservingGrayOnlySampler_KOnly(t *testing.T) {
 }
 
 func TestBlackPreservingKOnlyIntents_SingleSRGB(t *testing.T) {
-	profiles := []CmsHPROFILE{CmsCreate_sRGBProfile()}
-	defer CmsCloseProfile(profiles[0])
+	profiles := []CmsHPROFILE{CmsCreate_sRGBProfile(nil)}
+	defer CmsCloseProfile(nil, profiles[0])
 
 	intents := []uint32{INTENT_PRESERVE_K_ONLY_PERCEPTUAL}
 	bpc := []bool{true}
 	adapt := []float64{1.0}
 
-	p := BlackPreservingKOnlyIntents(nil, 1, intents, profiles, bpc, adapt, 0)
+	p := BlackPreservingKOnlyIntents(nil, nil, 1, intents, profiles, bpc, adapt, 0)
 	if p == nil {
 		t.Errorf("BlackPreservingKOnlyIntents returned nil unexpectedly")
 	} else {
-		cmsPipelineFree(p)
+		cmsPipelineFree(nil, p)
 	}
 }
 
@@ -265,12 +265,12 @@ func TestBlackPreservingSampler_KOnly(t *testing.T) {
 
 	p := &PreserveKPlaneParams{
 		Cmyk2Cmyk: nil,
-		KTone:     CmsBuildGamma(nil, 1.0),
+		KTone:     CmsBuildGamma(nil, nil, 1.0),
 	}
 
 	defer CmsFreeToneCurve(p.KTone)
 
-	got := BlackPreservingSampler(in, out, p)
+	got := BlackPreservingSampler(nil, in, out, p)
 	if got != 1 {
 		t.Errorf("BlackPreservingSampler should return 1 on success")
 	}

@@ -1,8 +1,8 @@
 package golcms
 
 import (
-	"fmt"
 	"math"
+	"sync"
 
 	//"unsafe"
 	"arena"
@@ -48,7 +48,7 @@ func cmsRegisterParametricCurvesPlugin(ar *arena.Arena, ContextID CmsContext, Da
 	}
 	plugin, ok := Data.(*cmsPluginParametricCurves)
 	if !ok {
-		fmt.Printf("Error: Plugin is not of the type cmsPluginParametricCurves\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginParametricCurves\n")
 		return false
 	}
 	// Allocate memory for a new parametric curves collection.
@@ -435,7 +435,7 @@ func cmsEvalToneCurveFloat(curve *CmsToneCurve, v float32) float32 {
 }
 
 // cmsEvalToneCurve16 evaluates a tone curve at a specific point (16-bit input and output).
-func cmsEvalToneCurve16(Curve *CmsToneCurve, v uint16) uint16 {
+/*func cmsEvalToneCurve16(Curve *CmsToneCurve, v uint16) uint16 {
 	var out uint16
 
 	cmsAssert(Curve != nil, "curve is nil")
@@ -443,6 +443,26 @@ func cmsEvalToneCurve16(Curve *CmsToneCurve, v uint16) uint16 {
 	Curve.InterpParams.Interpolation.Lerp16([]uint16{v}, outSlice, Curve.InterpParams)
 	out = outSlice[0] // Extract the modified value from the slice
 	return out
+}*/
+
+var toneBufferPool = sync.Pool{
+	New: func() any {
+		return &[2]uint16{0, 0} // [0]=input, [1]=output
+	},
+}
+
+func cmsEvalToneCurve16(Curve *CmsToneCurve, v uint16) uint16 {
+	cmsAssert(Curve != nil, "curve is nil")
+
+	buf := toneBufferPool.Get().(*[2]uint16)
+	defer toneBufferPool.Put(buf)
+
+	buf[0] = v
+	buf[1] = 0
+
+	Curve.InterpParams.Interpolation.Lerp16(buf[0:1], buf[1:2], Curve.InterpParams)
+
+	return buf[1]
 }
 
 // cmsEstimateGamma estimates the gamma value of a tone curve using a least squares fitting method.
@@ -806,7 +826,7 @@ func EvalSegmentedFn(g *CmsToneCurve, R float64) float64 {
 				// Ensure Table is of type []float32
 				table, ok := g.SegInterp[i].Table.([]float32)
 				if !ok {
-					fmt.Println("Error: Table is not of type []float32")
+					cmsSignalError(nil, cmsERROR_UNDEFINED, "Table is not of type []float32")
 					return math.Inf(-1) // Return invalid result
 				}
 

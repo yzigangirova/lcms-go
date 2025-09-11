@@ -101,7 +101,9 @@ type cmsTagEntry struct {
 
 type CmsHPROFILE interface{}
 type CmsHANDLE interface{} // Generic handle
-type CmsHTRANSFORM interface{}
+type CmsHTRANSFORM interface{
+	 DestroyArena()
+}
 type CmsToneCurve cms_curve_struct
 
 // Where to place/locate the stages in the pipeline chain

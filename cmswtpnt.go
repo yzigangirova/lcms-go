@@ -1,7 +1,7 @@
 package golcms
 
 import (
-	"errors"
+	//"errors"
 	"math"
 )
 
@@ -24,11 +24,11 @@ func cmsD50_xyY() *CmsCIExyY {
 }
 
 // Obtains WhitePoint from Temperature
-func cmsWhitePointFromTemp(WhitePoint *CmsCIExyY, TempK float64) error {
+func cmsWhitePointFromTemp(WhitePoint *CmsCIExyY, TempK float64) bool {
 	var x, y, T, T2, T3 float64
 
 	if WhitePoint == nil {
-		return errors.New("WhitePoint cannot be nil")
+		return false
 	}
 
 	T = TempK
@@ -40,7 +40,7 @@ func cmsWhitePointFromTemp(WhitePoint *CmsCIExyY, TempK float64) error {
 	} else if T > 7000.0 && T <= 25000.0 {
 		x = -2.0064*(1e9/T3) + 1.9018*(1e6/T2) + 0.24748*(1e3/T) + 0.237040
 	} else {
-		return errors.New("cmsWhitePointFromTemp: invalid temperature")
+		return false
 	}
 
 	y = -3.000*(x*x) + 2.870*x - 0.275
@@ -49,7 +49,7 @@ func cmsWhitePointFromTemp(WhitePoint *CmsCIExyY, TempK float64) error {
 	WhitePoint.Y_small = y
 	WhitePoint.Y_large = 1.0
 
-	return nil
+	return true
 }
 
 // ISOTEMPERATURE represents isotemperature data used for white point conversions.

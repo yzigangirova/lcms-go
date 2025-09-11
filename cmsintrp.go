@@ -2,8 +2,6 @@ package golcms
 
 import (
 	"arena"
-	"fmt"
-	"log"
 	"math"
 	"unsafe"
 )
@@ -36,7 +34,7 @@ func cmsRegisterInterpPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
 	}
 	plugin, ok := Data.(*cmsPluginInterpolation)
 	if !ok {
-		fmt.Printf("Error: Plugin is not of the type cmsPluginInterpolation\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginInterpolation\n")
 		return false
 	}
 	// Set replacement functions
@@ -170,18 +168,18 @@ func LinLerp1D(Value, Output []uint16, p *cmsInterpParams) {
 	// Ensure `p.Table` is a `[]uint16`
 	LutTable, ok := p.Table.([]uint16)
 	if !ok {
-		fmt.Printf("Error: p.Table is not of type []uint16 in LinLerp1D")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []uint16 in LinLerp1D")
 		return
 	}
 	if len(LutTable) == 0 {
-		fmt.Printf("Error: p.Table is empty in LinLerp1D")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is empty in LinLerp1D")
 		return
 	}
 
 	// If last value or just one point
 	if Value[0] == 0xffff || p.Domain[0] == 0 {
 		if p.Domain[0] >= uint32(len(LutTable)) {
-			fmt.Printf("Error: p.Domain[0] index %d out of bounds for LUT of size %d", p.Domain[0], len(LutTable))
+			cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Domain[0] index %d out of bounds for LUT of size %d", p.Domain[0], len(LutTable))
 			return
 		}
 		Output[0] = LutTable[p.Domain[0]]
@@ -193,7 +191,7 @@ func LinLerp1D(Value, Output []uint16, p *cmsInterpParams) {
 		rest = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(val3))) // Extract fractional part (LSB)
 
 		if cell0 < 0 || cell0+1 >= int32(len(LutTable)) {
-			fmt.Printf("Error: Interpolation index out of range in LinLerp1D (cell0=%d, LUT size=%d)\n", cell0, len(LutTable))
+			cmsSignalError(nil, cmsERROR_UNDEFINED, "Interpolation index out of range in LinLerp1D (cell0=%d, LUT size=%d)\n", cell0, len(LutTable))
 			return
 		}
 
@@ -226,7 +224,7 @@ func LinLerp1Dfloat(Value []float32, Output []float32, p *cmsInterpParams) {
 	// Ensure p.Table is a []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		fmt.Printf("Error: p.Table is not of type []float32 in LinLerp1Dfloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in LinLerp1Dfloat")
 		return
 	}
 
@@ -260,7 +258,7 @@ func Eval1Input(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	// Ensure p16.Table is a []uint16
 	LutTable, ok := p16.Table.([]uint16)
 	if !ok {
-		fmt.Printf("Error: p16.Table is not of type []uint16 in Eval1Input")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p16.Table is not of type []uint16 in Eval1Input")
 		return
 	}
 
@@ -306,14 +304,14 @@ func Eval1InputFloat(Value []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure Value and Output have at least 1 element
 	if len(Value) == 0 || len(Output) < int(p.nOutputs) || p.Table == nil {
-		log.Println("Error: Invalid input parameters in Eval1InputFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input parameters in Eval1InputFloat")
 		return
 	}
 
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval1InputFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval1InputFloat")
 		return
 	}
 
@@ -370,7 +368,7 @@ func BilinearInterpFloat(Input []float32, Output []float32, p *cmsInterpParams) 
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval1InputFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval1InputFloat")
 		return
 	}
 	// Inline functions for LERP and DENS
@@ -428,7 +426,7 @@ func BilinearInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 	// Ensure p16.Table is a []uint16
 	LutTable, ok := p.Table.([]uint16)
 	if !ok {
-		fmt.Printf("Error: p16.Table is not of type []uint16 in Eval1Input")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p16.Table is not of type []uint16 in Eval1Input")
 		return
 	}
 
@@ -488,7 +486,7 @@ func TrilinearInterpFloat(Input []float32, Output []float32, p *cmsInterpParams)
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval1InputFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval1InputFloat")
 		return
 	}
 
@@ -563,7 +561,7 @@ func TrilinearInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 	// Ensure p16.Table is a []uint16
 	LutTable, ok := p.Table.([]uint16)
 	if !ok {
-		fmt.Printf("Error: p16.Table is not of type []uint16 in Eval1Input")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p16.Table is not of type []uint16 in Eval1Input")
 		return
 	}
 
@@ -641,7 +639,7 @@ func TetrahedralInterpFloat(Input []float32, Output []float32, p *cmsInterpParam
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval1InputFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval1InputFloat")
 		return
 	}
 
@@ -726,7 +724,7 @@ func TetrahedralInterpFloat(Input []float32, Output []float32, p *cmsInterpParam
 	// Ensure p16.Table is a []uint16
 	LutTable, ok := p.Table.([]uint16)
 	if !ok {
-		fmt.Printf("Error: p16.Table is not of type []uint16 in Eval1Input")
+		cmsSignalError(nil, cmsERROR_UNDEFINED,"p16.Table is not of type []uint16 in Eval1Input")
 		return
 	}
 
@@ -787,7 +785,7 @@ func TetrahedralInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 	// Variables
 	LutTable, ok := p.Table.([]uint16)
 	if !ok {
-		fmt.Printf("Error: p.Table is not []uint16\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not []uint16\n")
 		return
 	}
 
@@ -955,7 +953,7 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 	// Ensure p.Table is a []uint16
 	LutTable, ok := p.Table.([]uint16)
 	if !ok {
-		fmt.Printf("Error: p.Table is not of type []uint16 in Eval4Inputs\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []uint16 in Eval4Inputs\n")
 		return
 	}
 
@@ -1020,9 +1018,7 @@ func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
 	fmt.Println("got Z1", Z1)*/
 
 	LutTable, _ = p.Table.([]uint16) // Reset to original LUT
-	/*for i := 0; i < 20; i++ {
-		fmt.Printf("LutTable[%d] = %d\n", i, LutTable[i])
-	}*/
+
 	LutTable = LutTable[K0:] // Shift by K0
 
 	for outChan := uint32(0); outChan < uint32(TotalOut); outChan++ {
@@ -1174,14 +1170,14 @@ func Eval4InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure Input and Output slices have enough elements
 	if len(Input) < 4 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval4InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval4InputsFloat")
 		return
 	}
 
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval4InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval4InputsFloat")
 		return
 	}
 
@@ -1223,14 +1219,14 @@ func Eval5Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure Input, Output, and Table have enough elements
 	if len(Input) < 5 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval5Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval5Inputs")
 		return
 	}
 
 	// Ensure p16.Table is of type []uint16
 	LutTable, ok := p16.Table.([]uint16)
 	if !ok {
-		log.Println("Error: p16.Table is not of type []uint16 in Eval5Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p16.Table is not of type []uint16 in Eval5Inputs")
 		return
 	}
 
@@ -1248,7 +1244,7 @@ func Eval5Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval5Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval5Inputs")
 		return
 	}
 
@@ -1279,14 +1275,14 @@ func Eval5InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure Input, Output, and Table have enough elements
 	if len(Input) < 5 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval5InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval5InputsFloat")
 		return
 	}
 
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval5InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval5InputsFloat")
 		return
 	}
 
@@ -1304,7 +1300,7 @@ func Eval5InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval5InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval5InputsFloat")
 		return
 	}
 
@@ -1335,14 +1331,14 @@ func Eval6Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure Input, Output, and Table have enough elements
 	if len(Input) < 6 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval6Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval6Inputs")
 		return
 	}
 
 	// Ensure p.Table is of type []uint16
 	LutTable, ok := p16.Table.([]uint16)
 	if !ok {
-		log.Println("Error: p.Table is not of type []uint16 in Eval6Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []uint16 in Eval6Inputs")
 		return
 	}
 
@@ -1360,7 +1356,7 @@ func Eval6Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval6Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval6Inputs")
 		return
 	}
 
@@ -1391,14 +1387,14 @@ func Eval6InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure Input, Output, and Table have enough elements
 	if len(Input) < 6 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval6InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval6InputsFloat")
 		return
 	}
 
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval6InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval6InputsFloat")
 		return
 	}
 
@@ -1416,7 +1412,7 @@ func Eval6InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval6InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval6InputsFloat")
 		return
 	}
 
@@ -1447,14 +1443,14 @@ func Eval7Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure Input, Output, and Table have enough elements
 	if len(Input) < 7 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval7Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval7Inputs")
 		return
 	}
 
 	// Ensure p.Table is of type []uint16
 	LutTable, ok := p16.Table.([]uint16)
 	if !ok {
-		log.Println("Error: p.Table is not of type []uint16 in Eval7Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []uint16 in Eval7Inputs")
 		return
 	}
 
@@ -1472,7 +1468,7 @@ func Eval7Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval7Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, " LUT index out of range in Eval7Inputs")
 		return
 	}
 
@@ -1503,14 +1499,14 @@ func Eval7InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure Input, Output, and Table have enough elements
 	if len(Input) < 7 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval7InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, " Invalid input/output slice sizes in Eval7InputsFloat")
 		return
 	}
 
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval7InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, " p.Table is not of type []float32 in Eval7InputsFloat")
 		return
 	}
 
@@ -1528,7 +1524,7 @@ func Eval7InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval7InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval7InputsFloat")
 		return
 	}
 
@@ -1559,14 +1555,14 @@ func Eval8Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure Input, Output, and Table have enough elements
 	if len(Input) < 8 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval8Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval8Inputs")
 		return
 	}
 
 	// Ensure p.Table is of type []uint16
 	LutTable, ok := p16.Table.([]uint16)
 	if !ok {
-		log.Println("Error: p.Table is not of type []uint16 in Eval8Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []uint16 in Eval8Inputs")
 		return
 	}
 
@@ -1584,7 +1580,7 @@ func Eval8Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval8Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval8Inputs")
 		return
 	}
 
@@ -1615,14 +1611,14 @@ func Eval8InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure Input, Output, and Table have enough elements
 	if len(Input) < 8 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval8InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval8InputsFloat")
 		return
 	}
 
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval8InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval8InputsFloat")
 		return
 	}
 
@@ -1640,7 +1636,7 @@ func Eval8InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval8InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval8InputsFloat")
 		return
 	}
 
@@ -1671,14 +1667,14 @@ func Eval9Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure Input, Output, and Table have enough elements
 	if len(Input) < 9 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval9Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval9Inputs")
 		return
 	}
 
 	// Ensure p.Table is of type []uint16
 	LutTable, ok := p16.Table.([]uint16)
 	if !ok {
-		log.Println("Error: p.Table is not of type []uint16 in Eval9Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []uint16 in Eval9Inputs")
 		return
 	}
 
@@ -1696,7 +1692,7 @@ func Eval9Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval9Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval9Inputs")
 		return
 	}
 
@@ -1727,14 +1723,14 @@ func Eval9InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure Input, Output, and Table have enough elements
 	if len(Input) < 9 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval9InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval9InputsFloat")
 		return
 	}
 
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval9InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval9InputsFloat")
 		return
 	}
 
@@ -1752,7 +1748,7 @@ func Eval9InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval9InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval9InputsFloat")
 		return
 	}
 
@@ -1783,14 +1779,14 @@ func Eval10Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure Input, Output, and Table have enough elements
 	if len(Input) < 10 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval10Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval10Inputs")
 		return
 	}
 
 	// Ensure p.Table is of type []uint16
 	LutTable, ok := p16.Table.([]uint16)
 	if !ok {
-		log.Println("Error: p.Table is not of type []uint16 in Eval10Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []uint16 in Eval10Inputs")
 		return
 	}
 
@@ -1808,7 +1804,7 @@ func Eval10Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval10Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval10Inputs")
 		return
 	}
 
@@ -1839,14 +1835,14 @@ func Eval10InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure Input, Output, and Table have enough elements
 	if len(Input) < 10 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval10InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval10InputsFloat")
 		return
 	}
 
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval10InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval10InputsFloat")
 		return
 	}
 
@@ -1864,7 +1860,7 @@ func Eval10InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval10InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval10InputsFloat")
 		return
 	}
 
@@ -1895,14 +1891,14 @@ func Eval11Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure Input, Output, and Table have enough elements
 	if len(Input) < 11 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval11Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval11Inputs")
 		return
 	}
 
 	// Ensure p.Table is of type []uint16
 	LutTable, ok := p16.Table.([]uint16)
 	if !ok {
-		log.Println("Error: p.Table is not of type []uint16 in Eval11Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []uint16 in Eval11Inputs")
 		return
 	}
 
@@ -1920,7 +1916,7 @@ func Eval11Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval11Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval11Inputs")
 		return
 	}
 
@@ -1951,14 +1947,14 @@ func Eval11InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure Input, Output, and Table have enough elements
 	if len(Input) < 11 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval11InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval11InputsFloat")
 		return
 	}
 
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval11InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval11InputsFloat")
 		return
 	}
 
@@ -1976,7 +1972,7 @@ func Eval11InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval11InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval11InputsFloat")
 		return
 	}
 
@@ -2007,14 +2003,14 @@ func Eval12Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure Input, Output, and LUT have enough elements
 	if len(Input) < 12 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval12Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval12Inputs")
 		return
 	}
 
 	// Ensure p.Table is of type []uint16
 	LutTable, ok := p16.Table.([]uint16)
 	if !ok {
-		log.Println("Error: p.Table is not of type []uint16 in Eval12Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []uint16 in Eval12Inputs")
 		return
 	}
 
@@ -2032,7 +2028,7 @@ func Eval12Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval12Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval12Inputs")
 		return
 	}
 
@@ -2063,14 +2059,14 @@ func Eval12InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure Input, Output, and LUT have enough elements
 	if len(Input) < 12 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval12InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval12InputsFloat")
 		return
 	}
 
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval12InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval12InputsFloat")
 		return
 	}
 
@@ -2088,7 +2084,7 @@ func Eval12InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval12InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval12InputsFloat")
 		return
 	}
 
@@ -2119,14 +2115,14 @@ func Eval13Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure Input, Output, and LUT have enough elements
 	if len(Input) < 13 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval13Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval13Inputs")
 		return
 	}
 
 	// Ensure p.Table is of type []uint16
 	LutTable, ok := p16.Table.([]uint16)
 	if !ok {
-		log.Println("Error: p.Table is not of type []uint16 in Eval13Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []uint16 in Eval13Inputs")
 		return
 	}
 
@@ -2144,7 +2140,7 @@ func Eval13Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval13Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval13Inputs")
 		return
 	}
 
@@ -2175,14 +2171,14 @@ func Eval13InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure Input, Output, and LUT have enough elements
 	if len(Input) < 13 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval13InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval13InputsFloat")
 		return
 	}
 
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval13InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval13InputsFloat")
 		return
 	}
 
@@ -2200,7 +2196,7 @@ func Eval13InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval13InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval13InputsFloat")
 		return
 	}
 
@@ -2231,14 +2227,14 @@ func Eval14Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure Input, Output, and LUT have enough elements
 	if len(Input) < 14 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval14Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval14Inputs")
 		return
 	}
 
 	// Ensure p.Table is of type []uint16
 	LutTable, ok := p16.Table.([]uint16)
 	if !ok {
-		log.Println("Error: p.Table is not of type []uint16 in Eval14Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []uint16 in Eval14Inputs")
 		return
 	}
 
@@ -2256,7 +2252,7 @@ func Eval14Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval14Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval14Inputs")
 		return
 	}
 
@@ -2287,14 +2283,14 @@ func Eval14InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure Input, Output, and LUT have enough elements
 	if len(Input) < 14 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval14InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval14InputsFloat")
 		return
 	}
 
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval14InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval14InputsFloat")
 		return
 	}
 
@@ -2312,7 +2308,7 @@ func Eval14InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval14InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval14InputsFloat")
 		return
 	}
 
@@ -2343,14 +2339,14 @@ func Eval15Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure Input, Output, and LUT have enough elements
 	if len(Input) < 15 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval15Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval15Inputs")
 		return
 	}
 
 	// Ensure p.Table is of type []uint16
 	LutTable, ok := p16.Table.([]uint16)
 	if !ok {
-		log.Println("Error: p.Table is not of type []uint16 in Eval15Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []uint16 in Eval15Inputs")
 		return
 	}
 
@@ -2368,7 +2364,7 @@ func Eval15Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval15Inputs")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval15Inputs")
 		return
 	}
 
@@ -2399,14 +2395,14 @@ func Eval15InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure Input, Output, and LUT have enough elements
 	if len(Input) < 15 || len(Output) < TotalOut {
-		log.Println("Error: Invalid input/output slice sizes in Eval15InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Invalid input/output slice sizes in Eval15InputsFloat")
 		return
 	}
 
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		log.Println("Error: p.Table is not of type []float32 in Eval15InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []float32 in Eval15InputsFloat")
 		return
 	}
 
@@ -2424,7 +2420,7 @@ func Eval15InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 
 	// Ensure K0 and K1 do not exceed LUT bounds
 	if K0 >= len(LutTable) || K1 >= len(LutTable) {
-		log.Println("Error: LUT index out of range in Eval15InputsFloat")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "LUT index out of range in Eval15InputsFloat")
 		return
 	}
 

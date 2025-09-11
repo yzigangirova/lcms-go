@@ -433,7 +433,7 @@ func cmsSaveProfileToIOhandler(ar *arena.Arena, hProfile CmsHPROFILE, io *cmsIOH
 	if !cmsWriteHeader(Icc, 0) {
 		goto Error
 	}
-	if !SaveTags(ar,Icc, &Keep) {
+	if !SaveTags(ar, Icc, &Keep) {
 		goto Error
 	}
 
@@ -447,7 +447,7 @@ func cmsSaveProfileToIOhandler(ar *arena.Arena, hProfile CmsHPROFILE, io *cmsIOH
 		if !cmsWriteHeader(Icc, UsedSpace) {
 			goto Error
 		}
-		if !SaveTags(ar,Icc, &Keep) {
+		if !SaveTags(ar, Icc, &Keep) {
 			goto Error
 		}
 	}
@@ -515,14 +515,14 @@ func cmsSaveProfileToMem(ar *arena.Arena, hProfile CmsHPROFILE, MemPtr unsafe.Po
 	return rc
 }
 
-func freeOneTag(ar *arena.Arena,Icc *cmsICCPROFILE, i uint32) {
+func freeOneTag(ar *arena.Arena, Icc *cmsICCPROFILE, i uint32) {
 	if Icc.TagPtrs[i] != nil {
 		TypeHandler := Icc.TagTypeHandlers[i]
 		if TypeHandler != nil {
 			LocalTypeHandler := *TypeHandler
 			LocalTypeHandler.ContextID = Icc.ContextID
 			LocalTypeHandler.ICCVersion = Icc.Version
-			LocalTypeHandler.FreeFn(ar,&LocalTypeHandler, Icc.TagPtrs[i])
+			LocalTypeHandler.FreeFn(ar, &LocalTypeHandler, Icc.TagPtrs[i])
 		} else {
 			//cmsFree(Icc.ContextID, Icc.TagPtrs[i])
 		}
@@ -543,7 +543,7 @@ func CmsCloseProfile(ar *arena.Arena, hProfile CmsHPROFILE) bool {
 	}
 
 	for i := uint32(0); i < Icc.TagCount; i++ {
-		freeOneTag(ar,Icc, i)
+		freeOneTag(ar, Icc, i)
 	}
 
 	if Icc.IOhandler != nil {
@@ -572,7 +572,7 @@ func IsTypeSupported(TagDescriptor *cmsTagDescriptor, Type cmsTagTypeSignature) 
 	return false
 }
 
-func cmsReadTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature) interface{} {
+func cmsReadTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature) interface{} {
 	Icc := hProfile.(*cmsICCPROFILE)
 	var io *cmsIOHANDLER
 	var TypeHandler *cmsTagTypeHandler
@@ -677,7 +677,7 @@ func cmsReadTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature) inter
 	LocalTypeHandler.ContextID = Icc.ContextID
 	LocalTypeHandler.ICCVersion = Icc.Version
 	// Read the tag
-	Icc.TagPtrs[n] = LocalTypeHandler.ReadFn(ar,&LocalTypeHandler, io, &ElemCount, TagSize)
+	Icc.TagPtrs[n] = LocalTypeHandler.ReadFn(ar, &LocalTypeHandler, io, &ElemCount, TagSize)
 	// The tag type is supported, but something wrong happened and we cannot read the tag.
 	// let know the user about this (although it is just a warning)
 	if Icc.TagPtrs[n] == nil {
@@ -702,7 +702,7 @@ func cmsReadTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature) inter
 	return Icc.TagPtrs[n]
 
 Error:
-	freeOneTag(ar,Icc, uint32(n))
+	freeOneTag(ar, Icc, uint32(n))
 	Icc.TagPtrs[n] = nil
 	cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
 	return nil
@@ -760,7 +760,7 @@ func cmsGetTagTrueType(hProfile CmsHPROFILE, sig cmsTagSignature) cmsTagTypeSign
 }
 
 // cmsWriteTag translates the given function
-func cmsWriteTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature, data interface{}) bool {
+func cmsWriteTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, data interface{}) bool {
 	//	fmt.Println("WriteTag")
 	Icc := hProfile.(*cmsICCPROFILE)
 	var TypeHandler *cmsTagTypeHandler
@@ -780,7 +780,7 @@ func cmsWriteTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature, data
 		i = cmsSearchTag(Icc, sig, false)
 		if i >= 0 {
 			// Mark the tag as deleted
-			cmsDeleteTagByPos(ar,Icc, i)
+			cmsDeleteTagByPos(ar, Icc, i)
 			Icc.TagNames[i] = 0
 			cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
 			return true
@@ -789,7 +789,7 @@ func cmsWriteTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature, data
 	}
 
 	// Add a new tag or get the position of an existing one
-	if !cmsNewTag(ar,Icc, sig, &i) {
+	if !cmsNewTag(ar, Icc, sig, &i) {
 		goto Error
 	}
 
@@ -800,7 +800,7 @@ func cmsWriteTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature, data
 	// Retrieve information about the tag
 	TagDescriptor = cmsGetTagDescriptor(Icc.ContextID, sig)
 	if TagDescriptor == nil {
-		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unsupported tag '%x'", sig))
+		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unsupported tag '%x'", sig)
 		goto Error
 	}
 
@@ -815,7 +815,7 @@ func cmsWriteTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature, data
 	// Check if the type is supported
 	if !IsTypeSupported(TagDescriptor, Type) {
 		str := cmsTagSignature2String(sig)
-		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unsupported type '%d' for tag '%s'", TypeString, str))
+		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unsupported type '%d' for tag '%s'", TypeString, str)
 		goto Error
 	}
 
@@ -823,7 +823,7 @@ func cmsWriteTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature, data
 	TypeHandler = cmsGetTagTypeHandler(Icc.ContextID, Type)
 	if TypeHandler == nil {
 		str := cmsTagSignature2String(sig)
-		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unsupported type '%d' for tag '%s'", TypeString, str))
+		cmsSignalError(Icc.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unsupported type '%d' for tag '%s'", TypeString, str)
 		goto Error
 	}
 
@@ -837,11 +837,11 @@ func cmsWriteTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature, data
 	LocalTypeHandler = *TypeHandler
 	LocalTypeHandler.ContextID = Icc.ContextID
 	LocalTypeHandler.ICCVersion = Icc.Version
-	Icc.TagPtrs[i] = LocalTypeHandler.DupFn(ar,&LocalTypeHandler, data, TagDescriptor.ElemCount)
+	Icc.TagPtrs[i] = LocalTypeHandler.DupFn(ar, &LocalTypeHandler, data, TagDescriptor.ElemCount)
 
 	if Icc.TagPtrs[i] == nil {
 		str := cmsTagSignature2String(sig)
-		cmsSignalError(Icc.ContextID, cmsERROR_CORRUPTION_DETECTED, fmt.Sprintf("Malformed struct  for tag '%s'", str))
+		cmsSignalError(Icc.ContextID, cmsERROR_CORRUPTION_DETECTED, "Malformed struct  for tag '%s'", str)
 		goto Error
 	}
 
@@ -926,7 +926,7 @@ func cmsSearchTag(Icc *cmsICCPROFILE, sig cmsTagSignature, followLinks bool) int
 }
 
 // Deletes a tag entry
-func cmsDeleteTagByPos(ar *arena.Arena,Icc *cmsICCPROFILE, i int) {
+func cmsDeleteTagByPos(ar *arena.Arena, Icc *cmsICCPROFILE, i int) {
 	cmsAssert(Icc != nil, "")
 	cmsAssert(i >= 0, "")
 
@@ -940,7 +940,7 @@ func cmsDeleteTagByPos(ar *arena.Arena,Icc *cmsICCPROFILE, i int) {
 				LocalTypeHandler := *TypeHandler
 				LocalTypeHandler.ContextID = Icc.ContextID
 				LocalTypeHandler.ICCVersion = Icc.Version
-				LocalTypeHandler.FreeFn(ar,&LocalTypeHandler, Icc.TagPtrs[i])
+				LocalTypeHandler.FreeFn(ar, &LocalTypeHandler, Icc.TagPtrs[i])
 				Icc.TagPtrs[i] = nil
 			}
 		}
@@ -948,17 +948,17 @@ func cmsDeleteTagByPos(ar *arena.Arena,Icc *cmsICCPROFILE, i int) {
 }
 
 // Creates a new tag entry
-func cmsNewTag(ar *arena.Arena,Icc *cmsICCPROFILE, sig cmsTagSignature, NewPos *int) bool {
+func cmsNewTag(ar *arena.Arena, Icc *cmsICCPROFILE, sig cmsTagSignature, NewPos *int) bool {
 	// Search for the tag
 	i := cmsSearchTag(Icc, sig, false)
 	if i >= 0 {
 		// Already exists? delete it
-		cmsDeleteTagByPos(ar,Icc, i)
+		cmsDeleteTagByPos(ar, Icc, i)
 		*NewPos = i
 	} else {
 		// No, make a new one
 		if Icc.TagCount >= MAX_TABLE_TAG {
-			cmsSignalError(Icc.ContextID, cmsERROR_RANGE, fmt.Sprintf("Too many tags (%d)", MAX_TABLE_TAG))
+			cmsSignalError(Icc.ContextID, cmsERROR_RANGE, "Too many tags (%d)", MAX_TABLE_TAG)
 			return false
 		}
 
@@ -1084,7 +1084,7 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 
 	Header, err := ReadStruct[cmsICCHeader](io, binary.BigEndian, 1)
 	if err != nil {
-		fmt.Errorf("Failed to read ICC header: %v", err)
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Failed to read ICC header: %v", err)
 	}
 
 	// Validate file as an ICC profile
@@ -1261,7 +1261,7 @@ func cmsWriteHeader(Icc *cmsICCPROFILE, UsedSpace uint32) bool {
 }
 
 // SaveTags dumps tag contents. If the profile is being modified, untouched tags are copied from FileOrig.
-func SaveTags(ar *arena.Arena,Icc *cmsICCPROFILE, FileOrig *cmsICCPROFILE) bool {
+func SaveTags(ar *arena.Arena, Icc *cmsICCPROFILE, FileOrig *cmsICCPROFILE) bool {
 	io := Icc.IOhandler
 	Version := cmsGetProfileVersion(CmsHPROFILE(Icc))
 
@@ -1342,7 +1342,7 @@ func SaveTags(ar *arena.Arena,Icc *cmsICCPROFILE, FileOrig *cmsICCPROFILE) bool 
 			localTypeHandler := *typeHandler
 			localTypeHandler.ContextID = Icc.ContextID
 			localTypeHandler.ICCVersion = Icc.Version
-			if !localTypeHandler.WriteFn(ar,&localTypeHandler, io, data, tagDescriptor.ElemCount) {
+			if !localTypeHandler.WriteFn(ar, &localTypeHandler, io, data, tagDescriptor.ElemCount) {
 				cmsSignalError(Icc.ContextID, cmsERROR_WRITE, "Couldn't write type")
 				return false
 			}
@@ -1393,8 +1393,7 @@ func MemoryRead(iohandler *cms_io_handler, buffer interface{}, size, count uint3
 
 	if resData.Pointer+length > resData.Size {
 		length = resData.Size - resData.Pointer
-		cmsSignalError(nil, cmsERROR_READ,
-			fmt.Sprintf("Read from memory error. Got %d bytes, block should be of %d bytes", length, count*size))
+		cmsSignalError(nil, cmsERROR_READ, "Read from memory error. Got %d bytes, block should be of %d bytes", length, count*size)
 		return 0
 	}
 
@@ -1682,29 +1681,6 @@ func cmsOpenIOhandlerFromFile(ar *arena.Arena, ContextID CmsContext, FileName st
 }
 
 // FileRead reads count elements of size bytes each from the file stream. Returns the number of elements read.
-/*func FileRead(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32 {
-	file := (*os.File)(iohandler.Stream)
-	totalBytes := int(size * count)
-	readBuffer := make([]byte, totalBytes)
-
-	nRead, err := file.Read(readBuffer)
-	if err != nil {
-		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_FILE, "Read error. Got  bytes, block should be of  bytes")
-		return 0
-	}
-
-	// Copy the read data into the provided buffer
-	MemmoveSlice(buffer, readBuffer, nRead)
-
-	if nRead < totalBytes {
-		cmsSignalError(unsafe.Pointer(iohandler.ContextID), cmsERROR_FILE, "Read error. Got  bytes, block should be of  bytes")
-		return 0
-	}
-
-	return uint32(nRead / int(size))
-}*/
-
-// FileRead reads count elements of size bytes each from the file stream. Returns the number of elements read.
 func FileRead(iohandler *cms_io_handler, buffer interface{}, size, count uint32) uint32 {
 	//	fmt.Println("fileread")
 	file, ok := iohandler.Stream.(*os.File)
@@ -1718,7 +1694,7 @@ func FileRead(iohandler *cms_io_handler, buffer interface{}, size, count uint32)
 	nRead, err := file.Read(readBuffer)
 	if err != nil {
 		//		cmsSignalError(nil, cmsERROR_FILE, "Read error: %v", err)
-		cmsSignalError(nil, cmsERROR_FILE, "Read error: %v")
+		cmsSignalError(nil, cmsERROR_FILE, "Read error: %v", err)
 		return 0
 	}
 
@@ -1735,7 +1711,7 @@ func FileRead(iohandler *cms_io_handler, buffer interface{}, size, count uint32)
 
 	if nRead < totalBytes {
 		//	cmsSignalError(nil, cmsERROR_FILE, "Read error: got %d bytes, expected %d", nRead, totalBytes)
-		cmsSignalError(nil, cmsERROR_FILE, "Read error: got %d bytes, expected %d")
+		cmsSignalError(nil, cmsERROR_FILE, "Read error: got %d bytes, expected %d", nRead, totalBytes)
 		return 0
 	}
 
@@ -1833,7 +1809,7 @@ func FileClose(iohandler *cms_io_handler) bool {
 	cmsFree(iohandler.ContextID, iohandler)
 	return true
 }
-func cmsWriteRawTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature, data interface{}, size uint32) bool {
+func cmsWriteRawTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, data interface{}, size uint32) bool {
 	Icc := hProfile.(*cmsICCPROFILE)
 	mm := &Icc.UsrMutex
 	var i int
@@ -1842,7 +1818,7 @@ func cmsWriteRawTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature, d
 		return false
 	}
 
-	if !cmsNewTag(ar,Icc, sig, &i) {
+	if !cmsNewTag(ar, Icc, sig, &i) {
 		cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
 		return false
 	}
@@ -1862,7 +1838,7 @@ func cmsWriteRawTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature, d
 	}
 	return true
 }
-func cmsLinkTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature, dest cmsTagSignature) bool {
+func cmsLinkTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, dest cmsTagSignature) bool {
 	Icc := hProfile.(*cmsICCPROFILE)
 	var i int
 	mm := &Icc.UsrMutex
@@ -1870,7 +1846,7 @@ func cmsLinkTag(ar *arena.Arena,hProfile CmsHPROFILE, sig cmsTagSignature, dest 
 		return false
 	}
 
-	if !cmsNewTag(ar,Icc, sig, &i) {
+	if !cmsNewTag(ar, Icc, sig, &i) {
 		cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
 		return false
 	}

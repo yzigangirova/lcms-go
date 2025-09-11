@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"fmt"
+	"arena"
+	//"fmt"
 	"math"
 	"unsafe"
-	"arena"
 )
 
 // Check if the platform is little-endian
@@ -67,7 +67,7 @@ func cmsReadUInt8Number(io *cmsIOHANDLER, n *uint8) bool {
 
 	tmp, err := ReadStruct[uint8](io, binary.BigEndian, 1)
 	if err != nil {
-		fmt.Errorf("Failed to read uint8: %v", err)
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Failed to read uint8: %v", err)
 		return false
 	}
 
@@ -83,7 +83,7 @@ func cmsReadUInt16Number(io *cmsIOHANDLER, n *uint16) bool {
 
 	tmp, err := ReadStruct[uint16](io, binary.BigEndian, 1)
 	if err != nil {
-		fmt.Errorf("Failed to read uint16: %v", err)
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Failed to read uint16: %v", err)
 		return false
 	}
 
@@ -115,7 +115,7 @@ func cmsReadUInt32Number(io *cmsIOHANDLER, n *uint32) bool {
 
 	tmp, err := ReadStruct[uint32](io, binary.BigEndian, 1)
 	if err != nil {
-		fmt.Errorf("Failed to read uint32: %v", err)
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Failed to read uint32: %v", err)
 		return false
 	}
 	if n != nil {
@@ -132,7 +132,7 @@ func cmsReadFloat32Number(io *cmsIOHANDLER, n *float32) bool {
 	var err error
 	tmp.Integer, err = ReadStruct[uint32](io, binary.BigEndian, 1)
 	if err != nil {
-		fmt.Errorf("Failed to read uint32: %v", err)
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Failed to read uint32: %v", err)
 		return false
 	}
 
@@ -160,7 +160,7 @@ func cmsReadUInt64Number(io *cmsIOHANDLER, n *uint64) bool {
 
 	tmp, err := ReadStruct[uint64](io, binary.BigEndian, 1)
 	if err != nil {
-		fmt.Errorf("Failed to read uint64: %v", err)
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Failed to read uint64: %v", err)
 		return false
 	}
 	if n != nil {
@@ -176,7 +176,7 @@ func cmsRead15Fixed16Number(io *cmsIOHANDLER, n *float64) bool {
 
 	tmp, err := ReadStruct[uint32](io, binary.BigEndian, 1)
 	if err != nil {
-		fmt.Errorf("Failed to read uint32: %v", err)
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Failed to read uint32: %v", err)
 		return false
 	}
 
@@ -193,7 +193,7 @@ func cmsReadXYZNumber(io *cmsIOHANDLER, XYZ *cmsCIEXYZ) bool {
 
 	xyz, err := ReadStruct[cmsEncodedXYZNumber](io, binary.BigEndian, 1)
 	if err != nil {
-		fmt.Errorf("Failed to read uint32: %v", err)
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Failed to read uint32: %v", err)
 		return false
 	}
 
@@ -343,7 +343,7 @@ func cmsReadTypeBase(io *cmsIOHANDLER) cmsTagTypeSignature {
 	var base cmsTagBase
 	base, err := ReadStruct[cmsTagBase](io, binary.BigEndian, 1)
 	if err != nil {
-		fmt.Errorf("Failed to read uint32: %v", err)
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Failed to read uint32: %v", err)
 		return 0
 	}
 	return base.Sig
@@ -413,15 +413,15 @@ func cmsWriteAlignment(io *cmsIOHANDLER) bool {
 }*/
 
 // Main plugin dispatcher
-func cmsPlugin(ar *arena.Arena,plugin PluginIntrfc) bool {
-	return cmsPluginTHR(ar,nil, plugin)
+func cmsPlugin(ar *arena.Arena, plugin PluginIntrfc) bool {
+	return cmsPluginTHR(ar, nil, plugin)
 }
 
 // Plugin dispatcher for a specific thread
-func cmsPluginTHR(ar *arena.Arena,contextID CmsContext, plugin PluginIntrfc) bool {
+func cmsPluginTHR(ar *arena.Arena, contextID CmsContext, plugin PluginIntrfc) bool {
 	currentPlugin, ok := plugin.(*cmsPluginBase)
 	if !ok {
-		fmt.Printf("Error: Plugin is not of the type cmsPluginBase\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginBase\n")
 		return false
 	}
 	for currentPlugin != nil {
@@ -445,35 +445,35 @@ func cmsPluginTHR(ar *arena.Arena,contextID CmsContext, plugin PluginIntrfc) boo
 				return false
 			}
 		case cmsPluginTagTypeSig:
-			if !cmsRegisterTagTypePlugin(ar,contextID, currentPlugin) {
+			if !cmsRegisterTagTypePlugin(ar, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginTagSig:
-			if !cmsRegisterTagPlugin(ar,contextID, currentPlugin) {
+			if !cmsRegisterTagPlugin(ar, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginFormattersSig:
-			if !cmsRegisterFormattersPlugin(ar,contextID, currentPlugin) {
+			if !cmsRegisterFormattersPlugin(ar, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginRenderingIntentSig:
-			if !cmsRegisterRenderingIntentPlugin(ar,contextID, currentPlugin) {
+			if !cmsRegisterRenderingIntentPlugin(ar, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginParametricCurveSig:
-			if !cmsRegisterParametricCurvesPlugin(ar,contextID, currentPlugin) {
+			if !cmsRegisterParametricCurvesPlugin(ar, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginMultiProcessElementSig:
-			if !cmsRegisterMultiProcessElementPlugin(ar,contextID, currentPlugin) {
+			if !cmsRegisterMultiProcessElementPlugin(ar, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginOptimizationSig:
-			if !cmsRegisterOptimizationPlugin(ar,contextID, currentPlugin) {
+			if !cmsRegisterOptimizationPlugin(ar, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginTransformSig:
-			if !cmsRegisterTransformPlugin(ar,contextID, currentPlugin) {
+			if !cmsRegisterTransformPlugin(ar, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginMutexSig:
@@ -497,8 +497,8 @@ func cmsPluginTHR(ar *arena.Arena,contextID CmsContext, plugin PluginIntrfc) boo
 }
 
 // Revert all plugins to default
-func cmsUnregisterPlugins(ar *arena.Arena,) {
-	cmsUnregisterPluginsTHR(ar,nil)
+func cmsUnregisterPlugins(ar *arena.Arena) {
+	cmsUnregisterPluginsTHR(ar, nil)
 }
 
 /* C-code The context pool (linked list head)  NOT IMPEMENTED NEEDS FURTHER CONSIDERATION
@@ -601,17 +601,17 @@ func cmsGetContext(ContextID CmsContext) CmsContext {
 // plug-in, as a single call to cmsPluginTHR() function may register
 // many different plug-ins simultaneously, then there is no way to
 // identify which plug-in to unregister.
-func cmsUnregisterPluginsTHR(ar *arena.Arena,ContextID CmsContext) {
+func cmsUnregisterPluginsTHR(ar *arena.Arena, ContextID CmsContext) {
 	cmsRegisterMemHandlerPlugin(ContextID, nil)
 	cmsRegisterInterpPlugin(ContextID, nil)
-	cmsRegisterTagTypePlugin(ar,ContextID, nil)
-	cmsRegisterTagPlugin(ar,ContextID, nil)
-	cmsRegisterFormattersPlugin(ar,ContextID, nil)
-	cmsRegisterRenderingIntentPlugin(ar,ContextID, nil)
-	cmsRegisterParametricCurvesPlugin(ar,ContextID, nil)
-	cmsRegisterMultiProcessElementPlugin(ar,ContextID, nil)
-	cmsRegisterOptimizationPlugin(ar,ContextID, nil)
-	cmsRegisterTransformPlugin(ar,ContextID, nil)
+	cmsRegisterTagTypePlugin(ar, ContextID, nil)
+	cmsRegisterTagPlugin(ar, ContextID, nil)
+	cmsRegisterFormattersPlugin(ar, ContextID, nil)
+	cmsRegisterRenderingIntentPlugin(ar, ContextID, nil)
+	cmsRegisterParametricCurvesPlugin(ar, ContextID, nil)
+	cmsRegisterMultiProcessElementPlugin(ar, ContextID, nil)
+	cmsRegisterOptimizationPlugin(ar, ContextID, nil)
+	cmsRegisterTransformPlugin(ar, ContextID, nil)
 	cmsRegisterMutexPlugin(ContextID, nil)
 	cmsRegisterParallelizationPlugin(ContextID, nil)
 

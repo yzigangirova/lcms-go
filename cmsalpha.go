@@ -1,7 +1,7 @@
 package golcms
 
 import (
-	"errors"
+	//"errors"
 	"math"
 	"unsafe"
 )
@@ -612,16 +612,16 @@ var FormatterAlpha = [6][6]cmsFormatterAlphaFn{
 }
 
 // cmsGetFormatterAlpha implements the logic
-func cmsGetFormatterAlpha(id interface{}, in, out uint32) (cmsFormatterAlphaFn, error) {
+func cmsGetFormatterAlpha(id interface{}, in, out uint32) (cmsFormatterAlphaFn) {
 	inN := FormatterPos(in)
 	outN := FormatterPos(out)
 
 	if inN < 0 || outN < 0 || inN > 5 || outN > 5 {
 		cmsSignalError(id, 1, "Unrecognized alpha channel width")
-		return nil, errors.New("unrecognized alpha channel width")
+		return nil
 	}
 
-	return FormatterAlpha[inN][outN], nil
+	return FormatterAlpha[inN][outN]
 }
 
 // Compute increments for chunky formats
@@ -776,7 +776,7 @@ func cmsHandleExtraChannels(
 	ComputeComponentIncrements(p.OutputFormat, Stride.BytesPerPlaneOut, DestStartingOrder[:], DestIncrements[:])
 
 	// Get formatter function
-	copyValueFn, _ := cmsGetFormatterAlpha(p.ContextID, p.InputFormat, p.OutputFormat)
+	copyValueFn := cmsGetFormatterAlpha(p.ContextID, p.InputFormat, p.OutputFormat)
 	if copyValueFn == nil {
 		return
 	}

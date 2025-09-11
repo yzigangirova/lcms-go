@@ -3,7 +3,7 @@ package golcms
 import (
 	//"unsafe"
 	"arena"
-	"fmt"
+	//"fmt"
 )
 
 // Append a Lab identity after the given sequence of profiles and return the transform.
@@ -162,7 +162,7 @@ type cmsTACestimator struct {
 func EstimateTAC(ar *arena.Arena, in []uint16, out []uint16, cargo interface{}) int32 {
 	bp, ok := cargo.(*cmsTACestimator)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsTACestimator\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsTACestimator\n")
 		return 0
 	}
 	var roundTrip [cmsMAXCHANNELS]float32
@@ -273,7 +273,7 @@ const ERR_THRESHOLD = 5
 func GamutSampler(ar *arena.Arena, In []uint16, Out []uint16, cargo interface{}) int32 {
 	t, ok := cargo.(*GAMUTCHAIN)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *GAMUTCHAIN\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *GAMUTCHAIN\n")
 		return 0
 	}
 	var LabIn1, LabOut1 cmsCIELab

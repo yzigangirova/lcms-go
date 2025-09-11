@@ -101,7 +101,7 @@ func RegisterTypesPlugin(ar *arena.Arena, id CmsContext, Data PluginIntrfc, pos 
 	}
 	plugin, ok := Data.(*cmsPluginTagType)
 	if !ok {
-		fmt.Printf("Error: Plugin is not of the type cmsPluginTagType\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginTagType\n")
 		return false
 	}
 	// Allocate memory for the new linked list node.
@@ -240,7 +240,7 @@ func TypeXYZDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}, n uin
 	pxyz, ok := ptr.(*cmsCIEXYZ)
 	xyz := *pxyz //copy values
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsCIEXYZ\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsCIEXYZ\n")
 		return false
 	}
 	return &xyz
@@ -264,7 +264,7 @@ func DecideXYZtype(ICCVersion float64, Data interface{}) cmsTagTypeSignature {
 func DecideLUTtypeA2B(ICCVersion float64, Data interface{}) cmsTagTypeSignature {
 	Lut, ok := Data.(*cmsPipeline)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsPipeline\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsPipeline\n")
 		return 0
 	}
 	if ICCVersion < 4.0 {
@@ -281,7 +281,7 @@ func DecideLUTtypeA2B(ICCVersion float64, Data interface{}) cmsTagTypeSignature 
 func DecideLUTtypeB2A(ICCVersion float64, Data interface{}) cmsTagTypeSignature {
 	Lut, ok := Data.(*cmsPipeline)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsPipeline\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsPipeline\n")
 		return 0
 	}
 	if ICCVersion < 4.0 {
@@ -298,7 +298,7 @@ func DecideLUTtypeB2A(ICCVersion float64, Data interface{}) cmsTagTypeSignature 
 func DecideCurveType(ICCVersion float64, Data interface{}) cmsTagTypeSignature {
 	Curve, ok := Data.(*CmsToneCurve)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsToneCurve\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsToneCurve\n")
 		return 0
 	}
 	if ICCVersion < 4.0 {
@@ -325,7 +325,7 @@ func TypeParametricCurveRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIO
 	var newGamma *CmsToneCurve
 
 	if !cmsReadUInt16Number(io, &curveType) {
-		cmsSignalError(self.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unknown parametric curve type '%d'")
+		cmsSignalError(self.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unknown parametric curve type '%d'", curveType)
 		return nil
 	}
 	if !cmsReadUInt16Number(io, nil) { // Reserved
@@ -352,7 +352,7 @@ func TypeParametricCurveRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIO
 func TypeParametricCurveWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	curve, ok := ptr.(*CmsToneCurve)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsToneCurve\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsToneCurve\n")
 		return false
 	}
 	paramsByType := []int{0, 1, 3, 4, 5, 7}
@@ -446,7 +446,7 @@ Error:
 func TypeTextWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	mlu, ok := ptr.(*cmsMLU)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsMLU\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsMLU\n")
 		return false
 	}
 	var size uint32
@@ -612,7 +612,7 @@ Error:
 func TypeTextDescriptionWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	mlu, ok := ptr.(*cmsMLU)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsMLU\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsMLU\n")
 		return false
 	}
 	var Text []byte
@@ -992,7 +992,7 @@ func cmsRegisterTagPlugin(ar *arena.Arena, id CmsContext, Data PluginIntrfc) boo
 	}
 	plugin, ok := Data.(*cmsPluginTag)
 	if !ok {
-		fmt.Printf("Error: Plugin is not of the type cmsPluginTagType\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginTagType\n")
 		return false
 	}
 	// Allocate memory for the new linked list node.
@@ -1079,7 +1079,7 @@ Error:
 func TypeScreeningWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	sc, ok := ptr.(*cmsScreening)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsScreening\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsScreening\n")
 		return false
 	}
 	if !cmsWriteUInt32Number(io, sc.Flag) || !cmsWriteUInt32Number(io, sc.NChannels) {
@@ -1123,7 +1123,7 @@ func TypeViewingConditionsRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cms
 func TypeViewingConditionsWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	vc, ok := ptr.(*cmsICCViewingConditions)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsICCViewingConditions\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsICCViewingConditions\n")
 		return false
 	}
 	return cmsWriteXYZNumber(io, &vc.IlluminantXYZ) &&
@@ -1211,7 +1211,7 @@ func SaveOneChromaticity(x, y float64, io *cmsIOHANDLER) bool {
 func TypeChromaticityWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	chrm, ok := ptr.(*CmsCIExyYTRIPLE)
 	if !ok {
-		fmt.Printf("Error: not of the type *CmsCIExyYTRIPLE\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *CmsCIExyYTRIPLE\n")
 		return false
 	}
 	if !cmsWriteUInt16Number(io, 3) || // nChannels
@@ -1492,7 +1492,7 @@ func TypeSignatureRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 func TypeSignatureWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	sigPtr, ok := ptr.(*cmsSignature)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsSignature\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsSignature\n")
 		return false
 	}
 	return cmsWriteUInt32Number(io, uint32(*sigPtr))
@@ -1568,7 +1568,7 @@ func TypeCurveRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, n
 func TypeCurveWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	curve, ok := ptr.(*CmsToneCurve) // Convert the pointer to a CmsToneCurve struct
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsToneCurve\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsToneCurve\n")
 		return false
 	}
 	if curve.nSegments == 1 && curve.Segments != nil {
@@ -1622,7 +1622,7 @@ func TypeDateTimeRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER
 	}
 	timestamp, err := ReadStruct[cmsDateTimeNumber](io, binary.BigEndian, 1)
 	if err != nil {
-		fmt.Errorf("Failed to read cmsDateTimeNumber: %v", err)
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Failed to read cmsDateTimeNumber: %v", err)
 		return nil
 	}
 
@@ -1634,7 +1634,7 @@ func TypeDateTimeRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER
 func TypeDateTimeWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	dateTime, ok := ptr.(*time.Time)
 	if !ok {
-		fmt.Printf("Error: not of the type *dateTime\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *dateTime\n")
 		return false
 	}
 	var timestamp cmsDateTimeNumber
@@ -1680,7 +1680,7 @@ func TypeMeasurementRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHAND
 func TypeMeasurementWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	mc, ok := ptr.(*cmsICCMeasurementConditions)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsICCMeasurementConditions\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsICCMeasurementConditions\n")
 		return false
 	}
 	// Write the data to the IO handler
@@ -1785,7 +1785,7 @@ Error:
 func TypeMLUWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	mlu, ok := ptr.(*cmsMLU)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsMLU\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsMLU\n")
 		return false
 	}
 
@@ -1950,7 +1950,7 @@ Error:
 func TypeLUT8Write(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	newLUT, ok := ptr.(*cmsPipeline)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsPipeline\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsPipeline\n")
 		return false
 	}
 	var (
@@ -2320,7 +2320,7 @@ func TypeLUT16Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, n
 func TypeLUT16Write(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	newLUT, ok := ptr.(*cmsPipeline)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsPipeline\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsPipeline\n")
 		return false
 	}
 	var matMPE *cmsStageMatrixData
@@ -2517,7 +2517,7 @@ Error:
 func TypeColorantTableWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	namedColorList, ok := ptr.(*cmsNAMEDCOLORLIST)
 	if !ok {
-		fmt.Printf("Error: not of the type *NAMEDCOLORLIST\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *NAMEDCOLORLIST\n")
 		return false
 	}
 	nColors := cmsNamedColorCount(namedColorList)
@@ -2835,7 +2835,7 @@ func SaveDescription(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 func TypeProfileSequenceDescWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	seq, ok := ptr.(*cmsSEQ)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsSEQ\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsSEQ\n")
 		return false
 	}
 	if !cmsWriteUInt32Number(io, seq.n) {
@@ -2880,7 +2880,7 @@ identification of a profile used in a sequence
 func ReadSeqID(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo interface{}, n, sizeOfTag uint32) bool {
 	outSeq, ok := cargo.(*cmsSEQ)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsSEQ\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsSEQ\n")
 		return false
 	}
 	seqSlice := outSeq.seq // Convert pointer to slice
@@ -2929,7 +2929,7 @@ func TypeProfileSequenceIdRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cms
 func WriteSeqID(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo interface{}, n, sizeOfTag uint32) bool {
 	seq, ok := cargo.(*cmsSEQ)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsSEQ\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsSEQ\n")
 		return false
 	}
 	seqSlice := seq.seq // Convert pointer to slice
@@ -2942,7 +2942,7 @@ func WriteSeqID(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, carg
 	}
 
 	// Store the MLU
-	if !SaveDescription(ar,self, io, currentSeq.Description) {
+	if !SaveDescription(ar, self, io, currentSeq.Description) {
 		return false
 	}
 
@@ -2952,7 +2952,7 @@ func WriteSeqID(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, carg
 func TypeProfileSequenceIdWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	seq, ok := ptr.(*cmsSEQ)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsSEQ\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsSEQ\n")
 		return false
 	}
 
@@ -2974,7 +2974,7 @@ func TypeProfileSequenceIdWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cm
 func TypeProfileSequenceIdDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}, nItems uint32) interface{} {
 	seq, ok := ptr.(*cmsSEQ)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsSEQ\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsSEQ\n")
 		return false
 	}
 
@@ -3070,7 +3070,7 @@ Error:
 func TypeUcrBgWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	value, ok := ptr.(*cmsUcrBg)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsUrcBg\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsUrcBg\n")
 		return false
 	}
 
@@ -3106,9 +3106,9 @@ func TypeUcrBgDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}, n u
 		return nil
 	}
 
-	newUcrBg.Bg = cmsDupToneCurve(ar,src.Bg)
-	newUcrBg.Ucr = cmsDupToneCurve(ar,src.Ucr)
-	newUcrBg.Desc = cmsMLUdup(ar,src.Desc)
+	newUcrBg.Bg = cmsDupToneCurve(ar, src.Bg)
+	newUcrBg.Ucr = cmsDupToneCurve(ar, src.Ucr)
+	newUcrBg.Desc = cmsMLUdup(ar, src.Desc)
 	return newUcrBg
 }
 
@@ -3212,7 +3212,7 @@ func WriteCountAndString(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHAND
 }
 
 func TypeCrdInfoRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) interface{} {
-	mlu := cmsMLUalloc(ar,self.ContextID, 5)
+	mlu := cmsMLUalloc(ar, self.ContextID, 5)
 
 	*nItems = 0
 	if mlu == nil {
@@ -3220,11 +3220,11 @@ func TypeCrdInfoRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 	}
 
 	// Read strings for each section
-	if !ReadCountAndString(ar,self, io, mlu, &sizeOfTag, "nm") ||
-		!ReadCountAndString(ar,self, io, mlu, &sizeOfTag, "#0") ||
-		!ReadCountAndString(ar,self, io, mlu, &sizeOfTag, "#1") ||
-		!ReadCountAndString(ar,self, io, mlu, &sizeOfTag, "#2") ||
-		!ReadCountAndString(ar,self, io, mlu, &sizeOfTag, "#3") {
+	if !ReadCountAndString(ar, self, io, mlu, &sizeOfTag, "nm") ||
+		!ReadCountAndString(ar, self, io, mlu, &sizeOfTag, "#0") ||
+		!ReadCountAndString(ar, self, io, mlu, &sizeOfTag, "#1") ||
+		!ReadCountAndString(ar, self, io, mlu, &sizeOfTag, "#2") ||
+		!ReadCountAndString(ar, self, io, mlu, &sizeOfTag, "#3") {
 		cmsMLUfree(mlu)
 		return nil
 	}
@@ -3236,15 +3236,15 @@ func TypeCrdInfoRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 func TypeCrdInfoWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	mlu, ok := ptr.(*cmsMLU)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsMLU\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsMLU\n")
 		return false
 	}
 	// Write strings for each section
-	if !WriteCountAndString(ar,self, io, mlu, "nm") ||
-		!WriteCountAndString(ar,self, io, mlu, "#0") ||
-		!WriteCountAndString(ar,self, io, mlu, "#1") ||
-		!WriteCountAndString(ar,self, io, mlu, "#2") ||
-		!WriteCountAndString(ar,self, io, mlu, "#3") {
+	if !WriteCountAndString(ar, self, io, mlu, "nm") ||
+		!WriteCountAndString(ar, self, io, mlu, "#0") ||
+		!WriteCountAndString(ar, self, io, mlu, "#1") ||
+		!WriteCountAndString(ar, self, io, mlu, "#2") ||
+		!WriteCountAndString(ar, self, io, mlu, "#3") {
 		return false
 	}
 
@@ -3253,7 +3253,7 @@ func TypeCrdInfoWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER
 
 func TypeCrdInfoDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}, nItems uint32) interface{} {
 	mlu := ptr.(*cmsMLU)
-	return cmsMLUdup(ar,mlu)
+	return cmsMLUdup(ar, mlu)
 }
 
 func TypeCrdInfoFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) {
@@ -3308,7 +3308,7 @@ func TypeDataRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 func TypeDataWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	binData, ok := ptr.(*cmsICCData)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsICCData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsICCData\n")
 		return false
 	}
 	// Validate that Len matches the actual length of Data
@@ -3393,38 +3393,38 @@ func TypeLUTA2BRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 	}
 
 	// Allocate an empty LUT
-	newLUT := cmsPipelineAlloc(ar,self.ContextID, uint32(inputChan), uint32(outputChan))
+	newLUT := cmsPipelineAlloc(ar, self.ContextID, uint32(inputChan), uint32(outputChan))
 	if newLUT == nil {
 		return nil
 	}
 
 	// Process each offset and add corresponding stages to the pipeline
 	if offsetA != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar,self, io, baseOffset+offsetA, uint32(inputChan))) {
+		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetA, uint32(inputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetC != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadCLUT(ar,self, io, baseOffset+offsetC, uint32(inputChan), uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadCLUT(ar, self, io, baseOffset+offsetC, uint32(inputChan), uint32(outputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetM != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar,self, io, baseOffset+offsetM, uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetM, uint32(outputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetMat != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadMatrix(ar,self, io, baseOffset+offsetMat)) {
+		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadMatrix(ar, self, io, baseOffset+offsetMat)) {
 			goto Error
 		}
 	}
 
 	if offsetB != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar,self, io, baseOffset+offsetB, uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetB, uint32(outputChan))) {
 			goto Error
 		}
 	}
@@ -3433,14 +3433,14 @@ func TypeLUTA2BRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 	return newLUT
 
 Error:
-	cmsPipelineFree(ar,newLUT)
+	cmsPipelineFree(ar, newLUT)
 	return nil
 }
 
 func TypeLUTA2BWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	lut, ok := ptr.(*cmsPipeline)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsPipeline\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsPipeline\n")
 		return false
 	}
 	var (
@@ -3498,7 +3498,7 @@ func TypeLUTA2BWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 	// Write the stages
 	if a != nil {
 		offsetA = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar,self, io, cmsSigParametricCurveType, a) {
+		if !WriteSetOfCurves(ar, self, io, cmsSigParametricCurveType, a) {
 			return false
 		}
 	}
@@ -3509,28 +3509,28 @@ func TypeLUTA2BWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 		if lut.SaveAs8Bits {
 			precision = 1
 		}
-		if !WriteCLUT(ar,self, io, precision, clut) {
+		if !WriteCLUT(ar, self, io, precision, clut) {
 			return false
 		}
 	}
 
 	if m != nil {
 		offsetM = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar,self, io, cmsSigParametricCurveType, m) {
+		if !WriteSetOfCurves(ar, self, io, cmsSigParametricCurveType, m) {
 			return false
 		}
 	}
 
 	if matrix != nil {
 		offsetMat = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteMatrix(ar,self, io, matrix) {
+		if !WriteMatrix(ar, self, io, matrix) {
 			return false
 		}
 	}
 
 	if b != nil {
 		offsetB = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar,self, io, cmsSigParametricCurveType, b) {
+		if !WriteSetOfCurves(ar, self, io, cmsSigParametricCurveType, b) {
 			return false
 		}
 	}
@@ -3553,11 +3553,11 @@ func TypeLUTA2BWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 }
 
 func TypeLUTA2BDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}, n uint32) interface{} {
-	return cmsPipelineDup(ar,ptr.(*cmsPipeline))
+	return cmsPipelineDup(ar, ptr.(*cmsPipeline))
 }
 
 func TypeLUTA2BFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) {
-	cmsPipelineFree(ar,ptr.(*cmsPipeline))
+	cmsPipelineFree(ar, ptr.(*cmsPipeline))
 }
 
 func WriteMatrix(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, mpe *cmsStage) bool {
@@ -3565,7 +3565,7 @@ func WriteMatrix(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, mpe
 
 	matrixData, ok := mpe.Data.(*cmsStageMatrixData)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsStageMatrixData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsStageMatrixData\n")
 		return false
 	}
 
@@ -3617,11 +3617,11 @@ func WriteSetOfCurves(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER
 		// Write the curve data
 		switch currentType {
 		case cmsSigCurveType:
-			if !TypeCurveWrite(ar,self, io, curves[i], 1) {
+			if !TypeCurveWrite(ar, self, io, curves[i], 1) {
 				return false
 			}
 		case cmsSigParametricCurveType:
-			if !TypeParametricCurveWrite(ar,self, io, curves[i], 1) {
+			if !TypeParametricCurveWrite(ar, self, io, curves[i], 1) {
 				return false
 			}
 		default:
@@ -3639,7 +3639,7 @@ func WriteSetOfCurves(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER
 func WriteCLUT(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, precision uint8, mpe *cmsStage) bool {
 	clutData, ok := mpe.Data.(*cmsStageCLutData)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsStageCLutData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsStageCLutData\n")
 		return false
 	}
 
@@ -3706,7 +3706,7 @@ func ReadMatrix(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, offs
 	}
 
 	// Allocate the matrix
-	return cmsStageAllocMatrix(ar,self.ContextID, 3, 3, dMat[:], dOff[:])
+	return cmsStageAllocMatrix(ar, self.ContextID, 3, 3, dMat[:], dOff[:])
 }
 func ReadCLUT(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, offset, inputChannels, outputChannels uint32) *cmsStage {
 	var gridPoints8 [cmsMAXCHANNELS]uint8
@@ -3739,14 +3739,14 @@ func ReadCLUT(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, offset
 	}
 
 	// Allocate the CLUT
-	clut := cmsStageAllocCLut16bitGranular(ar,self.ContextID, gridPoints[:inputChannels], inputChannels, outputChannels, nil)
+	clut := cmsStageAllocCLut16bitGranular(ar, self.ContextID, gridPoints[:inputChannels], inputChannels, outputChannels, nil)
 	if clut == nil {
 		return nil
 	}
 
 	data, ok := clut.Data.(*cmsStageCLutData)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsStageCLutData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsStageCLutData\n")
 		return nil
 	}
 
@@ -3756,19 +3756,19 @@ func ReadCLUT(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, offset
 		for i := uint32(0); i < data.NEntries; i++ {
 			value, err := ReadStruct[uint8](io, binary.BigEndian, 1)
 			if err != nil {
-				cmsStageFree(ar,clut)
-				fmt.Errorf("Failed to read uint8: %v", err)
+				cmsStageFree(ar, clut)
+				cmsSignalError(nil, cmsERROR_UNDEFINED, "Failed to read uint8: %v", err)
 				return nil
 			}
 			data.Tab.([]uint16)[i] = FROM_8_TO_16(value)
 		}
 	case 2:
 		if !cmsReadUInt16Array(io, data.NEntries, data.Tab.([]uint16)) {
-			cmsStageFree(ar,clut)
+			cmsStageFree(ar, clut)
 			return nil
 		}
 	default:
-		cmsStageFree(ar,clut)
+		cmsStageFree(ar, clut)
 		cmsSignalError(self.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unknown precision")
 		return nil
 	}
@@ -3780,9 +3780,9 @@ func ReadEmbeddedCurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 
 	switch baseType {
 	case cmsSigCurveType:
-		return TypeCurveRead(ar,self, io, nil, 0).(*CmsToneCurve)
+		return TypeCurveRead(ar, self, io, nil, 0).(*CmsToneCurve)
 	case cmsSigParametricCurveType:
-		return TypeParametricCurveRead(ar,self, io, nil, 0).(*CmsToneCurve)
+		return TypeParametricCurveRead(ar, self, io, nil, 0).(*CmsToneCurve)
 	default:
 		//	str := cmsTagSignature2String(sig)
 		cmsSignalError(self.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unknown curve type ")
@@ -3801,7 +3801,7 @@ func ReadSetOfCurves(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 
 	var curves [cmsMAXCHANNELS]*CmsToneCurve
 	for i := uint32(0); i < nCurves; i++ {
-		curves[i] = ReadEmbeddedCurve(ar,self, io)
+		curves[i] = ReadEmbeddedCurve(ar, self, io)
 		if curves[i] == nil || !cmsReadAlignment(io) {
 			for j := uint32(0); j < i; j++ {
 				CmsFreeToneCurve(curves[j])
@@ -3811,7 +3811,7 @@ func ReadSetOfCurves(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 	}
 
 	// Allocate the tone curves stage
-	stage := cmsStageAllocToneCurves(ar,self.ContextID, nCurves, curves[:])
+	stage := cmsStageAllocToneCurves(ar, self.ContextID, nCurves, curves[:])
 
 	// Free the individual curves
 	for i := uint32(0); i < nCurves; i++ {
@@ -3857,37 +3857,37 @@ func TypeLUTB2ARead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 	}
 
 	// Allocate an empty LUT
-	newLUT = cmsPipelineAlloc(ar,self.ContextID, uint32(inputChan), uint32(outputChan))
+	newLUT = cmsPipelineAlloc(ar, self.ContextID, uint32(inputChan), uint32(outputChan))
 	if newLUT == nil {
 		return nil
 	}
 
 	if offsetB != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar,self, io, baseOffset+offsetB, uint32(inputChan))) {
+		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetB, uint32(inputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetMat != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadMatrix(ar,self, io, baseOffset+offsetMat)) {
+		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadMatrix(ar, self, io, baseOffset+offsetMat)) {
 			goto Error
 		}
 	}
 
 	if offsetM != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar,self, io, baseOffset+offsetM, uint32(inputChan))) {
+		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetM, uint32(inputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetC != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadCLUT(ar,self, io, baseOffset+offsetC, uint32(inputChan), uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadCLUT(ar, self, io, baseOffset+offsetC, uint32(inputChan), uint32(outputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetA != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar,self, io, baseOffset+offsetA, uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetA, uint32(outputChan))) {
 			goto Error
 		}
 	}
@@ -3896,14 +3896,14 @@ func TypeLUTB2ARead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 	return newLUT
 
 Error:
-	cmsPipelineFree(ar,newLUT)
+	cmsPipelineFree(ar, newLUT)
 	return nil
 }
 
 func TypeLUTB2AWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	lut, ok := ptr.(*cmsPipeline)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsPipeline\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsPipeline\n")
 		return false
 	}
 
@@ -3939,7 +3939,7 @@ func TypeLUTB2AWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 
 	if a != nil {
 		offsetA = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar,self, io, cmsSigParametricCurveType, a) {
+		if !WriteSetOfCurves(ar, self, io, cmsSigParametricCurveType, a) {
 			return false
 		}
 	}
@@ -3950,28 +3950,28 @@ func TypeLUTB2AWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 		if lut.SaveAs8Bits {
 			precision = 1
 		}
-		if !WriteCLUT(ar,self, io, precision, clut) {
+		if !WriteCLUT(ar, self, io, precision, clut) {
 			return false
 		}
 	}
 
 	if m != nil {
 		offsetM = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar,self, io, cmsSigParametricCurveType, m) {
+		if !WriteSetOfCurves(ar, self, io, cmsSigParametricCurveType, m) {
 			return false
 		}
 	}
 
 	if matrix != nil {
 		offsetMat = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteMatrix(ar,self, io, matrix) {
+		if !WriteMatrix(ar, self, io, matrix) {
 			return false
 		}
 	}
 
 	if b != nil {
 		offsetB = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar,self, io, cmsSigParametricCurveType, b) {
+		if !WriteSetOfCurves(ar, self, io, cmsSigParametricCurveType, b) {
 			return false
 		}
 	}
@@ -3994,11 +3994,11 @@ func TypeLUTB2AWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 }
 
 func TypeLUTB2ADup(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}, nItems uint32) interface{} {
-	return cmsPipelineDup(ar,ptr.(*cmsPipeline))
+	return cmsPipelineDup(ar, ptr.(*cmsPipeline))
 }
 
 func TypeLUTB2AFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) {
-	cmsPipelineFree(ar,ptr.(*cmsPipeline))
+	cmsPipelineFree(ar, ptr.(*cmsPipeline))
 }
 
 // This is the list of built-in MPE types
@@ -4010,7 +4010,7 @@ func ReadMPEElem(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, car
 	var nItems uint32
 	newLUT, ok := cargo.(*cmsPipeline)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsPipeline\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsPipeline\n")
 		return false
 	}
 
@@ -4030,14 +4030,14 @@ func ReadMPEElem(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, car
 	typeHandler = GetHandler(cmsTagTypeSignature(elementSig), mpeTypePluginChunk.TagTypes, &SupportedMPEtypes[0])
 	if typeHandler == nil {
 		str := cmsTagSignature2String(cmsTagSignature(elementSig))
-		cmsSignalError(self.ContextID, cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unknown MPE type '%s' found.", str))
+		cmsSignalError(self.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unknown MPE type '%s' found.", str)
 		return false
 	}
 
 	// If there's no read method, ignore the element
 	if typeHandler.ReadFn != nil {
 		// Read the MPE and insert it into the pipeline
-		stage := typeHandler.ReadFn(ar,self, io, &nItems, sizeOfTag).(*cmsStage)
+		stage := typeHandler.ReadFn(ar, self, io, &nItems, sizeOfTag).(*cmsStage)
 		if stage == nil || !cmsPipelineInsertStage(newLUT, cmsAT_END, stage) {
 			return false
 		}
@@ -4069,7 +4069,7 @@ func TypeMPERead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nIt
 	}
 
 	// Allocate an empty LUT
-	newLUT = cmsPipelineAlloc(ar,self.ContextID, uint32(inputChans), uint32(outputChans))
+	newLUT = cmsPipelineAlloc(ar, self.ContextID, uint32(inputChans), uint32(outputChans))
 	if newLUT == nil {
 		return nil
 	}
@@ -4080,7 +4080,7 @@ func TypeMPERead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nIt
 	}
 
 	// Read position table and elements
-	if !ReadPositionTable(ar,self, io, elementCount, baseOffset, newLUT, ReadMPEElem) {
+	if !ReadPositionTable(ar, self, io, elementCount, baseOffset, newLUT, ReadMPEElem) {
 		goto Error
 	}
 
@@ -4094,7 +4094,7 @@ func TypeMPERead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nIt
 
 Error:
 	if newLUT != nil {
-		cmsPipelineFree(ar,newLUT)
+		cmsPipelineFree(ar, newLUT)
 	}
 	*nItems = 0
 	return nil
@@ -4116,7 +4116,7 @@ func TypeMPEWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, pt
 
 	lut, ok := ptr.(*cmsPipeline)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsPipeline\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsPipeline\n")
 		return false
 	}
 
@@ -4170,7 +4170,7 @@ func TypeMPEWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, pt
 		}
 
 		before = uint32(io.Tell((*cms_io_handler)(io)))
-		if !typeHandler.WriteFn(ar,self, io, elem, 1) {
+		if !typeHandler.WriteFn(ar, self, io, elem, 1) {
 			goto Error
 		}
 
@@ -4203,11 +4203,11 @@ Error:
 }
 
 func TypeMPEDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}, nItems uint32) interface{} {
-	return cmsPipelineDup(ar,ptr.(*cmsPipeline))
+	return cmsPipelineDup(ar, ptr.(*cmsPipeline))
 }
 
 func TypeMPEFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) {
-	cmsPipelineFree(ar,ptr.(*cmsPipeline))
+	cmsPipelineFree(ar, ptr.(*cmsPipeline))
 }
 
 // ********************************************************************************
@@ -4360,7 +4360,7 @@ func ReadOneMLUC(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, e *
 		return false
 	}
 	var nItems uint32
-	*mlu = TypeMLURead(ar,self, io, &nItems, e.Sizes[i]).(*cmsMLU)
+	*mlu = TypeMLURead(ar, self, io, &nItems, e.Sizes[i]).(*cmsMLU)
 	return *mlu != nil
 }
 
@@ -4375,7 +4375,7 @@ func WriteOneMLUC(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, e 
 	before := uint32(io.Tell((*cms_io_handler)(io)))
 	e.Offsets[i] = before - baseOffset
 
-	if !TypeMLUWrite(ar,self, io, mlu, 1) {
+	if !TypeMLUWrite(ar, self, io, mlu, 1) {
 		return false
 	}
 
@@ -4413,12 +4413,12 @@ func TypeDictionaryRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 
 	// Check valid lengths
 	if length != 16 && length != 24 && length != 32 {
-		cmsSignalError(self.ContextID, cmsERROR_UNKNOWN_EXTENSION, fmt.Sprintf("Unknown record length in dictionary"))
+		cmsSignalError(self.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unknown record length in dictionary")
 		return nil
 	}
 
 	// Create an empty dictionary
-	hDict = cmsDictAlloc(ar,self.ContextID)
+	hDict = cmsDictAlloc(ar, self.ContextID)
 	if hDict == nil {
 		return nil
 	}
@@ -4441,10 +4441,10 @@ func TypeDictionaryRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 			goto Error
 		}
 
-		if length > 16 && !ReadOneMLUC(ar,self, io, &a.DisplayName, i, &displayNameMLU) {
+		if length > 16 && !ReadOneMLUC(ar, self, io, &a.DisplayName, i, &displayNameMLU) {
 			goto Error
 		}
-		if length > 24 && !ReadOneMLUC(ar,self, io, &a.DisplayValue, i, &displayValueMLU) {
+		if length > 24 && !ReadOneMLUC(ar, self, io, &a.DisplayValue, i, &displayValueMLU) {
 			goto Error
 		}
 
@@ -4452,7 +4452,7 @@ func TypeDictionaryRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 			cmsSignalError(self.ContextID, cmsERROR_CORRUPTION_DETECTED, "Bad dictionary Name/Value")
 			rc = false
 		} else {
-			rc = cmsDictAddEntry(ar,hDict, nameWCS, valueWCS, displayNameMLU, displayValueMLU)
+			rc = cmsDictAddEntry(ar, hDict, nameWCS, valueWCS, displayNameMLU, displayValueMLU)
 		}
 
 		if displayNameMLU != nil {
@@ -4535,10 +4535,10 @@ func TypeDictionaryWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHAND
 			goto Error
 		}
 
-		if p.DisplayName != nil && !WriteOneMLUC(ar,self, io, &a.DisplayName, i, p.DisplayName, baseOffset) {
+		if p.DisplayName != nil && !WriteOneMLUC(ar, self, io, &a.DisplayName, i, p.DisplayName, baseOffset) {
 			goto Error
 		}
-		if p.DisplayValue != nil && !WriteOneMLUC(ar,self, io, &a.DisplayValue, i, p.DisplayValue, baseOffset) {
+		if p.DisplayValue != nil && !WriteOneMLUC(ar, self, io, &a.DisplayValue, i, p.DisplayValue, baseOffset) {
 			goto Error
 		}
 
@@ -4560,7 +4560,7 @@ Error:
 }
 
 func TypeDictionaryDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}, nItems uint32) interface{} {
-	return cmsDictDup(ar,CmsHANDLE(ptr))
+	return cmsDictDup(ar, CmsHANDLE(ptr))
 }
 
 func TypeDictionaryFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) {
@@ -4607,7 +4607,7 @@ Error:
 func TypeVideoSignalWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	cicp, ok := ptr.(*cmsVideoSignalType)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsVideoSignal\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsVideoSignal\n")
 		return false
 	}
 
@@ -4672,7 +4672,7 @@ func TypeVcgtRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 		}
 
 		for i := 0; i < 3; i++ {
-			curves[i] = cmsBuildTabulatedToneCurve16(ar,self.ContextID, uint32(nElems), nil)
+			curves[i] = cmsBuildTabulatedToneCurve16(ar, self.ContextID, uint32(nElems), nil)
 			switch nBytes {
 			case 1:
 				var v uint8
@@ -4703,7 +4703,7 @@ func TypeVcgtRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 				math.Pow(max-min, 1.0/gamma),
 				0, 0, 0, min, 0,
 			}
-			curves[i] = cmsBuildParametricToneCurve(ar,self.ContextID, 5, params)
+			curves[i] = cmsBuildParametricToneCurve(ar, self.ContextID, 5, params)
 		}
 	default:
 		cmsSignalError(self.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unsupported tag type for VCGT")
@@ -4782,9 +4782,9 @@ func TypeVcgtDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}, n ui
 		return nil
 	}
 
-	NewCurves[0] = cmsDupToneCurve(ar,oldCurves[0])
-	NewCurves[1] = cmsDupToneCurve(ar,oldCurves[1])
-	NewCurves[2] = cmsDupToneCurve(ar,oldCurves[2])
+	NewCurves[0] = cmsDupToneCurve(ar, oldCurves[0])
+	NewCurves[1] = cmsDupToneCurve(ar, oldCurves[1])
+	NewCurves[2] = cmsDupToneCurve(ar, oldCurves[2])
 	return &NewCurves[0]
 }
 
@@ -4807,12 +4807,12 @@ func TypeVcgtFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) {
 
 func GenericMPEDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}, n uint32) interface{} {
 	//fmt.Println("GenericMPEDup")
-	return cmsStageDup(ar,ptr.(*cmsStage))
+	return cmsStageDup(ar, ptr.(*cmsStage))
 
 }
 
 func GenericMPEFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) {
-	cmsStageFree(ar,ptr.(*cmsStage))
+	cmsStageFree(ar, ptr.(*cmsStage))
 }
 
 // Each curve is stored in one or more curve segments, with break-points specified between curve segments.
@@ -4912,7 +4912,7 @@ func ReadSegmentedCurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 		}
 	}
 
-	curve := cmsBuildSegmentedToneCurve(ar,self.ContextID, uint32(nSegments), segments)
+	curve := cmsBuildSegmentedToneCurve(ar, self.ContextID, uint32(nSegments), segments)
 
 	// Fix implicit points
 	for i := uint32(0); i < uint32(nSegments); i++ {
@@ -4927,7 +4927,7 @@ func ReadSegmentedCurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 // ReadMPECurve reads a single curve for MPE
 func ReadMPECurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo interface{}, n, sizeOfTag uint32) bool {
 	gammaTables := cargo.([]*CmsToneCurve)
-	gammaTables[n] = ReadSegmentedCurve(ar,self, io)
+	gammaTables[n] = ReadSegmentedCurve(ar, self, io)
 	return gammaTables[n] != nil
 }
 
@@ -4948,8 +4948,8 @@ func TypeMPEcurveRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER
 
 	var mpe *cmsStage
 	// Read position table and allocate the MPE curve stage
-	if ReadPositionTable(ar,self, io, uint32(inputChans), baseOffset, gammaTables, ReadMPECurve) {
-		mpe = cmsStageAllocToneCurves(ar,self.ContextID, uint32(inputChans), gammaTables)
+	if ReadPositionTable(ar, self, io, uint32(inputChans), baseOffset, gammaTables, ReadMPECurve) {
+		mpe = cmsStageAllocToneCurves(ar, self.ContextID, uint32(inputChans), gammaTables)
 
 	}
 
@@ -5025,7 +5025,7 @@ func WriteSegmentedCurve(io *cmsIOHANDLER, curve *CmsToneCurve) bool {
 func WriteMPECurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo interface{}, n, sizeOfTag uint32) bool {
 	curves, ok := cargo.(*cmsStageToneCurvesData)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsStageToneCurvesData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsStageToneCurvesData\n")
 		return false
 	}
 
@@ -5037,7 +5037,7 @@ func TypeMPEcurveWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 	mpe, ok := ptr.(*cmsStage)
 	curves, ok := mpe.Data.(*cmsStageToneCurvesData)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsStageToneCurvesData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsStageToneCurvesData\n")
 		return false
 	}
 
@@ -5052,7 +5052,7 @@ func TypeMPEcurveWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 	}
 
 	// Write position table
-	return WritePositionTable(ar,self, io, 0, uint32(mpe.InputChannels), baseOffset, curves, WriteMPECurve)
+	return WritePositionTable(ar, self, io, 0, uint32(mpe.InputChannels), baseOffset, curves, WriteMPECurve)
 }
 func TypeMPEmatrixRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) interface{} {
 	var inputChans, outputChans uint16
@@ -5083,7 +5083,7 @@ func TypeMPEmatrixRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 		offsets[i] = float64(v)
 	}
 
-	mpe := cmsStageAllocMatrix(ar,self.ContextID, uint32(outputChans), uint32(inputChans), matrix, offsets)
+	mpe := cmsStageAllocMatrix(ar, self.ContextID, uint32(outputChans), uint32(inputChans), matrix, offsets)
 	*nItems = 1
 	return mpe
 }
@@ -5092,7 +5092,7 @@ func TypeMPEmatrixWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 	mpe, ok := ptr.(*cmsStage)
 	matrix, ok := mpe.Data.(*cmsStageMatrixData)
 	if !ok {
-		fmt.Printf("Error: not of the type *cmsStageMatrixData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsStageMatrixData\n")
 		return false
 	}
 
@@ -5148,7 +5148,7 @@ func TypeMPEclutRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 		gridPoints[i] = uint32(dimensions8[i])
 	}
 
-	mpe := cmsStageAllocCLutFloatGranular(ar,self.ContextID, gridPoints[:], uint32(inputChans), uint32(outputChans), nil)
+	mpe := cmsStageAllocCLutFloatGranular(ar, self.ContextID, gridPoints[:], uint32(inputChans), uint32(outputChans), nil)
 	if mpe == nil {
 		return nil
 	}
@@ -5156,7 +5156,7 @@ func TypeMPEclutRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 	clut := mpe.Data.(*cmsStageCLutData)
 	for i := uint32(0); i < clut.NEntries; i++ {
 		if !cmsReadFloat32Number(io, &clut.Tab.([]float32)[i]) {
-			cmsStageFree(ar,mpe)
+			cmsStageFree(ar, mpe)
 			return nil
 		}
 	}

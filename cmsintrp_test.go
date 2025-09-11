@@ -41,7 +41,7 @@ func TestCmsComputeInterpParams_BasicUint16(t *testing.T) {
 		table[i] = uint16(i * 257)
 	}
 
-	params := cmsComputeInterpParams(nil, 256, 1, 1, table, 0)
+	params := cmsComputeInterpParams(nil,nil, 256, 1, 1, table, 0)
 	if params == nil {
 		t.Fatal("cmsComputeInterpParams returned nil")
 	}
@@ -54,7 +54,7 @@ func TestCmsComputeInterpParams_BasicFloat32(t *testing.T) {
 		table[i] = float32(i) / 255.0
 	}
 
-	params := cmsComputeInterpParams(nil, 256, 1, 1, table, 0)
+	params := cmsComputeInterpParams(nil,nil, 256, 1, 1, table, 0)
 	if params == nil {
 		t.Fatal("cmsComputeInterpParams returned nil for float32 table")
 	}
@@ -79,7 +79,7 @@ func TestLinLerp1Dfloat(t *testing.T) {
 
 func TestEval1Input(t *testing.T) {
 	table := []uint16{0, 32768, 65535}
-	interp := cmsComputeInterpParams(nil, 3, 1, 1, table, 0)
+	interp := cmsComputeInterpParams(nil, nil, 3, 1, 1, table, 0)
 	defer cmsFreeInterpParams(interp)
 
 	input := []uint16{32768}
@@ -93,7 +93,7 @@ func TestEval1Input(t *testing.T) {
 
 func TestEval1InputFloat(t *testing.T) {
 	table := []float32{0.0, 0.5, 1.0}
-	interp := cmsComputeInterpParams(nil, 3, 1, 1, table, 0)
+	interp := cmsComputeInterpParams(nil,nil, 3, 1, 1, table, 0)
 	defer cmsFreeInterpParams(interp)
 
 	input := []float32{0.5}

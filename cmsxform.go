@@ -7,7 +7,6 @@ import (
 	"arena"
 	"bytes"
 	"encoding/binary"
-	"fmt"
 )
 
 // Transformations stuff
@@ -147,6 +146,7 @@ func cmsAllocAlarmCodesChunk(ar *arena.Arena, ctx CmsContext, src CmsContext) {
 
 // cmsDeleteTransform releases the resources associated with a transform.
 func cmsDeleteTransform(ar *arena.Arena, hTransform CmsHTRANSFORM) {
+	//fmt.Println("cmsDeleteTransform")
 	p := hTransform.(*cmsTRANSFORM)
 
 	if p == nil {
@@ -160,7 +160,7 @@ func cmsDeleteTransform(ar *arena.Arena, hTransform CmsHTRANSFORM) {
 
 	// Free the LUT pipeline if it exists
 	if p.Lut != nil {
-		fmt.Printf(" cmsPipelineFree pipeline ptr = %p\n", p.Lut)
+		//	fmt.Printf(" cmsPipelineFree pipeline ptr = %p\n", p.Lut)
 
 		cmsPipelineFree(ar, p.Lut)
 	}
@@ -205,11 +205,15 @@ func PixelSize(Format uint32) uint32 {
 
 // cmsDoTransform applies a transformation to the input buffer and writes the result to the output buffer.
 func CmsDoTransform(ar *arena.Arena, Transform CmsHTRANSFORM, InputBuffer, OutputBuffer any, Size uint32) {
-	//fmt.Printf("start CmsDoTransform\n")
 
+	//fmt.Printf("start CmsDoTransform\n")
+	/*if ar == nil {
+		ar = arena.NewArena()
+		defer ar.Free()
+	}*/
 	p, ok := Transform.(*cmsTRANSFORM) // Cast the generic Transform to the specific type cmsTRANSFORM
 	if !ok {
-		fmt.Println("Error: p is not of the type cmsTransform")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "p is not of the type cmsTransform")
 	}
 	var stride cmsStride
 
@@ -232,7 +236,10 @@ func CmsDoTransformStride(
 	InputBuffer, OutputBuffer any,
 	Size uint32,
 	Stride uint32) {
-
+	/*	if ar == nil {
+		ar = arena.NewArena()
+		defer ar.Free()
+	}*/
 	p := Transform.(*cmsTRANSFORM)
 	var stride cmsStride
 
@@ -255,7 +262,10 @@ func CmsDoTransformLineStride(
 	BytesPerLineOut uint32,
 	BytesPerPlaneIn uint32,
 	BytesPerPlaneOut uint32) {
-
+	/*	if ar == nil {
+		ar = arena.NewArena()
+		defer ar.Free()
+	}*/
 	p := Transform.(*cmsTRANSFORM)
 	var stride cmsStride
 
@@ -652,10 +662,6 @@ func CachedXFORM(
 						fmt.Printf("wIn[1] %d\n", wIn[1])
 						fmt.Printf("wIn[2] %d\n", wIn[2])*/
 
-				/*table16 := p.Lut.Data.(*cmsInterpParams).Table.([]uint16)
-				for i := 0; i < 20; i++ {
-					fmt.Printf("table[%d] = %d\n", i, table16[i])
-				}*/
 				p.Lut.Eval16Fn(ar, wIn[:], wOut[:], p.Lut.Data)
 				/*	fmt.Printf("wOut[0] %d\n", wOut[0])
 					fmt.Printf("wOut[1] %d\n", wOut[1])
@@ -855,7 +861,7 @@ func cmsRegisterTransformPlugin(ar *arena.Arena, ContextID CmsContext, Data Plug
 	}
 	plugin, ok := Data.(*cmsPluginTransform)
 	if !ok {
-		fmt.Printf("Error: Plugin is not of the type cmsPluginTransform\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginTransform\n")
 		return false
 	}
 	// Ensure the factory callback is present.
@@ -1014,16 +1020,7 @@ func AllocEmptyTransform(
 
 	// Store the proposed pipeline
 	p.Lut = lut
-	/*if _, ok := p.Lut.Data.(*cmsInterpParams); ok {
-		fmt.Println("aaok := xform.Lut.Data.(*cmsInterpParams), count ", count)
-		table16 := p.Lut.Data.(*cmsInterpParams).Table.([]uint16)
-		for i := 0; i < 20; i++ {
-			fmt.Printf("table[%d] = %d\n", i, table16[i])
-		}
-	} else {
-		fmt.Println("aanot ok := xform.Lut.Data.(*cmsInterpParams)")
 
-	}*/
 	// Check if any plugin wants to handle the transform
 	if p.Lut != nil {
 		if (*dwFlags & cmsFLAGS_NOOPTIMIZE) == 0 {
@@ -1061,27 +1058,9 @@ func AllocEmptyTransform(
 		}
 
 		// Optimize the pipeline if no plugin handled the transform
-		/*if _, ok := p.Lut.Data.(*cmsInterpParams); ok {
-			fmt.Println("bbok := xform.Lut.Data.(*cmsInterpParams), count ", count)
-			table16 := p.Lut.Data.(*cmsInterpParams).Table.([]uint16)
-			for i := 0; i < 20; i++ {
-				fmt.Printf("table[%d] = %d\n", i, table16[i])
-			}
-		} else {
-			fmt.Println("bbnot ok := xform.Lut.Data.(*cmsInterpParams)")
 
-		}*/
 		cmsOptimizePipeline(ar, ContextID, &p.Lut, Intent, InputFormat, OutputFormat, dwFlags)
-		/*if _, ok := p.Lut.Data.(*cmsInterpParams); ok {
-			fmt.Println("ccok := xform.Lut.Data.(*cmsInterpParams), count ", count)
-			table16 := p.Lut.Data.(*cmsInterpParams).Table.([]uint16)
-			for i := 0; i < 20; i++ {
-				fmt.Printf("table[%d] = %d\n", i, table16[i])
-			}
-		} else {
-			fmt.Println("ccnot ok := xform.Lut.Data.(*cmsInterpParams)")
 
-		}*/
 	}
 
 	// Check for floating-point transform
@@ -1138,16 +1117,7 @@ func AllocEmptyTransform(
 			}
 		}
 	}
-	/*if _, ok := p.Lut.Data.(*cmsInterpParams); ok {
-		fmt.Println("ddok := xform.Lut.Data.(*cmsInterpParams), count ", count)
-		table16 := p.Lut.Data.(*cmsInterpParams).Table.([]uint16)
-		for i := 0; i < 20; i++ {
-			fmt.Printf("table[%d] = %d\n", i, table16[i])
-		}
-	} else {
-		fmt.Println("ddnot ok := xform.Lut.Data.(*cmsInterpParams)")
 
-	}*/
 	// Finalize the transform structure
 	p.InputFormat = *InputFormat
 	p.OutputFormat = *OutputFormat
@@ -1156,16 +1126,7 @@ func AllocEmptyTransform(
 	p.UserData = nil
 
 	ParallelizeIfSuitable(p)
-	/*if _, ok := p.Lut.Data.(*cmsInterpParams); ok {
-		fmt.Println("eeok := xform.Lut.Data.(*cmsInterpParams), count ", count)
-		table16 := p.Lut.Data.(*cmsInterpParams).Table.([]uint16)
-		for i := 0; i < 20; i++ {
-			fmt.Printf("table[%d] = %d\n", i, table16[i])
-		}
-	} else {
-		fmt.Println("eenot ok := xform.Lut.Data.(*cmsInterpParams)")
 
-	}*/
 	//	fmt.Println("END AllocEmptyTransform")
 	return p
 }
@@ -1285,12 +1246,9 @@ func cmsCreateExtendedTransform(
 	OutputFormat uint32,
 	dwFlags uint32,
 ) *cmsTRANSFORM {
-	//("cmsCreateExtendedTransform")
+	//fmt.Println("cmsCreateExtendedTransform")
 	// Check if it's a fake transform
-	/*if ar == nil {
-		ar = arena.NewArena()
-		defer ar.Free()
-	}*/
+
 	if dwFlags&cmsFLAGS_NULLTRANSFORM != 0 {
 		return AllocEmptyTransform(ar, ContextID, nil, INTENT_PERCEPTUAL, &InputFormat, &OutputFormat, &dwFlags)
 	}
@@ -1356,16 +1314,7 @@ func cmsCreateExtendedTransform(
 	if xform == nil {
 		return nil
 	}
-	/*if _, ok := xform.Lut.Data.(*cmsInterpParams); ok {
-		fmt.Println("22ok := xform.Lut.Data.(*cmsInterpParams), count ", count)
-		table16 := xform.Lut.Data.(*cmsInterpParams).Table.([]uint16)
-		for i := 0; i < 20; i++ {
-			fmt.Printf("table[%d] = %d\n", i, table16[i])
-		}
-	} else {
-		fmt.Println("22not ok := xform.Lut.Data.(*cmsInterpParams)")
 
-	}*/
 	// Configure transform
 	xform.EntryColorSpace = EntryColorSpace
 	xform.ExitColorSpace = ExitColorSpace
@@ -1402,16 +1351,7 @@ func cmsCreateExtendedTransform(
 			xform.OutputColorant = cmsDupNamedColorList(ar, (cmsReadTag(ar, hProfiles[nProfiles-1], cmsSigColorantTableTag)).(*cmsNAMEDCOLORLIST))
 		}
 	}
-	/*if _, ok := xform.Lut.Data.(*cmsInterpParams); ok {
-		fmt.Println("33ok := xform.Lut.Data.(*cmsInterpParams) , count ", count)
-		table16 := xform.Lut.Data.(*cmsInterpParams).Table.([]uint16)
-		for i := 0; i < 20; i++ {
-			fmt.Printf("table[%d] = %d\n", i, table16[i])
-		}
-	} else {
-		fmt.Println("33not ok := xform.Lut.Data.(*cmsInterpParams)")
 
-	}*/
 	// Store the sequence of profiles
 	if dwFlags&cmsFLAGS_KEEP_SEQUENCE != 0 {
 		xform.Sequence = cmsCompileProfileSequence(ar, ContextID, nProfiles, hProfiles)
@@ -1428,26 +1368,10 @@ func cmsCreateExtendedTransform(
 		}
 
 	}
-	/*if _, ok := xform.Lut.Data.(*cmsInterpParams); ok {
-		fmt.Println("44ok := xform.Lut.Data.(*cmsInterpParams) , count ", count)
-		table16 := xform.Lut.Data.(*cmsInterpParams).Table.([]uint16)
-		for i := 0; i < 20; i++ {
-			fmt.Printf("table[%d] = %d\n", i, table16[i])
-		}
-	} else {
-		fmt.Println("44not ok := xform.Lut.Data.(*cmsInterpParams)")
 
-	}*/
-	//if xform.Lut.Data.
-	/*if _, ok := xform.Lut.Data.(*cmsInterpParams); ok {
-		table16 := xform.Lut.Data.(*cmsInterpParams).Table.([]uint16)
-		for i := 0; i < 20; i++ {
-			fmt.Printf("table[%d] = %d\n", i, table16[i])
-		}
-	}*/
 	count++
 	//fmt.Println("end cmsCreateExtendedTransform before returning form")
-
+	xform.Ar = ar
 	return xform
 }
 

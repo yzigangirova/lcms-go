@@ -3,10 +3,30 @@ package golcms
 import (
 	"fmt"
 	"math"
+	"sync"
 
 	//"unsafe"
 	"arena"
 )
+
+var lutBufferPool = sync.Pool{
+	New: func() any {
+		// Allocate once
+		return new([2][MAX_STAGE_CHANNELS]float32)
+	},
+}
+
+var in16Pool = sync.Pool{
+	New: func() any {
+		return new([MAX_STAGE_CHANNELS]uint16)
+	},
+}
+
+var out16Pool = sync.Pool{
+	New: func() any {
+		return new([MAX_STAGE_CHANNELS]uint16)
+	},
+}
 
 func cmsStageAllocPlaceholder(
 	ar *arena.Arena,
@@ -133,30 +153,18 @@ func cmsStageClipNegatives(ar *arena.Arena, ContextID CmsContext, nChannels uint
 func cmsStageGetPtrToCurveSet(mpe *cmsStage) []*CmsToneCurve {
 	data, ok := mpe.Data.(*cmsStageToneCurvesData)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsToneCurve\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsToneCurve\n")
 		return nil
 	}
 	return data.TheCurves
 }
-
-/*func EvaluateCurves(In []float32, Out []float32, mpe *cmsStage) {
-	data := (*cmsStageToneCurvesData)(mpe.Data)
-	if data == nil || data.TheCurves == nil {
-		return
-	}
-
-	for i := uint32(0); i < data.NCurves; i++ {
-		Out[i] = cmsEvalToneCurveFloat(data.TheCurves[i], In[i])
-
-	}
-}*/
 
 func EvaluateCurves(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage) {
 	//fmt.Println("   START EvaluateCurves In ", In[0], In[1], In[2], In[3])
 
 	data, ok := mpe.Data.(*cmsStageToneCurvesData)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsStageToneCurvesData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageToneCurvesData\n")
 		return
 	}
 	if data == nil || data.TheCurves == nil {
@@ -193,7 +201,7 @@ func CurveSetElemTypeFree(ar *arena.Arena, mpe *cmsStage) {
 
 	data, ok := mpe.Data.(*cmsStageToneCurvesData)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsStageToneCurvesData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageToneCurvesData\n")
 		return
 	}
 	if data == nil {
@@ -214,7 +222,7 @@ func CurveSetDup(ar *arena.Arena, mpe *cmsStage) interface{} {
 	// Access the data from the input stage
 	data, ok := mpe.Data.(*cmsStageToneCurvesData)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsStageToneCurvesData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageToneCurvesData\n")
 		return nil
 	}
 	// Allocate memory for the new tone curves data structure
@@ -305,83 +313,6 @@ func cmsStageAllocIdentityCurves(ar *arena.Arena, ContextID CmsContext, nChannel
 	return mpe
 }
 
-// EvaluateMatrix performs matrix multiplication and applies an optional offset.
-/*func EvaluateMatrix(in []float32, out []float32, mpe *cmsStage) {
-	fmt.Println("start EvaluateMatrix")
-	// Cast the unsafe pointer to the original struct type
-	data := (*cmsStageMatrixData)(mpe.Data)
-
-	for i := uint32(0); i < mpe.OutputChannels; i++ {
-		var tmp float64 = 0
-		for j := uint32(0); j < mpe.InputChannels; j++ {
-			tmp += float64(in[j]) * data.Double[i*mpe.InputChannels+j]
-		}
-
-		if data.Offset != nil {
-			tmp += data.Offset[i]
-		}
-		out[i] = float32(tmp)
-	}
-	fmt.Println("end EvaluateMatrix")
-}*/
-
-/*func EvaluateMatrix(in []float32, out []float32, mpe *cmsStage) {
-	fmt.Println("start EVALUATE MATRIX")
-	fmt.Printf("got mpe %p \n", mpe)
-
-	data, ok := mpe.Data.(*cmsStageMatrixData)
-	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsStageMatrixData\n")
-		return
-	}
-	// Print matrix coefficients
-	fmt.Println("Matrix Coefficients (Double):")
-	for i := uint32(0); i < mpe.OutputChannels; i++ {
-		for j := uint32(0); j < mpe.InputChannels; j++ {
-			val := data.Double[i*mpe.InputChannels+j]
-			fmt.Printf("Double[%d][%d] = %.10f\n", i, j, val)
-		}
-	}
-
-	// Print offsets if available
-		if data.Offset != nil {
-			fmt.Println("Offsets:")
-			for i := uint32(0); i < mpe.OutputChannels; i++ {
-				fmt.Printf("Offset[%d] = %.10f\n", i, data.Offset[i])
-			}
-		} else {
-			fmt.Println("No offsets present.")
-		}
-
-	// Print input vector
-	fmt.Print("Input: ")
-	for j := uint32(0); j < mpe.InputChannels; j++ {
-		fmt.Printf("%f ", in[j])
-	}
-	fmt.Println()
-
-	for i := uint32(0); i < mpe.OutputChannels; i++ {
-		var tmp float64 = 0
-		for j := uint32(0); j < mpe.InputChannels; j++ {
-			coeff := data.Double[i*mpe.InputChannels+j]
-			product := float64(in[j]) * coeff
-			tmp += product
-				fmt.Printf("M[%d][%d] = %.10f, In[%d] = %.10f, product = %.10f\n",
-				i, j, coeff, j, in[j], product)
-		}
-
-		if data.Offset != nil {
-			tmp += data.Offset[i]
-			//	fmt.Printf("Offset[%d] = %.10f\n", i, data.Offset[i])
-		}
-
-		out[i] = float32(tmp)
-		fmt.Printf("Out[%d] = %.10f\n", i, out[i])
-	}
-
-	fmt.Println("end EVALUATE MATRIX")
-}*/
-
 func EvaluateMatrix(ar *arena.Arena, in []float32, out []float32, mpe *cmsStage) {
 	//fmt.Printf("start EvaluateMatrix %.7f  %.7f  %.7f  %.7f \n", in[0], in[1], in[2], in[3])
 
@@ -432,7 +363,7 @@ func MatrixElemDup(ar *arena.Arena, mpe *cmsStage) interface{} {
 
 	Data, ok := mpe.Data.(*cmsStageMatrixData)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsStageMatrixData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageMatrixData\n")
 		return nil
 	}
 
@@ -454,7 +385,7 @@ func MatrixElemTypeFree(ar *arena.Arena, mpe *cmsStage) {
 
 	Data, ok := mpe.Data.(*cmsStageMatrixData)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsStageMatrixData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageMatrixData\n")
 		return
 	}
 	if Data == nil {
@@ -518,104 +449,17 @@ func cmsStageAllocMatrix(
 	return NewMPE
 }
 
-/*func cmsStageAllocMatrix(
-	ContextID CmsContext,
-	Rows, Cols uint32,
-	Matrix, Offset []float64,
-) *cmsStage {
-	fmt.Println("start cmsStageAllocMatrix")
-	for i, row := range Matrix {
-		fmt.Printf("Matrix %d %v\n", i, row)
-	}
-	var i, n uint32
-	var NewElem *cmsStageMatrixData
-	var NewMPE *cmsStage
-
-	n = Rows * Cols
-
-	if n == 0 || n >= math.MaxUint32/Cols || n >= math.MaxUint32/Rows || n < Rows || n < Cols {
-		return nil
-	}
-
-	NewMPE = cmsStageAllocPlaceholder(
-		ContextID,
-		cmsSigMatrixElemType,
-		Cols,
-		Rows,
-		EvaluateMatrix,
-		MatrixElemDup,
-		MatrixElemTypeFree,
-		nil,
-	)
-
-	if NewMPE == nil {
-		return nil
-	}
-
-	NewElem = allocateStruct[cmsStageMatrixData]()
-	if NewElem == nil {
-		goto Error
-	}
-	NewMPE.Data = NewElem
-
-	NewElem.Double = make([]float64, n)
-	copy(NewElem.Double, Matrix)
-	fmt.Printf("allocMatrix *cmsStageMatrixData NewElem ptr: %p\n", NewElem)
-
-	if Offset != nil {
-		NewElem.Offset = make([]float64, Rows)
-		for i = 0; i < Rows; i++ {
-			NewElem.Offset[i] = Offset[i]
-		}
-
-	}
-
-fmt.Printf("allocMatrix NewElem.Double: %v\n", NewElem.Double)
-fmt.Printf("allocMatrix NewElem.Offset: %v\n", NewElem.Offset)
-fmt.Printf("allocMatrix NewMPE.Data ptr: %p\n", NewMPE.Data)
-	fmt.Printf("allocMatrix *cmsStage NewMPE ptr: %p\n", NewMPE)
-	fmt.Println("end cmsStageAllocMatrix")
-	return NewMPE
-
-Error:
-	if NewMPE != nil {
-		cmsStageFree(NewMPE)
-	}
-	return nil
-}*/
-
 func EvaluateXYZ2Lab(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage) {
 	//fmt.Printf("start EvaluateXYZ2Lab %.7f  %.7f  %.7f  %.7f \n", In[0], In[1], In[2], In[3])
 	const XYZadj = MAX_ENCODEABLE_XYZ
 
 	var XYZ cmsCIEXYZ
 	var Lab cmsCIELab
-	//0.42667532 0.4428354 0.36783364 0.06250095  //go
-	//0.427594 0.443783 0.368573 0.062501  //ci
-	// From 0..1.0 to XYZ
-	/*const eps = 1e-7
-	patchInput := func(v float64) float64 {
-		if math.Abs(float64(v)-0.42667532) < eps {
-			return 0.427594
-		}
-		if math.Abs(float64(v)-0.4428354) < eps {
-			return 0.443783
-		}
-		if math.Abs(float64(v)-0.36783364) < eps {
-			return 0.368573
-		}
-		if math.Abs(float64(v)-0.06250095) < eps {
-			return 0.062501
-		}
-		return v
-	}*/
+
 	XYZ.X = float64(In[0]) * XYZadj
 	XYZ.Y = float64(In[1]) * XYZadj
 	XYZ.Z = float64(In[2]) * XYZadj
 
-	/*XYZ.X = patchInput(float64(In[0])) * XYZadj
-	XYZ.Y = patchInput(float64(In[1])) * XYZadj
-	XYZ.Z = patchInput(float64(In[2])) * XYZadj*/
 	// Convert XYZ to Lab
 	cmsXYZ2Lab(nil, &Lab, &XYZ)
 
@@ -1018,56 +862,26 @@ func LUTeval16(ar *arena.Arena, In []uint16, Out []uint16, D interface{}) {
 	FromFloatTo16(Storage[Phase][:], Out, lut.OutputChannels)
 }
 
-// _LUTevalFloat evaluates the LUT on a float32 basis
-/*
-func LUTevalFloat(In []float32, Out []float32, D unsafe.Pointer) {
-	lut := (*cmsPipeline)(D)
-	var Storage [2][MAX_STAGE_CHANNELS]float32
-	var Phase, NextPhase int
-
-	// Copy input to the first storage buffer
-	MemmoveSlice(Storage[Phase][:], In, int(lut.InputChannels))
-
-	// Process each stage in the pipeline
-	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
-		NextPhase = Phase ^ 1
-		mpe.EvalPtr(Storage[Phase][:], Storage[NextPhase][:], mpe)
-		Phase = NextPhase
-	}
-
-	// Copy the result to the output
-	MemmoveSlice(Out, Storage[Phase][:], int(lut.OutputChannels))
-}
-*/
-// ошибка здесь
-func LUTevalFloat(ar *arena.Arena, In []float32, Out []float32, D interface{}) {
-	//fmt.Printf(" START LUTevalFloat In %.7f %.7f %.7f %.7f \n", In[0], In[1], In[2], In[3])
-
+func LUTevalFloat(_ *arena.Arena, In []float32, Out []float32, D interface{}) {
 	lut, ok := D.(*cmsPipeline)
 	if !ok {
-		panic(" D  must be of type *cmsPipeline")
+		panic(" D must be of type *cmsPipeline")
 	}
-	var Storage [2][MAX_STAGE_CHANNELS]float32
+
+	storagePtr := lutBufferPool.Get().(*[2][MAX_STAGE_CHANNELS]float32)
+	defer lutBufferPool.Put(storagePtr) // reuse for next call
+
+	// Work with pointer directly, no copying
 	var Phase, NextPhase int
-	var count int
-	MemmoveSlice(Storage[Phase][:], In, int(lut.InputChannels))
-	if ar == nil {
-		ar = arena.NewArena()
-		defer ar.Free()
-	}
+	MemmoveSlice(storagePtr[Phase][:], In, int(lut.InputChannels))
+
 	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
 		NextPhase = Phase ^ 1
-		//fmt.Printf("before Storage[Phase][:] %.7f %.7f %.7f %.7f \n", Storage[Phase][0], Storage[Phase][1], Storage[Phase][2], Storage[Phase][3])
-		//fmt.Printf("before Storage[NextPhase][:] %.7f %.7f %.7f %.7f \n", Storage[NextPhase][0], Storage[NextPhase][1], Storage[NextPhase][2], Storage[NextPhase][3])
-		mpe.EvalPtr(ar, Storage[Phase][:], Storage[NextPhase][:], mpe)
-		//fmt.Printf("after Storage[Phase][:] %.7f %.7f %.7f %.7f \n", Storage[Phase][0], Storage[Phase][1], Storage[Phase][2], Storage[Phase][3])
-		//fmt.Printf("after Storage[NextPhase][:] %.7f %.7f %.7f %.7f \n", Storage[NextPhase][0], Storage[NextPhase][1], Storage[NextPhase][2], Storage[NextPhase][3])
+		mpe.EvalPtr(nil, storagePtr[Phase][:], storagePtr[NextPhase][:], mpe)
 		Phase = NextPhase
-		count++
 	}
-	MemmoveSlice(Out, Storage[Phase][:], int(lut.OutputChannels))
-	//fmt.Println(" END LUTevalFloat")
 
+	MemmoveSlice(Out, storagePtr[Phase][:], int(lut.OutputChannels))
 }
 
 // cmsPipelineAlloc allocates and initializes a new LUT pipeline
@@ -1481,34 +1295,32 @@ func EvaluateCLUTfloat(ar *arena.Arena, In []float32, Out []float32, mpe *cmsSta
 	//fmt.Println("start EvaluateCLUTfloat")
 	data, ok := mpe.Data.(*cmsStageCLutData)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsStageClutData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageClutData\n")
 		return
 	}
 	data.Params.Interpolation.LerpFloat(In, Out, data.Params)
 }
 
-// EvaluateCLUTfloatIn16 converts to 16 bits, evaluates, and back to floating point.
 func EvaluateCLUTfloatIn16(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage) {
-	//fmt.Println("start EvaluateCLUTfloatIn16")
-	var In16 []uint16
-	var Out16 []uint16
-	if ar != nil {
-		In16 = arena.MakeSlice[uint16](ar, int(mpe.InputChannels), int(mpe.InputChannels))
-		Out16 = arena.MakeSlice[uint16](ar, int(mpe.OutputChannels), int(mpe.OutputChannels))
-	} else {
-		In16 = make([]uint16, mpe.InputChannels)
-		Out16 = make([]uint16, mpe.OutputChannels)
-	}
+	in16 := in16Pool.Get().(*[MAX_STAGE_CHANNELS]uint16)
+	out16 := out16Pool.Get().(*[MAX_STAGE_CHANNELS]uint16)
+	defer func() {
+		in16Pool.Put(in16)
+		out16Pool.Put(out16)
+	}()
+
 	data, ok := mpe.Data.(*cmsStageCLutData)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsStageClutData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageClutData\n")
 		return
 	}
+	if mpe.InputChannels > MAX_STAGE_CHANNELS || mpe.OutputChannels > MAX_STAGE_CHANNELS {
+		panic("Number of channels exceeds MAX_STAGE_CHANNELS")
+	}
 
-	FromFloatTo16(In, In16[:], mpe.InputChannels)
-	data.Params.Interpolation.Lerp16(In16[:], Out16[:], data.Params)
-	From16ToFloat(Out16[:], Out, mpe.OutputChannels)
-	//fmt.Println("end EvaluateCLUTfloatIn16")
+	FromFloatTo16(In, in16[:], mpe.InputChannels)
+	data.Params.Interpolation.Lerp16(in16[:], out16[:], data.Params)
+	From16ToFloat(out16[:], Out, mpe.OutputChannels)
 }
 
 // CubeSize calculates the total number of nodes in a hypercube.
@@ -1540,7 +1352,7 @@ func CubeSize(Dims []uint32, b uint32) uint32 {
 func CLUTElemDup(ar *arena.Arena, mpe *cmsStage) interface{} {
 	data, ok := mpe.Data.(*cmsStageCLutData)
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsStageClutData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageClutData\n")
 		return nil
 	}
 	newElem := allocateStruct[cmsStageCLutData](ar)
@@ -1584,7 +1396,7 @@ func CLutElemTypeFree(ar *arena.Arena, mpe *cmsStage) {
 		return
 	}
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsStageClutData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageClutData\n")
 		return
 	}
 	// Free interpolation parameters
@@ -1608,7 +1420,7 @@ func cmsStageAllocCLut16bitGranular(
 	}
 
 	if inputChan > MAX_INPUT_DIMENSIONS {
-		cmsSignalError(ContextID, cmsERROR_RANGE, "Too many input channels (%d channels, max=%d)")
+		cmsSignalError(ContextID, cmsERROR_RANGE, "Too many input channels (%d channels, max=%d)", inputChan, MAX_INPUT_DIMENSIONS)
 		return nil
 	}
 
@@ -1811,7 +1623,7 @@ func cmsStageSampleCLut16bit(
 		return false
 	}
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsStageClutData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageClutData\n")
 		return false
 	}
 	nSamples := clut.Params.nSamples
@@ -1886,7 +1698,7 @@ func cmsStageSampleCLutFloat(
 		return false
 	}
 	if !ok {
-		fmt.Printf("Error: Interface data assertion error, not *cmsStageClutData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageClutData\n")
 		return false
 	}
 	nSamples := clut.Params.nSamples

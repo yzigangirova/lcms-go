@@ -56,7 +56,7 @@ func TestCmsIsToneCurveLinear_Linear(t *testing.T) {
 		values[i] = uint16((i * 65535) / int(entries-1))
 	}
 
-	curve := cmsBuildTabulatedToneCurve16(nil, entries, values)
+	curve := cmsBuildTabulatedToneCurve16(nil,nil, entries, values)
 	if !cmsIsToneCurveLinear(curve) {
 		t.Errorf("cmsIsToneCurveLinear expected true for linear ramp")
 	}
@@ -68,7 +68,7 @@ func TestCmsIsToneCurveMonotonic_Ascending(t *testing.T) {
 		values[i] = uint16(i * 256)
 	}
 
-	curve := cmsBuildTabulatedToneCurve16(nil, entries, values)
+	curve := cmsBuildTabulatedToneCurve16(nil,nil, entries, values)
 	if !cmsIsToneCurveMonotonic(curve) {
 		t.Errorf("Expected curve to be monotonic ascending")
 	}
@@ -81,7 +81,7 @@ func TestCmsIsToneCurveMonotonic_Descending(t *testing.T) {
 		values[i] = uint16((255 - i) * 256)
 	}
 
-	curve := cmsBuildTabulatedToneCurve16(nil, entries, values)
+	curve := cmsBuildTabulatedToneCurve16(nil,nil, entries, values)
 	if !cmsIsToneCurveMonotonic(curve) {
 		t.Errorf("Expected curve to be monotonic descending")
 	}
@@ -93,7 +93,7 @@ func TestCmsEstimateGamma_Linear(t *testing.T) {
 		values[i] = uint16((i * 65535) / (MAX_NODES_IN_CURVE - 1))
 	}
 
-	curve := cmsBuildTabulatedToneCurve16(nil, MAX_NODES_IN_CURVE, values)
+	curve := cmsBuildTabulatedToneCurve16(nil,nil, MAX_NODES_IN_CURVE, values)
 	gamma := cmsEstimateGamma(curve, 0.1)
 	if gamma < 0.9 || gamma > 1.1 {
 		t.Errorf("cmsEstimateGamma on linear should be ~1, got %f", gamma)
@@ -105,7 +105,7 @@ func TestCmsEvalToneCurveFloat_Linear(t *testing.T) {
 	for i := range values {
 		values[i] = uint16((i * 65535) / 255)
 	}
-	curve := cmsBuildTabulatedToneCurve16(nil, 256, values)
+	curve := cmsBuildTabulatedToneCurve16(nil,nil, 256, values)
 
 	got := cmsEvalToneCurveFloat(curve, 0.5)
 	if math.Abs(float64(got-0.5)) > 0.01 {
@@ -118,7 +118,7 @@ func TestCmsEvalToneCurve16_Linear(t *testing.T) {
 	for i := range values {
 		values[i] = uint16((i * 65535) / 255)
 	}
-	curve := cmsBuildTabulatedToneCurve16(nil, 256, values)
+	curve := cmsBuildTabulatedToneCurve16(nil,nil, 256, values)
 
 	got := cmsEvalToneCurve16(curve, 32768)
 	if math.Abs(float64(got)-32768) > 500 {
@@ -127,7 +127,7 @@ func TestCmsEvalToneCurve16_Linear(t *testing.T) {
 }
 
 func TestCmsBuildParametricToneCurve_Valid(t *testing.T) {
-	curve := cmsBuildParametricToneCurve(nil, 1, []float64{2.2})
+	curve := cmsBuildParametricToneCurve(nil,nil, 1, []float64{2.2})
 	if curve == nil {
 		t.Errorf("cmsBuildParametricToneCurve returned nil for type 1")
 	}
@@ -138,8 +138,8 @@ func TestCmsReverseToneCurve(t *testing.T) {
 		values[i] = uint16((i * 65535) / 255)
 	}
 
-	original := cmsBuildTabulatedToneCurve16(nil, 256, values)
-	reversed := cmsReverseToneCurve(original)
+	original := cmsBuildTabulatedToneCurve16(nil,nil, 256, values)
+	reversed := cmsReverseToneCurve(nil,original)
 	if reversed == nil {
 		t.Fatal("cmsReverseToneCurve returned nil")
 	}
@@ -155,8 +155,8 @@ func TestCmsDupToneCurve(t *testing.T) {
 		values[i] = uint16((i * 65535) / 255)
 	}
 
-	original := cmsBuildTabulatedToneCurve16(nil, 256, values)
-	copy := cmsDupToneCurve(original)
+	original := cmsBuildTabulatedToneCurve16(nil,nil, 256, values)
+	copy := cmsDupToneCurve(nil,original)
 	if copy == nil {
 		t.Fatal("cmsDupToneCurve returned nil")
 	}
@@ -169,7 +169,7 @@ func TestCmsDupToneCurve(t *testing.T) {
 }
 
 func TestCmsIsToneCurveMultisegment(t *testing.T) {
-	g := cmsBuildSegmentedToneCurve(nil, 2, []cmsCurveSegment{
+	g := cmsBuildSegmentedToneCurve(nil,nil, 2, []cmsCurveSegment{
 		{X0: 0.0, X1: 0.5, Type: 1, Params: [10]float64{1.0}},
 		{X0: 0.5, X1: 1.0, Type: 1, Params: [10]float64{1.0}},
 	})
@@ -196,7 +196,7 @@ func TestCmsIsToneCurveMultisegment(t *testing.T) {
 }*/
 
 func TestCmsGetToneCurveParametricType(t *testing.T) {
-	curve := cmsBuildParametricToneCurve(nil, 1, []float64{2.2})
+	curve := cmsBuildParametricToneCurve(nil,nil, 1, []float64{2.2})
 	tp := cmsGetToneCurveParametricType(curve)
 	if tp != 1 {
 		t.Errorf("Expected parametric type 1, got %d", tp)

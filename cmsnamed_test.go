@@ -18,7 +18,7 @@ func TestStrFrom16(t *testing.T) {
 }
 
 func TestCmsMLUalloc_Basic(t *testing.T) {
-	mlu := cmsMLUalloc(nil, 0)
+	mlu := cmsMLUalloc(nil,nil, 0)
 	if mlu == nil {
 		t.Fatal("cmsMLUalloc returned nil")
 	}
@@ -28,7 +28,7 @@ func TestCmsMLUalloc_Basic(t *testing.T) {
 }
 
 func TestCmsMLUtranslationsCount(t *testing.T) {
-	mlu := cmsMLUalloc(nil, 1)
+	mlu := cmsMLUalloc(nil,nil, 1)
 	mlu.UsedEntries = 3
 	if cmsMLUtranslationsCount(mlu) != 3 {
 		t.Errorf("cmsMLUtranslationsCount expected 3, got %d", cmsMLUtranslationsCount(mlu))
@@ -36,7 +36,7 @@ func TestCmsMLUtranslationsCount(t *testing.T) {
 }
 
 func TestSearchMLUEntry_NotFound(t *testing.T) {
-	mlu := cmsMLUalloc(nil, 2)
+	mlu := cmsMLUalloc(nil,nil, 2)
 	idx := SearchMLUEntry(mlu, 0x656E, 0x5553)
 	if idx != -1 {
 		t.Errorf("Expected -1 for missing entry, got %d", idx)
@@ -44,7 +44,7 @@ func TestSearchMLUEntry_NotFound(t *testing.T) {
 }
 
 func TestGrowMLUtable_DoubleSize(t *testing.T) {
-	mlu := cmsMLUalloc(nil, 2)
+	mlu := cmsMLUalloc(nil,nil, 2)
 	ok := GrowMLUtable(mlu)
 	if !ok || mlu.AllocatedEntries != 4 {
 		t.Errorf("GrowMLUtable failed: AllocatedEntries=%d", mlu.AllocatedEntries)
