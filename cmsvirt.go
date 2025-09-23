@@ -22,10 +22,10 @@ func SetTextTags(ar *arena.Arena, hProfile CmsHPROFILE, Description []uint16) bo
 		goto Error
 	}
 
-	if !cmsWriteTag(ar, hProfile, cmsSigProfileDescriptionTag, DescriptionMLU) {
+	if !cmsWriteTag(ar, hProfile, CmsSigProfileDescriptionTag, DescriptionMLU) {
 		goto Error
 	}
-	if !cmsWriteTag(ar, hProfile, cmsSigCopyrightTag, CopyrightMLU) {
+	if !cmsWriteTag(ar, hProfile, CmsSigCopyrightTag, CopyrightMLU) {
 		goto Error
 	}
 
@@ -70,13 +70,10 @@ func SetSeqDescTag(ar *arena.Arena, hProfile CmsHPROFILE, Model []byte) bool {
 	rc = true
 
 Error:
-	if Seq != nil {
-		cmsFreeProfileSequenceDescription(Seq)
-	}
+	cmsFreeProfileSequenceDescription(Seq)
 	return rc
 }
 
-// CmsCreateRGBProfileTHR translates the function to Go
 func CmsCreateRGBProfileTHR(ar *arena.Arena, ContextID CmsContext, WhitePoint *CmsCIExyY, Primaries *CmsCIExyYTRIPLE, TransferFunction []*CmsToneCurve) CmsHPROFILE {
 	var (
 		hICC          CmsHPROFILE
@@ -93,38 +90,38 @@ func CmsCreateRGBProfileTHR(ar *arena.Arena, ContextID CmsContext, WhitePoint *C
 	}
 
 	cmsSetProfileVersion(hICC, 4.4)
-	cmsSetDeviceClass(hICC, cmsSigDisplayClass)
-	cmsSetColorSpace(hICC, cmsSigRgbData)
-	cmsSetPCS(hICC, cmsSigXYZData)
+	cmsSetDeviceClass(hICC, CmsSigDisplayClass)
+	cmsSetColorSpace(hICC, CmsSigRgbData)
+	cmsSetPCS(hICC, CmsSigXYZData)
 	cmsSetHeaderRenderingIntent(hICC, INTENT_PERCEPTUAL)
 
 	// Implement profile using following tags:
 	//
-	//  1 cmsSigProfileDescriptionTag
-	//  2 cmsSigMediaWhitePointTag
-	//  3 cmsSigRedColorantTag
-	//  4 cmsSigGreenColorantTag
-	//  5 cmsSigBlueColorantTag
-	//  6 cmsSigRedTRCTag
-	//  7 cmsSigGreenTRCTag
-	//  8 cmsSigBlueTRCTag
+	//  1 CmsSigProfileDescriptionTag
+	//  2 CmsSigMediaWhitePointTag
+	//  3 CmsSigRedColorantTag
+	//  4 CmsSigGreenColorantTag
+	//  5 CmsSigBlueColorantTag
+	//  6 CmsSigRedTRCTag
+	//  7 CmsSigGreenTRCTag
+	//  8 CmsSigBlueTRCTag
 	//  9 Chromatic adaptation Tag
 	// This conforms a standard RGB DisplayProfile as says ICC, and then I add (As per addendum II)
-	// 10 cmsSigChromaticityTag
+	// 10 CmsSigChromaticityTag
 
 	if !SetTextTags(ar, hICC, StringToUTF16Slice("RGB built-in")) {
 		goto Error
 	}
 
 	if WhitePoint != nil {
-		if !cmsWriteTag(ar, hICC, cmsSigMediaWhitePointTag, cmsD50_XYZ()) {
+		if !cmsWriteTag(ar, hICC, CmsSigMediaWhitePointTag, cmsD50_XYZ()) {
 			goto Error
 		}
 
 		cmsxyY2XYZ(&WhitePointXYZ, WhitePoint)
 		cmsAdaptationMatrix(&CHAD, nil, &WhitePointXYZ, cmsD50_XYZ())
 
-		if !cmsWriteTag(ar, hICC, cmsSigChromaticAdaptationTag, &CHAD) {
+		if !cmsWriteTag(ar, hICC, CmsSigChromaticAdaptationTag, &CHAD) {
 			goto Error
 		}
 	}
@@ -150,41 +147,41 @@ func CmsCreateRGBProfileTHR(ar *arena.Arena, ContextID CmsContext, WhitePoint *C
 		Colorants.Blue.Y = MColorants.V[1].N[2]
 		Colorants.Blue.Z = MColorants.V[2].N[2]
 
-		if !cmsWriteTag(ar, hICC, cmsSigRedColorantTag, &Colorants.Red) ||
-			!cmsWriteTag(ar, hICC, cmsSigGreenColorantTag, &Colorants.Green) ||
-			!cmsWriteTag(ar, hICC, cmsSigBlueColorantTag, &Colorants.Blue) {
+		if !cmsWriteTag(ar, hICC, CmsSigRedColorantTag, &Colorants.Red) ||
+			!cmsWriteTag(ar, hICC, CmsSigGreenColorantTag, &Colorants.Green) ||
+			!cmsWriteTag(ar, hICC, CmsSigBlueColorantTag, &Colorants.Blue) {
 			goto Error
 		}
 	}
 
 	if TransferFunction != nil {
-		if !cmsWriteTag(ar, hICC, cmsSigRedTRCTag, TransferFunction[0]) {
+		if !cmsWriteTag(ar, hICC, CmsSigRedTRCTag, TransferFunction[0]) {
 			goto Error
 		}
 
 		if TransferFunction[1] == TransferFunction[0] {
-			if !cmsLinkTag(ar, hICC, cmsSigGreenTRCTag, cmsSigRedTRCTag) {
+			if !cmsLinkTag(ar, hICC, CmsSigGreenTRCTag, CmsSigRedTRCTag) {
 				goto Error
 			}
 		} else {
-			if !cmsWriteTag(ar, hICC, cmsSigGreenTRCTag, TransferFunction[1]) {
+			if !cmsWriteTag(ar, hICC, CmsSigGreenTRCTag, TransferFunction[1]) {
 				goto Error
 			}
 		}
 
 		if TransferFunction[2] == TransferFunction[0] {
-			if !cmsLinkTag(ar, hICC, cmsSigBlueTRCTag, cmsSigRedTRCTag) {
+			if !cmsLinkTag(ar, hICC, CmsSigBlueTRCTag, CmsSigRedTRCTag) {
 				goto Error
 			}
 		} else {
-			if !cmsWriteTag(ar, hICC, cmsSigBlueTRCTag, TransferFunction[2]) {
+			if !cmsWriteTag(ar, hICC, CmsSigBlueTRCTag, TransferFunction[2]) {
 				goto Error
 			}
 		}
 	}
 
 	if Primaries != nil {
-		if !cmsWriteTag(ar, hICC, cmsSigChromaticityTag, Primaries) {
+		if !cmsWriteTag(ar, hICC, CmsSigChromaticityTag, Primaries) {
 			goto Error
 		}
 	}
@@ -192,18 +189,14 @@ func CmsCreateRGBProfileTHR(ar *arena.Arena, ContextID CmsContext, WhitePoint *C
 	return hICC
 
 Error:
-	if hICC != nil {
-		CmsCloseProfile(ar, hICC)
-	}
+	CmsCloseProfile(ar, hICC)
 	return nil
 }
 
-// CmsCreateRGBProfile translates the function to Go
 func CmsCreateRGBProfile(ar *arena.Arena, WhitePoint *CmsCIExyY, Primaries *CmsCIExyYTRIPLE, TransferFunction []*CmsToneCurve) CmsHPROFILE {
 	return CmsCreateRGBProfileTHR(ar, nil, WhitePoint, Primaries, TransferFunction)
 }
 
-// cmsCreateGrayProfileTHR translates the function to Go
 func cmsCreateGrayProfileTHR(ar *arena.Arena, ContextID CmsContext, WhitePoint *CmsCIExyY, TransferFunction *CmsToneCurve) CmsHPROFILE {
 	var tmp cmsCIEXYZ
 	hICC := cmsCreateProfilePlaceholder(ar, ContextID)
@@ -212,9 +205,9 @@ func cmsCreateGrayProfileTHR(ar *arena.Arena, ContextID CmsContext, WhitePoint *
 	}
 
 	cmsSetProfileVersion(hICC, 4.4)
-	cmsSetDeviceClass(hICC, cmsSigDisplayClass)
-	cmsSetColorSpace(hICC, cmsSigGrayData)
-	cmsSetPCS(hICC, cmsSigXYZData)
+	cmsSetDeviceClass(hICC, CmsSigDisplayClass)
+	cmsSetColorSpace(hICC, CmsSigGrayData)
+	cmsSetPCS(hICC, CmsSigXYZData)
 	cmsSetHeaderRenderingIntent(hICC, INTENT_PERCEPTUAL)
 
 	if !SetTextTags(ar, hICC, StringToUTF16Slice("gray built-in")) {
@@ -223,13 +216,13 @@ func cmsCreateGrayProfileTHR(ar *arena.Arena, ContextID CmsContext, WhitePoint *
 
 	if WhitePoint != nil {
 		cmsxyY2XYZ(&tmp, WhitePoint)
-		if !cmsWriteTag(ar, hICC, cmsSigMediaWhitePointTag, &tmp) {
+		if !cmsWriteTag(ar, hICC, CmsSigMediaWhitePointTag, &tmp) {
 			goto Error
 		}
 	}
 
 	if TransferFunction != nil {
-		if !cmsWriteTag(ar, hICC, cmsSigGrayTRCTag, TransferFunction) {
+		if !cmsWriteTag(ar, hICC, CmsSigGrayTRCTag, TransferFunction) {
 			goto Error
 		}
 	}
@@ -237,18 +230,15 @@ func cmsCreateGrayProfileTHR(ar *arena.Arena, ContextID CmsContext, WhitePoint *
 	return hICC
 
 Error:
-	if hICC != nil {
 		CmsCloseProfile(ar, hICC)
-	}
 	return nil
 }
 
-// cmsCreateGrayProfile translates the function to Go
 func CmsCreateGrayProfile(ar *arena.Arena, WhitePoint *CmsCIExyY, TransferFunction *CmsToneCurve) CmsHPROFILE {
 	return cmsCreateGrayProfileTHR(ar, nil, WhitePoint, TransferFunction)
 }
 
-// cmsCreateLinearizationDeviceLinkTHR translates the function to Go
+//lint:ignore U1000 kept for parity with lcms; used in future ports
 func cmsCreateLinearizationDeviceLinkTHR(ar *arena.Arena, ContextID CmsContext, ColorSpace cmsColorSpaceSignature, TransferFunctions []*CmsToneCurve) CmsHPROFILE {
 	hICC := cmsCreateProfilePlaceholder(ar, ContextID)
 	if hICC == nil {
@@ -256,7 +246,7 @@ func cmsCreateLinearizationDeviceLinkTHR(ar *arena.Arena, ContextID CmsContext, 
 	}
 
 	cmsSetProfileVersion(hICC, 4.4)
-	cmsSetDeviceClass(hICC, cmsSigLinkClass)
+	cmsSetDeviceClass(hICC, CmsSigLinkClass)
 	cmsSetColorSpace(hICC, ColorSpace)
 	cmsSetPCS(hICC, ColorSpace)
 	cmsSetHeaderRenderingIntent(hICC, INTENT_PERCEPTUAL)
@@ -268,13 +258,13 @@ func cmsCreateLinearizationDeviceLinkTHR(ar *arena.Arena, ContextID CmsContext, 
 		goto Error
 	}
 
-	if !cmsPipelineInsertStage(Pipeline, cmsAT_BEGIN, cmsStageAllocToneCurves(ar, ContextID, uint32(nChannels), TransferFunctions)) {
+	if !cmsPipelineInsertStage(Pipeline, CmsAT_BEGIN, cmsStageAllocToneCurves(ar, ContextID, uint32(nChannels), TransferFunctions)) {
 		goto Error
 	}
 
 	if !SetTextTags(ar, hICC, StringToUTF16Slice("Linearization built-in")) ||
-		!cmsWriteTag(ar, hICC, cmsSigAToB0Tag, Pipeline) ||
-		!SetSeqDescTag(ar,hICC, []byte("Linearization built-in")) {
+		!cmsWriteTag(ar, hICC, CmsSigAToB0Tag, Pipeline) ||
+		!SetSeqDescTag(ar, hICC, []byte("Linearization built-in")) {
 		goto Error
 	}
 
@@ -283,13 +273,10 @@ func cmsCreateLinearizationDeviceLinkTHR(ar *arena.Arena, ContextID CmsContext, 
 
 Error:
 	cmsPipelineFree(ar, Pipeline)
-	if hICC != nil {
-		CmsCloseProfile(ar, hICC)
-	}
+	CmsCloseProfile(ar, hICC)
 	return nil
 }
 
-// cmsCreateLinearizationDeviceLink translates the function to Go
 func cmsCreateLinearizationDeviceLink(ar *arena.Arena, ColorSpace cmsColorSpaceSignature, TransferFunctions []*CmsToneCurve) CmsHPROFILE {
 	return cmsCreateLinearizationDeviceLinkTHR(ar, nil, ColorSpace, TransferFunctions)
 }
@@ -343,14 +330,14 @@ func InkLimitingSampler(ar *arena.Arena, In []uint16, Out []uint16, cargo interf
 
 	return 1
 }
-
+//lint:ignore U1000 kept for parity with lcms; used in future ports
 func cmsCreateInkLimitingDeviceLinkTHR(ar *arena.Arena, ContextID CmsContext, ColorSpace cmsColorSpaceSignature, Limit float64) CmsHPROFILE {
 	var hICC CmsHPROFILE
 	var LUT *cmsPipeline
 	var CLUT *cmsStage
 	var nChannels int32
 
-	if ColorSpace != cmsSigCmykData {
+	if ColorSpace != CmsSigCmykData {
 		cmsSignalError(ContextID, cmsERROR_COLORSPACE_CHECK, "InkLimiting: Only CMYK currently supported")
 		return nil
 	}
@@ -371,7 +358,7 @@ func cmsCreateInkLimitingDeviceLinkTHR(ar *arena.Arena, ContextID CmsContext, Co
 	}
 
 	cmsSetProfileVersion(hICC, 4.4)
-	cmsSetDeviceClass(hICC, cmsSigLinkClass)
+	cmsSetDeviceClass(hICC, CmsSigLinkClass)
 	cmsSetColorSpace(hICC, ColorSpace)
 	cmsSetPCS(hICC, ColorSpace)
 	cmsSetHeaderRenderingIntent(hICC, INTENT_PERCEPTUAL)
@@ -392,19 +379,19 @@ func cmsCreateInkLimitingDeviceLinkTHR(ar *arena.Arena, ContextID CmsContext, Co
 		goto Error
 	}
 
-	if !cmsPipelineInsertStage(LUT, cmsAT_BEGIN, cmsStageAllocIdentityCurves(ar,ContextID, uint32(nChannels))) ||
-		!cmsPipelineInsertStage(LUT, cmsAT_END, CLUT) ||
-		!cmsPipelineInsertStage(LUT, cmsAT_END, cmsStageAllocIdentityCurves(ar,ContextID, uint32(nChannels))) {
+	if !cmsPipelineInsertStage(LUT, CmsAT_BEGIN, cmsStageAllocIdentityCurves(ar, ContextID, uint32(nChannels))) ||
+		!cmsPipelineInsertStage(LUT, CmsAT_END, CLUT) ||
+		!cmsPipelineInsertStage(LUT, CmsAT_END, cmsStageAllocIdentityCurves(ar, ContextID, uint32(nChannels))) {
 		goto Error
 	}
 
-	if !SetTextTags(ar,hICC, StringToUTF16Slice("ink-limiting built-in")) {
+	if !SetTextTags(ar, hICC, StringToUTF16Slice("ink-limiting built-in")) {
 		goto Error
 	}
-	if !cmsWriteTag(ar, hICC, cmsSigAToB0Tag, LUT) {
+	if !cmsWriteTag(ar, hICC, CmsSigAToB0Tag, LUT) {
 		goto Error
 	}
-	if !SetSeqDescTag(ar,hICC, []byte("ink-limiting built-in")) {
+	if !SetSeqDescTag(ar, hICC, []byte("ink-limiting built-in")) {
 		goto Error
 	}
 
@@ -415,9 +402,7 @@ Error:
 	if LUT != nil {
 		cmsPipelineFree(ar, LUT)
 	}
-	if hICC != nil {
 		CmsCloseProfile(ar, hICC)
-	}
 	return nil
 }
 
@@ -438,11 +423,11 @@ func cmsCreateLab2ProfileTHR(ar *arena.Arena, ContextID CmsContext, WhitePoint *
 	}
 
 	cmsSetProfileVersion(hProfile, 2.1)
-	cmsSetDeviceClass(hProfile, cmsSigAbstractClass)
-	cmsSetColorSpace(hProfile, cmsSigLabData)
-	cmsSetPCS(hProfile, cmsSigLabData)
+	cmsSetDeviceClass(hProfile, CmsSigAbstractClass)
+	cmsSetColorSpace(hProfile, CmsSigLabData)
+	cmsSetPCS(hProfile, CmsSigLabData)
 
-	if !SetTextTags(ar,hProfile, StringToUTF16Slice("Lab identity built-in")) {
+	if !SetTextTags(ar, hProfile, StringToUTF16Slice("Lab identity built-in")) {
 		return nil
 	}
 
@@ -451,11 +436,11 @@ func cmsCreateLab2ProfileTHR(ar *arena.Arena, ContextID CmsContext, WhitePoint *
 		goto Error
 	}
 
-	if !cmsPipelineInsertStage(LUT, cmsAT_BEGIN, cmsStageAllocIdentityCLut(ar,ContextID, 3)) {
+	if !cmsPipelineInsertStage(LUT, CmsAT_BEGIN, cmsStageAllocIdentityCLut(ar, ContextID, 3)) {
 		goto Error
 	}
 
-	if !cmsWriteTag(ar, hProfile, cmsSigAToB0Tag, LUT) {
+	if !cmsWriteTag(ar, hProfile, CmsSigAToB0Tag, LUT) {
 		goto Error
 	}
 	cmsPipelineFree(ar, LUT)
@@ -465,9 +450,8 @@ Error:
 	if LUT != nil {
 		cmsPipelineFree(ar, LUT)
 	}
-	if hProfile != nil {
 		CmsCloseProfile(ar, hProfile)
-	}
+	
 	return nil
 }
 
@@ -489,11 +473,11 @@ func cmsCreateLab4ProfileTHR(ar *arena.Arena, ContextID CmsContext, WhitePoint *
 	}
 
 	cmsSetProfileVersion(hProfile, 4.4)
-	cmsSetDeviceClass(hProfile, cmsSigAbstractClass)
-	cmsSetColorSpace(hProfile, cmsSigLabData)
-	cmsSetPCS(hProfile, cmsSigLabData)
+	cmsSetDeviceClass(hProfile, CmsSigAbstractClass)
+	cmsSetColorSpace(hProfile, CmsSigLabData)
+	cmsSetPCS(hProfile, CmsSigLabData)
 
-	if !SetTextTags(ar,hProfile, StringToUTF16Slice("Lab identity built-in")) {
+	if !SetTextTags(ar, hProfile, StringToUTF16Slice("Lab identity built-in")) {
 		goto Error
 	}
 
@@ -502,11 +486,11 @@ func cmsCreateLab4ProfileTHR(ar *arena.Arena, ContextID CmsContext, WhitePoint *
 		goto Error
 	}
 
-	if !cmsPipelineInsertStage(LUT, cmsAT_BEGIN, cmsStageAllocIdentityCurves(ar, ContextID, 3)) {
+	if !cmsPipelineInsertStage(LUT, CmsAT_BEGIN, cmsStageAllocIdentityCurves(ar, ContextID, 3)) {
 		goto Error
 	}
 
-	if !cmsWriteTag(ar, hProfile, cmsSigAToB0Tag, LUT) {
+	if !cmsWriteTag(ar, hProfile, CmsSigAToB0Tag, LUT) {
 		goto Error
 	}
 	cmsPipelineFree(ar, LUT)
@@ -516,9 +500,8 @@ Error:
 	if LUT != nil {
 		cmsPipelineFree(ar, LUT)
 	}
-	if hProfile != nil {
 		CmsCloseProfile(ar, hProfile)
-	}
+	
 	return nil
 }
 
@@ -536,11 +519,11 @@ func cmsCreateXYZProfileTHR(ar *arena.Arena, ContextID CmsContext) CmsHPROFILE {
 	}
 
 	cmsSetProfileVersion(hProfile, 4.4)
-	cmsSetDeviceClass(hProfile, cmsSigAbstractClass)
-	cmsSetColorSpace(hProfile, cmsSigXYZData)
-	cmsSetPCS(hProfile, cmsSigXYZData)
+	cmsSetDeviceClass(hProfile, CmsSigAbstractClass)
+	cmsSetColorSpace(hProfile, CmsSigXYZData)
+	cmsSetPCS(hProfile, CmsSigXYZData)
 
-	if !SetTextTags(ar,hProfile, StringToUTF16Slice("XYZ identity built-in")) {
+	if !SetTextTags(ar, hProfile, StringToUTF16Slice("XYZ identity built-in")) {
 		goto Error
 	}
 
@@ -549,11 +532,11 @@ func cmsCreateXYZProfileTHR(ar *arena.Arena, ContextID CmsContext) CmsHPROFILE {
 		goto Error
 	}
 
-	if !cmsPipelineInsertStage(LUT, cmsAT_BEGIN, cmsStageAllocIdentityCurves(ar, ContextID, 3)) {
+	if !cmsPipelineInsertStage(LUT, CmsAT_BEGIN, cmsStageAllocIdentityCurves(ar, ContextID, 3)) {
 		goto Error
 	}
 
-	if !cmsWriteTag(ar, hProfile, cmsSigAToB0Tag, LUT) {
+	if !cmsWriteTag(ar, hProfile, CmsSigAToB0Tag, LUT) {
 		goto Error
 	}
 	cmsPipelineFree(ar, LUT)
@@ -563,9 +546,8 @@ Error:
 	if LUT != nil {
 		cmsPipelineFree(ar, LUT)
 	}
-	if hProfile != nil {
 		CmsCloseProfile(ar, hProfile)
-	}
+	
 	return nil
 }
 
@@ -630,7 +612,7 @@ func CmsCreate_sRGBProfileTHR(ar *arena.Arena, ContextID CmsContext) CmsHPROFILE
 	}
 
 	// Create the RGB profile
-	hsRGB := CmsCreateRGBProfileTHR(ar,ContextID, &D65, &Rec709Primaries, Gamma22[:])
+	hsRGB := CmsCreateRGBProfileTHR(ar, ContextID, &D65, &Rec709Primaries, Gamma22[:])
 	CmsFreeToneCurve(Gamma22[0]) // Free the tone curve memory
 
 	if hsRGB == nil {
@@ -638,7 +620,7 @@ func CmsCreate_sRGBProfileTHR(ar *arena.Arena, ContextID CmsContext) CmsHPROFILE
 	}
 
 	// Set the text tags
-	if !SetTextTags(ar,hsRGB, StringToUTF16Slice("sRGB built-in")) {
+	if !SetTextTags(ar, hsRGB, StringToUTF16Slice("sRGB built-in")) {
 		CmsCloseProfile(ar, hsRGB)
 		return nil
 	}

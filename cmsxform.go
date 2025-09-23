@@ -77,7 +77,9 @@ var cmsAlarmCodesChunk = cmsAlarmCodesChunkType{DEFAULT_ALARM_CODES_VALUE}
 //var alarmCodeMutex sync.Mutex
 
 // cmsSetAlarmCodesTHR sets the alarm codes for a specific context.
-func cmsSetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP [cmsMAXCHANNELS]uint16) {
+//
+//lint:ignore U1000 kept for parity with lcms; used in future ports
+func cmsSetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP []uint16) {
 	//alarmCodeMutex.Lock()
 	//defer alarmCodeMutex.Unlock()
 
@@ -90,7 +92,9 @@ func cmsSetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP [cmsMAXCHANNELS]uint1
 }
 
 // cmsGetAlarmCodesTHR gets the alarm codes for a specific context.
-func cmsGetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP [cmsMAXCHANNELS]uint16) {
+//
+//lint:ignore U1000 kept for parity with lcms; used in future ports
+func cmsGetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP []uint16) {
 	//alarmCodeMutex.Lock()
 	//defer alarmCodeMutex.Unlock()
 
@@ -103,21 +107,23 @@ func cmsGetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP [cmsMAXCHANNELS]uint1
 }
 
 // cmsSetAlarmCodes sets the global alarm codes.
-func cmsSetAlarmCodes(NewAlarm [cmsMAXCHANNELS]uint16) {
-	if &NewAlarm[0] == nil {
-		panic("NewAlarm is nil")
+//
+//lint:ignore U1000 kept for parity with lcms; used in future ports
+func cmsSetAlarmCodes(newAlarm []uint16) {
+	if len(newAlarm) < cmsMAXCHANNELS {
+		panic("oldAlarm must have length >= cmsMAXCHANNELS")
 	}
-
-	cmsSetAlarmCodesTHR(nil, NewAlarm)
+	cmsSetAlarmCodesTHR(nil, newAlarm)
 }
 
 // cmsGetAlarmCodes gets the global alarm codes.
-func cmsGetAlarmCodes(OldAlarm [cmsMAXCHANNELS]uint16) {
-	if &OldAlarm[0] == nil {
-		panic("OldAlarm is nil")
+//
+//lint:ignore U1000 kept for parity with lcms; used in future ports
+func cmsGetAlarmCodes(oldAlarm []uint16) {
+	if len(oldAlarm) < cmsMAXCHANNELS {
+		panic("oldAlarm must have length >= cmsMAXCHANNELS")
 	}
-
-	cmsGetAlarmCodesTHR(nil, OldAlarm)
+	cmsGetAlarmCodesTHR(nil, oldAlarm) // THR should also accept []uint16
 }
 
 // cmsAllocAlarmCodesChunk initializes and duplicates alarm codes.
@@ -432,12 +438,41 @@ func NullFloatXFORM(
 	var fIn [cmsMAXCHANNELS]float32
 	var strideIn, strideOut uint32
 	var accum, output []byte
+	var inBytes, outBytes []byte
 	// Type assertion for input and output
-	inBytes, okIn := in.([]byte)
-	outBytes, okOut := out.([]byte)
+	// Type assertion and conversion for input
+	switch v := in.(type) {
+	case []byte:
+		inBytes = v
+	case []float32:
+		inBytes = float32SliceToBytes(v)
+	case []float64:
+		/*	fmt.Printf("v[0] %.7f\n", v[0])
+			fmt.Printf("v[1] %.7f\n", v[1])
+			fmt.Printf("v[2] %.7f\n", v[2])*/
+		inBytes = float64SliceToBytes(v)
+	case []uint16:
+		inBytes = uint16SliceToBytes(v)
+	case *cmsCIELab:
+		inBytes = float64SliceToBytes(LabToSlice(*v))
+	default:
+		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16 , or *cmsCIELab")
+	}
 
-	if !okIn || !okOut {
-		panic(" in and out must be of type []byte")
+	// Type assertion and conversion for output
+	switch v := out.(type) {
+	case []byte:
+		outBytes = v
+	case []float32:
+		outBytes = float32SliceToBytes(v)
+	case []float64:
+		outBytes = float64SliceToBytes(v)
+	case []uint16:
+		outBytes = uint16SliceToBytes(v)
+	case *cmsCIELab:
+		outBytes = float64SliceToBytes(LabToSlice(*v))
+	default:
+		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
@@ -459,6 +494,32 @@ func NullFloatXFORM(
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
+	switch v := out.(type) {
+	case []byte:
+		copy(v, outBytes)
+	case []float32:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case []float64:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case []uint16:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case *cmsCIELab:
+		lab := bytesToLab(outBytes)
+		v.L = lab.L
+		v.a = lab.a
+		v.b = lab.b
+	default:
+		panic("Unsupported type in NullFloatXFORM output finalization")
+	}
 }
 
 func NullXFORM(
@@ -471,12 +532,41 @@ func NullXFORM(
 	var wIn [cmsMAXCHANNELS]uint16
 	var strideIn, strideOut uint32
 	var accum, output []byte
+	var inBytes, outBytes []byte
 	// Type assertion for input and output
-	inBytes, okIn := in.([]byte)
-	outBytes, okOut := out.([]byte)
+	// Type assertion and conversion for input
+	switch v := in.(type) {
+	case []byte:
+		inBytes = v
+	case []float32:
+		inBytes = float32SliceToBytes(v)
+	case []float64:
+		/*	fmt.Printf("v[0] %.7f\n", v[0])
+			fmt.Printf("v[1] %.7f\n", v[1])
+			fmt.Printf("v[2] %.7f\n", v[2])*/
+		inBytes = float64SliceToBytes(v)
+	case []uint16:
+		inBytes = uint16SliceToBytes(v)
+	case *cmsCIELab:
+		inBytes = float64SliceToBytes(LabToSlice(*v))
+	default:
+		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16 , or *cmsCIELab")
+	}
 
-	if !okIn || !okOut {
-		panic(" in and out must be of type []byte")
+	// Type assertion and conversion for output
+	switch v := out.(type) {
+	case []byte:
+		outBytes = v
+	case []float32:
+		outBytes = float32SliceToBytes(v)
+	case []float64:
+		outBytes = float64SliceToBytes(v)
+	case []uint16:
+		outBytes = uint16SliceToBytes(v)
+	case *cmsCIELab:
+		outBytes = float64SliceToBytes(LabToSlice(*v))
+	default:
+		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
@@ -498,6 +588,32 @@ func NullXFORM(
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
+	switch v := out.(type) {
+	case []byte:
+		copy(v, outBytes)
+	case []float32:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case []float64:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case []uint16:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case *cmsCIELab:
+		lab := bytesToLab(outBytes)
+		v.L = lab.L
+		v.a = lab.a
+		v.b = lab.b
+	default:
+		panic("Unsupported type in NullXFORM output finalization")
+	}
 }
 
 func PrecalculatedXFORM(
@@ -512,12 +628,40 @@ func PrecalculatedXFORM(
 	var wIn, wOut [cmsMAXCHANNELS]uint16
 	var strideIn, strideOut uint32
 	var accum, output []byte
-	// Type assertion for input and output
-	inBytes, okIn := in.([]byte)
-	outBytes, okOut := out.([]byte)
+	var inBytes, outBytes []byte
+	// Type assertion and conversion for input
+	switch v := in.(type) {
+	case []byte:
+		inBytes = v
+	case []float32:
+		inBytes = float32SliceToBytes(v)
+	case []float64:
+		/*	fmt.Printf("v[0] %.7f\n", v[0])
+			fmt.Printf("v[1] %.7f\n", v[1])
+			fmt.Printf("v[2] %.7f\n", v[2])*/
+		inBytes = float64SliceToBytes(v)
+	case []uint16:
+		inBytes = uint16SliceToBytes(v)
+	case *cmsCIELab:
+		inBytes = float64SliceToBytes(LabToSlice(*v))
+	default:
+		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16 , or *cmsCIELab")
+	}
 
-	if !okIn || !okOut {
-		panic(" in and out must be of type []byte")
+	// Type assertion and conversion for output
+	switch v := out.(type) {
+	case []byte:
+		outBytes = v
+	case []float32:
+		outBytes = float32SliceToBytes(v)
+	case []float64:
+		outBytes = float64SliceToBytes(v)
+	case []uint16:
+		outBytes = uint16SliceToBytes(v)
+	case *cmsCIELab:
+		outBytes = float64SliceToBytes(LabToSlice(*v))
+	default:
+		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
@@ -541,6 +685,32 @@ func PrecalculatedXFORM(
 		// Update strides
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
+	}
+	switch v := out.(type) {
+	case []byte:
+		copy(v, outBytes)
+	case []float32:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case []float64:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case []uint16:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case *cmsCIELab:
+		lab := bytesToLab(outBytes)
+		v.L = lab.L
+		v.a = lab.a
+		v.b = lab.b
+	default:
+		panic("Unsupported type in PrecalculatedXFORMoutput finalization")
 	}
 }
 
@@ -576,12 +746,41 @@ func PrecalculatedXFORMGamutCheck(
 	var wIn, wOut [cmsMAXCHANNELS]uint16
 	var strideIn, strideOut uint32
 	var accum, output []byte
+	var inBytes, outBytes []byte
 	// Type assertion for input and output
-	inBytes, okIn := in.([]byte)
-	outBytes, okOut := out.([]byte)
+	// Type assertion and conversion for input
+	switch v := in.(type) {
+	case []byte:
+		inBytes = v
+	case []float32:
+		inBytes = float32SliceToBytes(v)
+	case []float64:
+		/*	fmt.Printf("v[0] %.7f\n", v[0])
+			fmt.Printf("v[1] %.7f\n", v[1])
+			fmt.Printf("v[2] %.7f\n", v[2])*/
+		inBytes = float64SliceToBytes(v)
+	case []uint16:
+		inBytes = uint16SliceToBytes(v)
+	case *cmsCIELab:
+		inBytes = float64SliceToBytes(LabToSlice(*v))
+	default:
+		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16 , or *cmsCIELab")
+	}
 
-	if !okIn || !okOut {
-		panic(" in and out must be of type []byte")
+	// Type assertion and conversion for output
+	switch v := out.(type) {
+	case []byte:
+		outBytes = v
+	case []float32:
+		outBytes = float32SliceToBytes(v)
+	case []float64:
+		outBytes = float64SliceToBytes(v)
+	case []uint16:
+		outBytes = uint16SliceToBytes(v)
+	case *cmsCIELab:
+		outBytes = float64SliceToBytes(LabToSlice(*v))
+	default:
+		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
@@ -604,6 +803,32 @@ func PrecalculatedXFORMGamutCheck(
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
+	switch v := out.(type) {
+	case []byte:
+		copy(v, outBytes)
+	case []float32:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case []float64:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case []uint16:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case *cmsCIELab:
+		lab := bytesToLab(outBytes)
+		v.L = lab.L
+		v.a = lab.a
+		v.b = lab.b
+	default:
+		panic("Unsupported type in PrecalculatedXFORMGamutCheck output finalization")
+	}
 }
 
 func CachedXFORM(
@@ -619,12 +844,41 @@ func CachedXFORM(
 	var strideIn, strideOut uint32
 	var cache cmsCACHE
 	var accum, output []byte
+	var inBytes, outBytes []byte
 	// Type assertion for input and output
-	inBytes, okIn := in.([]byte)
-	outBytes, okOut := out.([]byte)
-	//	fmt.Println("CachedXFORM")
-	if !okIn || !okOut {
-		panic(" in and out must be of type []byte")
+	// Type assertion and conversion for input
+	switch v := in.(type) {
+	case []byte:
+		inBytes = v
+	case []float32:
+		inBytes = float32SliceToBytes(v)
+	case []float64:
+		/*	fmt.Printf("v[0] %.7f\n", v[0])
+			fmt.Printf("v[1] %.7f\n", v[1])
+			fmt.Printf("v[2] %.7f\n", v[2])*/
+		inBytes = float64SliceToBytes(v)
+	case []uint16:
+		inBytes = uint16SliceToBytes(v)
+	case *cmsCIELab:
+		inBytes = float64SliceToBytes(LabToSlice(*v))
+	default:
+		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16 , or *cmsCIELab")
+	}
+
+	// Type assertion and conversion for output
+	switch v := out.(type) {
+	case []byte:
+		outBytes = v
+	case []float32:
+		outBytes = float32SliceToBytes(v)
+	case []float64:
+		outBytes = float64SliceToBytes(v)
+	case []uint16:
+		outBytes = uint16SliceToBytes(v)
+	case *cmsCIELab:
+		outBytes = float64SliceToBytes(LabToSlice(*v))
+	default:
+		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
@@ -682,6 +936,32 @@ func CachedXFORM(
 		fmt.Println("outBytes[0] ", outBytes[0])
 		fmt.Println("outBytes[1] ", outBytes[1])
 		fmt.Println("outBytes[2] ", outBytes[2])*/
+	switch v := out.(type) {
+	case []byte:
+		copy(v, outBytes)
+	case []float32:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case []float64:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case []uint16:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case *cmsCIELab:
+		lab := bytesToLab(outBytes)
+		v.L = lab.L
+		v.a = lab.a
+		v.b = lab.b
+	default:
+		panic("Unsupported type in CachedXFORM output finalization")
+	}
 
 }
 
@@ -698,12 +978,40 @@ func CachedXFORMGamutCheck(
 	var strideIn, strideOut uint32
 	var cache cmsCACHE
 	var accum, output []byte
-	// Type assertion for input and output
-	inBytes, okIn := in.([]byte)
-	outBytes, okOut := out.([]byte)
+	var inBytes, outBytes []byte
+	// Type assertion and conversion for input
+	switch v := in.(type) {
+	case []byte:
+		inBytes = v
+	case []float32:
+		inBytes = float32SliceToBytes(v)
+	case []float64:
+		/*	fmt.Printf("v[0] %.7f\n", v[0])
+			fmt.Printf("v[1] %.7f\n", v[1])
+			fmt.Printf("v[2] %.7f\n", v[2])*/
+		inBytes = float64SliceToBytes(v)
+	case []uint16:
+		inBytes = uint16SliceToBytes(v)
+	case *cmsCIELab:
+		inBytes = float64SliceToBytes(LabToSlice(*v))
+	default:
+		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16 , or *cmsCIELab")
+	}
 
-	if !okIn || !okOut {
-		panic(" in and out must be of type []byte")
+	// Type assertion and conversion for output
+	switch v := out.(type) {
+	case []byte:
+		outBytes = v
+	case []float32:
+		outBytes = float32SliceToBytes(v)
+	case []float64:
+		outBytes = float64SliceToBytes(v)
+	case []uint16:
+		outBytes = uint16SliceToBytes(v)
+	case *cmsCIELab:
+		outBytes = float64SliceToBytes(LabToSlice(*v))
+	default:
+		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
 
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
@@ -746,6 +1054,32 @@ func CachedXFORMGamutCheck(
 		//  Update strides correctly
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
+	}
+	switch v := out.(type) {
+	case []byte:
+		copy(v, outBytes)
+	case []float32:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case []float64:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case []uint16:
+		buf := bytes.NewReader(outBytes)
+		for i := range v {
+			binary.Read(buf, binary.LittleEndian, &v[i])
+		}
+	case *cmsCIELab:
+		lab := bytesToLab(outBytes)
+		v.L = lab.L
+		v.a = lab.a
+		v.b = lab.b
+	default:
+		panic("Unsupported type in CachedXFORMGamutCheck output finalization")
 	}
 }
 
@@ -1023,7 +1357,7 @@ func AllocEmptyTransform(
 
 	// Check if any plugin wants to handle the transform
 	if p.Lut != nil {
-		if (*dwFlags & cmsFLAGS_NOOPTIMIZE) == 0 {
+		if (*dwFlags & CmsFLAGS_NOOPTIMIZE) == 0 {
 			for plugin = ctx.TransformCollection; plugin != nil; plugin = plugin.Next {
 				if plugin.Factory(&p.Xform, &p.UserData, &p.FreeUserData, &p.Lut, InputFormat, OutputFormat, dwFlags) {
 					// Set plugin-controlled parameters
@@ -1075,7 +1409,7 @@ func AllocEmptyTransform(
 			return nil
 		}
 
-		if (*dwFlags & cmsFLAGS_NULLTRANSFORM) != 0 {
+		if (*dwFlags & CmsFLAGS_NULLTRANSFORM) != 0 {
 			p.Xform = NullFloatXFORM
 		} else {
 			p.Xform = FloatXFORM
@@ -1101,16 +1435,16 @@ func AllocEmptyTransform(
 			}
 		}
 
-		if (*dwFlags & cmsFLAGS_NULLTRANSFORM) != 0 {
+		if (*dwFlags & CmsFLAGS_NULLTRANSFORM) != 0 {
 			p.Xform = NullXFORM
-		} else if (*dwFlags & cmsFLAGS_NOCACHE) != 0 {
-			if (*dwFlags & cmsFLAGS_GAMUTCHECK) != 0 {
+		} else if (*dwFlags & CmsFLAGS_NOCACHE) != 0 {
+			if (*dwFlags & CmsFLAGS_GAMUTCHECK) != 0 {
 				p.Xform = PrecalculatedXFORMGamutCheck
 			} else {
 				p.Xform = PrecalculatedXFORM
 			}
 		} else {
-			if (*dwFlags & cmsFLAGS_GAMUTCHECK) != 0 {
+			if (*dwFlags & CmsFLAGS_GAMUTCHECK) != 0 {
 				p.Xform = CachedXFORMGamutCheck
 			} else {
 				p.Xform = CachedXFORM
@@ -1151,18 +1485,18 @@ func GetXFormColorSpaces(
 		cls := cmsGetDeviceClass(hProfile)
 		var ColorSpaceIn, ColorSpaceOut cmsColorSpaceSignature
 
-		lIsInput := PostColorSpace != cmsSigXYZData && PostColorSpace != cmsSigLabData
+		lIsInput := PostColorSpace != CmsSigXYZData && PostColorSpace != CmsSigLabData
 
 		switch {
-		case cls == cmsSigNamedColorClass:
-			ColorSpaceIn = cmsSig1colorData
+		case cls == CmsSigNamedColorClass:
+			ColorSpaceIn = CmsSig1colorData
 			if nProfiles > 1 {
 				ColorSpaceOut = cmsGetPCS(hProfile)
 			} else {
 				ColorSpaceOut = CmsGetColorSpace(hProfile)
 			}
 
-		case lIsInput || cls == cmsSigLinkClass:
+		case lIsInput || cls == CmsSigLinkClass:
 			ColorSpaceIn = CmsGetColorSpace(hProfile)
 			ColorSpaceOut = cmsGetPCS(hProfile)
 
@@ -1230,8 +1564,6 @@ func SetWhitePoint(wtPt *cmsCIEXYZ, src *cmsCIEXYZ) {
 
 }
 
-var count int
-
 func cmsCreateExtendedTransform(
 	ar *arena.Arena,
 	ContextID CmsContext,
@@ -1249,18 +1581,18 @@ func cmsCreateExtendedTransform(
 	//fmt.Println("cmsCreateExtendedTransform")
 	// Check if it's a fake transform
 
-	if dwFlags&cmsFLAGS_NULLTRANSFORM != 0 {
+	if dwFlags&CmsFLAGS_NULLTRANSFORM != 0 {
 		return AllocEmptyTransform(ar, ContextID, nil, INTENT_PERCEPTUAL, &InputFormat, &OutputFormat, &dwFlags)
 	}
 
 	// Gamut check validation
-	if dwFlags&cmsFLAGS_GAMUTCHECK != 0 && hGamutProfile == nil {
-		dwFlags &^= cmsFLAGS_GAMUTCHECK
+	if dwFlags&CmsFLAGS_GAMUTCHECK != 0 && hGamutProfile == nil {
+		dwFlags &^= CmsFLAGS_GAMUTCHECK
 	}
 
 	// Disable cache for floating-point formats
 	if cmsFormatterIsFloat(InputFormat) || cmsFormatterIsFloat(OutputFormat) {
-		dwFlags |= cmsFLAGS_NOCACHE
+		dwFlags |= CmsFLAGS_NOCACHE
 	}
 
 	// Retrieve entry and exit color spaces
@@ -1280,11 +1612,11 @@ func cmsCreateExtendedTransform(
 		return nil
 	}
 	// Check whatever the transform is 16 bits and involves linear RGB in first profile. If so, disable optimizations
-	if EntryColorSpace == cmsSigRgbData && T_BYTES(InputFormat) == 2 && (dwFlags&cmsFLAGS_NOOPTIMIZE) == 0 {
+	if EntryColorSpace == CmsSigRgbData && T_BYTES(InputFormat) == 2 && (dwFlags&CmsFLAGS_NOOPTIMIZE) == 0 {
 		gamma := cmsDetectRGBProfileGamma(ar, hProfiles[0], 0.1)
 
 		if gamma > 0 && gamma < 1.6 {
-			dwFlags |= cmsFLAGS_NOOPTIMIZE
+			dwFlags |= CmsFLAGS_NOOPTIMIZE
 		}
 	}
 
@@ -1320,46 +1652,46 @@ func cmsCreateExtendedTransform(
 	xform.ExitColorSpace = ExitColorSpace
 	xform.RenderingIntent = Intents[nProfiles-1]
 	// Take white points
-	SetWhitePoint(&xform.EntryWhitePoint, (cmsReadTag(ar, hProfiles[0], cmsSigMediaWhitePointTag).(*cmsCIEXYZ)))
-	SetWhitePoint(&xform.ExitWhitePoint, (cmsReadTag(ar, hProfiles[nProfiles-1], cmsSigMediaWhitePointTag).(*cmsCIEXYZ)))
+	SetWhitePoint(&xform.EntryWhitePoint, (cmsReadTag(ar, hProfiles[0], CmsSigMediaWhitePointTag).(*cmsCIEXYZ)))
+	SetWhitePoint(&xform.ExitWhitePoint, (cmsReadTag(ar, hProfiles[nProfiles-1], CmsSigMediaWhitePointTag).(*cmsCIEXYZ)))
 
 	// Add optional gamut check
-	if hGamutProfile != nil && (dwFlags&cmsFLAGS_GAMUTCHECK != 0) {
+	if hGamutProfile != nil && (dwFlags&CmsFLAGS_GAMUTCHECK != 0) {
 		xform.GamutCheck = cmsCreateGamutCheckPipeline(ar, ContextID, hProfiles, BPC, Intents, AdaptationStates, nGamutPCSposition, hGamutProfile)
 	}
 	// Try to read input and output colorant table
-	if cmsIsTag(hProfiles[0], cmsSigColorantTableTag) {
+	if cmsIsTag(hProfiles[0], CmsSigColorantTableTag) {
 
 		// Input table can only come in this way.
-		xform.InputColorant = cmsDupNamedColorList(ar, (cmsReadTag(ar, hProfiles[0], cmsSigColorantTableTag).(*cmsNAMEDCOLORLIST)))
+		xform.InputColorant = cmsDupNamedColorList(ar, (cmsReadTag(ar, hProfiles[0], CmsSigColorantTableTag).(*cmsNAMEDCOLORLIST)))
 	}
 
 	// Output is a little bit more complex.
-	if cmsGetDeviceClass(hProfiles[nProfiles-1]) == cmsSigLinkClass {
+	if cmsGetDeviceClass(hProfiles[nProfiles-1]) == CmsSigLinkClass {
 
 		// This tag may exist only on devicelink profiles.
-		if cmsIsTag(hProfiles[nProfiles-1], cmsSigColorantTableOutTag) {
+		if cmsIsTag(hProfiles[nProfiles-1], CmsSigColorantTableOutTag) {
 
 			// It may be NULL if error
-			xform.OutputColorant = cmsDupNamedColorList(ar, (cmsReadTag(ar, hProfiles[nProfiles-1], cmsSigColorantTableOutTag).(*cmsNAMEDCOLORLIST)))
+			xform.OutputColorant = cmsDupNamedColorList(ar, (cmsReadTag(ar, hProfiles[nProfiles-1], CmsSigColorantTableOutTag).(*cmsNAMEDCOLORLIST)))
 		}
 
 	} else {
 
-		if cmsIsTag(hProfiles[nProfiles-1], cmsSigColorantTableTag) {
+		if cmsIsTag(hProfiles[nProfiles-1], CmsSigColorantTableTag) {
 
-			xform.OutputColorant = cmsDupNamedColorList(ar, (cmsReadTag(ar, hProfiles[nProfiles-1], cmsSigColorantTableTag)).(*cmsNAMEDCOLORLIST))
+			xform.OutputColorant = cmsDupNamedColorList(ar, (cmsReadTag(ar, hProfiles[nProfiles-1], CmsSigColorantTableTag)).(*cmsNAMEDCOLORLIST))
 		}
 	}
 
 	// Store the sequence of profiles
-	if dwFlags&cmsFLAGS_KEEP_SEQUENCE != 0 {
+	if dwFlags&CmsFLAGS_KEEP_SEQUENCE != 0 {
 		xform.Sequence = cmsCompileProfileSequence(ar, ContextID, nProfiles, hProfiles)
 	} else {
 		xform.Sequence = nil
 	}
 	// If this is a cached transform, init first value, which is zero (16 bits only)
-	if dwFlags&cmsFLAGS_NOCACHE == 0 {
+	if dwFlags&CmsFLAGS_NOCACHE == 0 {
 		//fmt.Println("cached transform")
 		if xform.GamutCheck != nil {
 			TransformOnePixelWithGamutCheck(ar, xform, xform.Cache.CacheIn[:], xform.Cache.CacheOut[:])
@@ -1368,8 +1700,6 @@ func cmsCreateExtendedTransform(
 		}
 
 	}
-
-	count++
 	//fmt.Println("end cmsCreateExtendedTransform before returning form")
 	xform.Ar = ar
 	return xform
@@ -1399,7 +1729,7 @@ func cmsCreateMultiprofileTransformTHR(
 
 	// Initialize BPC, Intents, and AdaptationStates
 	for i := uint32(0); i < nProfiles; i++ {
-		if dwFlags&cmsFLAGS_BLACKPOINTCOMPENSATION != 0 {
+		if dwFlags&CmsFLAGS_BLACKPOINTCOMPENSATION != 0 {
 			BPC[i] = true
 		} else {
 			BPC[i] = false
@@ -1478,6 +1808,7 @@ func CmsCreateTransform(
 
 }
 
+//lint:ignore U1000 kept for parity with lcms; used in future ports
 func cmsCreateProofingTransformTHR(
 	ar *arena.Arena,
 	ContextID CmsContext,
@@ -1495,8 +1826,8 @@ func cmsCreateProofingTransformTHR(
 	hArray := []CmsHPROFILE{InputProfile, ProofingProfile, ProofingProfile, OutputProfile}
 	Intents := []uint32{nIntent, nIntent, INTENT_RELATIVE_COLORIMETRIC, ProofingIntent}
 	BPC := []bool{
-		dwFlags&cmsFLAGS_BLACKPOINTCOMPENSATION != 0,
-		dwFlags&cmsFLAGS_BLACKPOINTCOMPENSATION != 0,
+		dwFlags&CmsFLAGS_BLACKPOINTCOMPENSATION != 0,
+		dwFlags&CmsFLAGS_BLACKPOINTCOMPENSATION != 0,
 		false,
 		false,
 	}
@@ -1507,7 +1838,7 @@ func cmsCreateProofingTransformTHR(
 		cmsSetAdaptationStateTHR(ContextID, -1),
 	}
 
-	if dwFlags&(cmsFLAGS_SOFTPROOFING|cmsFLAGS_GAMUTCHECK) == 0 {
+	if dwFlags&(CmsFLAGS_SOFTPROOFING|CmsFLAGS_GAMUTCHECK) == 0 {
 		return cmsCreateTransformTHR(ar, ContextID, InputProfile, InputFormat, OutputProfile, OutputFormat, nIntent, dwFlags)
 	}
 

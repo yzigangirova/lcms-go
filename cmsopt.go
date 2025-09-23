@@ -165,10 +165,10 @@ func _MultiplyMatrix(ar *arena.Arena, Lut *cmsPipeline) bool {
 			return anyOpt
 		}
 
-		if (*pt1).Implements == cmsSigMatrixElemType && (*pt2).Implements == cmsSigMatrixElemType {
-			m1, ok := cmsStageData(*pt1).(*cmsStageMatrixData)
-			m2, ok := cmsStageData(*pt2).(*cmsStageMatrixData)
-			if !ok {
+		if (*pt1).Implements == CmsSigMatrixElemType && (*pt2).Implements == CmsSigMatrixElemType {
+			m1, ok1 := cmsStageData(*pt1).(*cmsStageMatrixData)
+			m2, ok2 := cmsStageData(*pt2).(*cmsStageMatrixData)
+			if !ok1 || !ok2 {
 				cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageMatrixData\n")
 				return false
 			}
@@ -211,13 +211,13 @@ func PreOptimize(ar *arena.Arena, Lut *cmsPipeline) bool {
 		opt = false
 
 		// Optimization steps
-		opt = opt || Remove1Op(ar, Lut, cmsSigIdentityElemType)
-		opt = opt || Remove2Op(ar, Lut, cmsSigXYZ2LabElemType, cmsSigLab2XYZElemType)
-		opt = opt || Remove2Op(ar, Lut, cmsSigLab2XYZElemType, cmsSigXYZ2LabElemType)
-		opt = opt || Remove2Op(ar, Lut, cmsSigLabV4toV2, cmsSigLabV2toV4)
-		opt = opt || Remove2Op(ar, Lut, cmsSigLabV2toV4, cmsSigLabV4toV2)
-		opt = opt || Remove2Op(ar, Lut, cmsSigLab2FloatPCS, cmsSigFloatPCS2Lab)
-		opt = opt || Remove2Op(ar, Lut, cmsSigXYZ2FloatPCS, cmsSigFloatPCS2XYZ)
+		opt = opt || Remove1Op(ar, Lut, CmsSigIdentityElemType)
+		opt = opt || Remove2Op(ar, Lut, CmsSigXYZ2LabElemType, CmsSigLab2XYZElemType)
+		opt = opt || Remove2Op(ar, Lut, CmsSigLab2XYZElemType, CmsSigXYZ2LabElemType)
+		opt = opt || Remove2Op(ar, Lut, CmsSigLabV4toV2, CmsSigLabV2toV4)
+		opt = opt || Remove2Op(ar, Lut, CmsSigLabV2toV4, CmsSigLabV4toV2)
+		opt = opt || Remove2Op(ar, Lut, CmsSigLab2FloatPCS, CmsSigFloatPCS2Lab)
+		opt = opt || Remove2Op(ar, Lut, CmsSigXYZ2FloatPCS, CmsSigFloatPCS2XYZ)
 		opt = opt || _MultiplyMatrix(ar, Lut)
 
 		if opt {
@@ -409,7 +409,7 @@ func PatchLUT(CLUT *cmsStage, At []uint16, Value []uint16, nChannelsOut, nChanne
 	var px, py, pz, pw float64
 	var x0, y0, z0, w0, index int
 
-	if CLUT.Type != cmsSigCLutElemType {
+	if CLUT.Type != CmsSigCLutElemType {
 		cmsSignalError(CLUT.ContextID, cmsERROR_INTERNAL, "(internal) Attempt to PatchLUT on non-lut stage")
 		return false
 	}
@@ -521,10 +521,10 @@ func FixWhiteMisalignment(ar *arena.Arena, Lut *cmsPipeline, EntryColorSpace, Ex
 	}
 
 	// Check for pre-linearization, CLUT, and post-linearization stages.
-	if !cmsPipelineCheckAndRetrieveStages(Lut, 3, []cmsStageSignature{cmsSigCurveSetElemType, cmsSigCLutElemType, cmsSigCurveSetElemType}, &PreLin, &CLUT, &PostLin) &&
-		!cmsPipelineCheckAndRetrieveStages(Lut, 2, []cmsStageSignature{cmsSigCurveSetElemType, cmsSigCLutElemType}, &PreLin, &CLUT) &&
-		!cmsPipelineCheckAndRetrieveStages(Lut, 2, []cmsStageSignature{cmsSigCLutElemType, cmsSigCurveSetElemType}, &CLUT, &PostLin) &&
-		!cmsPipelineCheckAndRetrieveStages(Lut, 1, []cmsStageSignature{cmsSigCLutElemType}, &CLUT) {
+	if !cmsPipelineCheckAndRetrieveStages(Lut, 3, []cmsStageSignature{CmsSigCurveSetElemType, CmsSigCLutElemType, CmsSigCurveSetElemType}, &PreLin, &CLUT, &PostLin) &&
+		!cmsPipelineCheckAndRetrieveStages(Lut, 2, []cmsStageSignature{CmsSigCurveSetElemType, CmsSigCLutElemType}, &PreLin, &CLUT) &&
+		!cmsPipelineCheckAndRetrieveStages(Lut, 2, []cmsStageSignature{CmsSigCLutElemType, CmsSigCurveSetElemType}, &CLUT, &PostLin) &&
+		!cmsPipelineCheckAndRetrieveStages(Lut, 1, []cmsStageSignature{CmsSigCLutElemType}, &CLUT) {
 		return false
 	}
 
@@ -622,15 +622,15 @@ func OptimizeByResampling(ar *arena.Arena, Lut **cmsPipeline, Intent uint32, Inp
 	}
 
 	// Handle prelinearization
-	if *dwFlags&cmsFLAGS_CLUT_PRE_LINEARIZATION != 0 {
+	if *dwFlags&CmsFLAGS_CLUT_PRE_LINEARIZATION != 0 {
 		PreLin := cmsPipelineGetPtrToFirstStage(Src)
-		if PreLin != nil && PreLin.Type == cmsSigCurveSetElemType {
+		if PreLin != nil && PreLin.Type == CmsSigCurveSetElemType {
 			if !AllCurvesAreLinear(PreLin) {
 				NewPreLin = cmsStageDup(ar, PreLin)
-				if NewPreLin == nil || !cmsPipelineInsertStage(Dest, cmsAT_BEGIN, NewPreLin) {
+				if NewPreLin == nil || !cmsPipelineInsertStage(Dest, CmsAT_BEGIN, NewPreLin) {
 					goto Error
 				}
-				cmsPipelineUnlinkStage(ar, Src, cmsAT_BEGIN, &KeepPreLin)
+				cmsPipelineUnlinkStage(ar, Src, CmsAT_BEGIN, &KeepPreLin)
 			}
 		}
 	}
@@ -638,20 +638,20 @@ func OptimizeByResampling(ar *arena.Arena, Lut **cmsPipeline, Intent uint32, Inp
 	// Allocate the CLUT
 	CLUT = cmsStageAllocCLut16bit(ar, Src.ContextID, nGridPoints, Src.InputChannels, Src.OutputChannels, nil)
 
-	if CLUT == nil || !cmsPipelineInsertStage(Dest, cmsAT_END, CLUT) {
+	if CLUT == nil || !cmsPipelineInsertStage(Dest, CmsAT_END, CLUT) {
 		goto Error
 	}
 
 	// Handle postlinearization
-	if *dwFlags&cmsFLAGS_CLUT_POST_LINEARIZATION != 0 {
+	if *dwFlags&CmsFLAGS_CLUT_POST_LINEARIZATION != 0 {
 		PostLin := cmsPipelineGetPtrToLastStage(Src)
-		if PostLin != nil && cmsStageType(PostLin) == cmsSigCurveSetElemType {
+		if PostLin != nil && cmsStageType(PostLin) == CmsSigCurveSetElemType {
 			if !AllCurvesAreLinear(PostLin) {
 				NewPostLin = cmsStageDup(ar, PostLin)
-				if NewPostLin == nil || !cmsPipelineInsertStage(Dest, cmsAT_END, NewPostLin) {
+				if NewPostLin == nil || !cmsPipelineInsertStage(Dest, CmsAT_END, NewPostLin) {
 					goto Error
 				}
-				cmsPipelineUnlinkStage(ar, Src, cmsAT_END, &KeepPostLin)
+				cmsPipelineUnlinkStage(ar, Src, CmsAT_END, &KeepPostLin)
 			}
 		}
 	}
@@ -702,9 +702,9 @@ func OptimizeByResampling(ar *arena.Arena, Lut **cmsPipeline, Intent uint32, Inp
 
 	// Adjust for absolute colorimetric intent
 	if Intent == INTENT_ABSOLUTE_COLORIMETRIC {
-		*dwFlags |= cmsFLAGS_NOWHITEONWHITEFIXUP
+		*dwFlags |= CmsFLAGS_NOWHITEONWHITEFIXUP
 	}
-	if *dwFlags&cmsFLAGS_NOWHITEONWHITEFIXUP == 0 {
+	if *dwFlags&CmsFLAGS_NOWHITEONWHITEFIXUP == 0 {
 		FixWhiteMisalignment(ar, Dest, ColorSpace, OutputColorSpace)
 	}
 
@@ -716,10 +716,10 @@ func OptimizeByResampling(ar *arena.Arena, Lut **cmsPipeline, Intent uint32, Inp
 Error:
 	// Restore original stages on error
 	if KeepPreLin != nil {
-		cmsPipelineInsertStage(Src, cmsAT_BEGIN, KeepPreLin)
+		cmsPipelineInsertStage(Src, CmsAT_BEGIN, KeepPreLin)
 	}
 	if KeepPostLin != nil {
-		cmsPipelineInsertStage(Src, cmsAT_END, KeepPostLin)
+		cmsPipelineInsertStage(Src, CmsAT_END, KeepPostLin)
 	}
 	cmsPipelineFree(ar, Dest)
 	return false
@@ -815,6 +815,11 @@ func Prelin8dup(ContextID CmsContext, ptr interface{}) interface{} {
 }
 
 func PrelinEval8(ar *arena.Arena, Input []uint16, Output []uint16, D interface{}) {
+	var r, g, b uint8
+	var rx, ry, rz cmsS15Fixed16Number
+	var c0, c1, c2, c3, Rest cmsS15Fixed16Number
+	var X0, X1, Y0, Y1, Z0, Z1 cmsS15Fixed16Number
+
 	p8, ok := D.(*Prelin8Data)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *Prelin8Data\n")
@@ -833,35 +838,33 @@ func PrelinEval8(ar *arena.Arena, Input []uint16, Output []uint16, D interface{}
 		return cmsS15Fixed16Number(LutTable[int(i+j+k+outChan)])
 	}
 
-	r := uint8(Input[0] >> 8)
-	g := uint8(Input[1] >> 8)
-	b := uint8(Input[2] >> 8)
+	r = uint8(Input[0] >> 8)
+	g = uint8(Input[1] >> 8)
+	b = uint8(Input[2] >> 8)
 
-	X0 := cmsS15Fixed16Number(p8.X0[r])
-	Y0 := cmsS15Fixed16Number(p8.Y0[g])
-	Z0 := cmsS15Fixed16Number(p8.Z0[b])
+	X0 = cmsS15Fixed16Number(p8.X0[r])
+	Y0 = cmsS15Fixed16Number(p8.Y0[g])
+	Z0 = cmsS15Fixed16Number(p8.Z0[b])
 
-	rx := p8.Rx[r]
-	ry := p8.Ry[g]
-	rz := p8.Rz[b]
+	rx = cmsS15Fixed16Number(p8.Rx[r])
+	ry = cmsS15Fixed16Number(p8.Ry[g])
+	rz = cmsS15Fixed16Number(p8.Rz[b])
 
-	X1 := X0
+	X1 = X0
 	if rx != 0 {
 		X1 += cmsS15Fixed16Number(p.opta[2])
 	}
-	Y1 := Y0
+	Y1 = Y0
 	if ry != 0 {
 		Y1 += cmsS15Fixed16Number(p.opta[1])
 	}
-	Z1 := Z0
+	Z1 = Z0
 	if rz != 0 {
 		Z1 += cmsS15Fixed16Number(p.opta[0])
 	}
 
 	for OutChan := 0; OutChan < TotalOut; OutChan++ {
-		c0 := DENS(uint32(X0), uint32(Y0), uint32(Z0), uint32(OutChan))
-
-		var c1, c2, c3 cmsS15Fixed16Number
+		c0 = DENS(uint32(X0), uint32(Y0), uint32(Z0), uint32(OutChan))
 		if rx >= ry && ry >= rz {
 			c1 = DENS(uint32(X1), uint32(Y0), uint32(Z0), uint32(OutChan)) - c0
 			c2 = DENS(uint32(X1), uint32(Y1), uint32(Z0), uint32(OutChan)) - DENS(uint32(X1), uint32(Y0), uint32(Z0), uint32(OutChan))
@@ -890,8 +893,8 @@ func PrelinEval8(ar *arena.Arena, Input []uint16, Output []uint16, D interface{}
 			c1, c2, c3 = 0, 0, 0
 		}
 
-		Rest := uint16(c1)*rx + uint16(c2)*ry + uint16(c3)*rz + 0x8001
-		Output[OutChan] = uint16(uint16(c0) + ((Rest + (Rest >> 16)) >> 16))
+		Rest = cmsS15Fixed16Number(c1*rx + c2*ry + c3*rz + 0x8001)
+		Output[OutChan] = uint16(c0 + ((Rest + (Rest >> 16)) >> 16))
 	}
 }
 
@@ -950,7 +953,7 @@ func OptimizeByComputingLinearization(ar *arena.Arena, Lut **cmsPipeline, Intent
 	}
 
 	if !cmsFormatterIs8bit(*InputFormat) {
-		if (*dwFlags & cmsFLAGS_CLUT_PRE_LINEARIZATION) == 0 {
+		if (*dwFlags & CmsFLAGS_CLUT_PRE_LINEARIZATION) == 0 {
 			return false
 		}
 	}
@@ -975,7 +978,7 @@ func OptimizeByComputingLinearization(ar *arena.Arena, Lut **cmsPipeline, Intent
 		goto Error
 	}
 
-	if cmsStageType(last) == cmsSigCurveSetElemType {
+	if cmsStageType(last) == CmsSigCurveSetElemType {
 		Data, ok := (cmsStageData(last)).(*cmsStageToneCurvesData)
 		if !ok {
 			cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *Prelin8Data\n")
@@ -1039,7 +1042,7 @@ func OptimizeByComputingLinearization(ar *arena.Arena, Lut **cmsPipeline, Intent
 		goto Error
 	}
 
-	if !cmsPipelineInsertStage(LutPlusCurves, cmsAT_BEGIN, cmsStageAllocToneCurves(ar, OriginalLut.ContextID, OriginalLut.InputChannels, TransReverse[:])) {
+	if !cmsPipelineInsertStage(LutPlusCurves, CmsAT_BEGIN, cmsStageAllocToneCurves(ar, OriginalLut.ContextID, OriginalLut.InputChannels, TransReverse[:])) {
 		goto Error
 	}
 
@@ -1049,12 +1052,12 @@ func OptimizeByComputingLinearization(ar *arena.Arena, Lut **cmsPipeline, Intent
 	}
 
 	OptimizedPrelinMpe = cmsStageAllocToneCurves(ar, OriginalLut.ContextID, OriginalLut.InputChannels, Trans[:])
-	if !cmsPipelineInsertStage(OptimizedLUT, cmsAT_BEGIN, OptimizedPrelinMpe) {
+	if !cmsPipelineInsertStage(OptimizedLUT, CmsAT_BEGIN, OptimizedPrelinMpe) {
 		goto Error
 	}
 
 	OptimizedCLUTmpe = cmsStageAllocCLut16bit(ar, OriginalLut.ContextID, nGridPoints, OriginalLut.InputChannels, OriginalLut.OutputChannels, nil)
-	if !cmsPipelineInsertStage(OptimizedLUT, cmsAT_END, OptimizedCLUTmpe) {
+	if !cmsPipelineInsertStage(OptimizedLUT, CmsAT_END, OptimizedCLUTmpe) {
 		goto Error
 	}
 
@@ -1096,10 +1099,10 @@ func OptimizeByComputingLinearization(ar *arena.Arena, Lut **cmsPipeline, Intent
 	}
 
 	if Intent == INTENT_ABSOLUTE_COLORIMETRIC {
-		*dwFlags |= cmsFLAGS_NOWHITEONWHITEFIXUP
+		*dwFlags |= CmsFLAGS_NOWHITEONWHITEFIXUP
 	}
 
-	if (*dwFlags & cmsFLAGS_NOWHITEONWHITEFIXUP) == 0 {
+	if (*dwFlags & CmsFLAGS_NOWHITEONWHITEFIXUP) == 0 {
 		if !FixWhiteMisalignment(ar, OptimizedLUT, ColorSpace, OutputColorSpace) {
 			return false
 		}
@@ -1293,7 +1296,7 @@ func OptimizeByJoiningCurves(
 
 	// Check if the LUT contains only curves
 	for mpe = cmsPipelineGetPtrToFirstStage(Src); mpe != nil; mpe = cmsStageNext(mpe) {
-		if cmsStageType(mpe) != cmsSigCurveSetElemType {
+		if cmsStageType(mpe) != CmsSigCurveSetElemType {
 			return false
 		}
 	}
@@ -1350,7 +1353,7 @@ func OptimizeByJoiningCurves(
 			cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsStageToneCurvesData\n")
 			goto Error
 		}
-		if !cmsPipelineInsertStage(Dest, cmsAT_BEGIN, ObtainedCurves) {
+		if !cmsPipelineInsertStage(Dest, CmsAT_BEGIN, ObtainedCurves) {
 			goto Error
 		}
 
@@ -1361,25 +1364,25 @@ func OptimizeByJoiningCurves(
 			if c16 == nil {
 				goto Error
 			}
-			*dwFlags |= cmsFLAGS_NOCACHE
+			*dwFlags |= CmsFLAGS_NOCACHE
 			cmsPipelineSetOptimizationParameters(Dest, FastEvaluateCurves8, c16, CurvesFree, CurvesDup)
 		} else {
 			c16 := CurvesAlloc(Dest.ContextID, Data.NCurves, 65536, Data.TheCurves)
 			if c16 == nil {
 				goto Error
 			}
-			*dwFlags |= cmsFLAGS_NOCACHE
+			*dwFlags |= CmsFLAGS_NOCACHE
 			cmsPipelineSetOptimizationParameters(Dest, FastEvaluateCurves16, c16, CurvesFree, CurvesDup)
 		}
 	} else {
 		cmsStageFree(ar, ObtainedCurves)
 		ObtainedCurves = nil
 
-		if !cmsPipelineInsertStage(Dest, cmsAT_BEGIN, cmsStageAllocIdentity(ar, Dest.ContextID, Src.InputChannels)) {
+		if !cmsPipelineInsertStage(Dest, CmsAT_BEGIN, cmsStageAllocIdentity(ar, Dest.ContextID, Src.InputChannels)) {
 			goto Error
 		}
 
-		*dwFlags |= cmsFLAGS_NOCACHE
+		*dwFlags |= CmsFLAGS_NOCACHE
 		cmsPipelineSetOptimizationParameters(Dest, FastIdentity16, Dest, nil, nil)
 	}
 
@@ -1399,9 +1402,7 @@ Error:
 			}
 		}
 	}
-	if Dest != nil {
-		cmsPipelineFree(ar, Dest)
-	}
+	cmsPipelineFree(ar, Dest)
 	return false
 }
 
@@ -1568,12 +1569,12 @@ func OptimizeMatrixShaper(ar *arena.Arena, Lut **cmsPipeline, Intent uint32, Inp
 
 	// Check for `shaper-matrix-matrix-shaper` or `shaper-matrix-shaper` constructs
 	IdentityMat = false
-	if cmsPipelineCheckAndRetrieveStages(Src, 4, []cmsStageSignature{cmsSigCurveSetElemType, cmsSigMatrixElemType, cmsSigMatrixElemType, cmsSigCurveSetElemType},
+	if cmsPipelineCheckAndRetrieveStages(Src, 4, []cmsStageSignature{CmsSigCurveSetElemType, CmsSigMatrixElemType, CmsSigMatrixElemType, CmsSigCurveSetElemType},
 		&Curve1, &Matrix1, &Matrix2, &Curve2) {
 		// Get both matrices
-		Data1, ok := cmsStageData(Matrix1).(*cmsStageMatrixData)
-		Data2, ok := cmsStageData(Matrix2).(*cmsStageMatrixData)
-		if !ok {
+		Data1, ok1 := cmsStageData(Matrix1).(*cmsStageMatrixData)
+		Data2, ok2 := cmsStageData(Matrix2).(*cmsStageMatrixData)
+		if !ok1 || !ok2 {
 			cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsStageMatrixData\n")
 			return false
 		}
@@ -1599,7 +1600,7 @@ func OptimizeMatrixShaper(ar *arena.Arena, Lut **cmsPipeline, Intent uint32, Inp
 			IdentityMat = true // Can optimize further
 		}
 	} else {
-		if cmsPipelineCheckAndRetrieveStages(Src, 3, []cmsStageSignature{cmsSigCurveSetElemType, cmsSigMatrixElemType, cmsSigCurveSetElemType},
+		if cmsPipelineCheckAndRetrieveStages(Src, 3, []cmsStageSignature{CmsSigCurveSetElemType, CmsSigMatrixElemType, CmsSigCurveSetElemType},
 			&Curve1, &Matrix1, &Curve2) {
 			// Single matrix case
 			Data, ok := cmsStageData(Matrix1).(*cmsStageMatrixData)
@@ -1629,18 +1630,18 @@ func OptimizeMatrixShaper(ar *arena.Arena, Lut **cmsPipeline, Intent uint32, Inp
 	}
 	//var ressl []float64
 	// Assemble the new LUT
-	if !cmsPipelineInsertStage(Dest, cmsAT_BEGIN, cmsStageDup(ar, Curve1)) {
+	if !cmsPipelineInsertStage(Dest, CmsAT_BEGIN, cmsStageDup(ar, Curve1)) {
 		goto Error
 	}
 	//ressl =
 
 	if !IdentityMat {
-		if !cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageAllocMatrix(ar, Dest.ContextID, 3, 3, MatToSlice(res), Offset)) {
+		if !cmsPipelineInsertStage(Dest, CmsAT_END, cmsStageAllocMatrix(ar, Dest.ContextID, 3, 3, MatToSlice(res), Offset)) {
 			goto Error
 		}
 	}
 	//res = SliceToMat(ressl)
-	if !cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageDup(ar, Curve2)) {
+	if !cmsPipelineInsertStage(Dest, CmsAT_END, cmsStageDup(ar, Curve2)) {
 		goto Error
 	}
 
@@ -1648,14 +1649,14 @@ func OptimizeMatrixShaper(ar *arena.Arena, Lut **cmsPipeline, Intent uint32, Inp
 	if IdentityMat {
 		OptimizeByJoiningCurves(ar, &Dest, Intent, InputFormat, OutputFormat, dwFlags)
 	} else {
-		mpeC1, ok := cmsStageData(Curve1).(*cmsStageToneCurvesData)
-		mpeC2, ok := cmsStageData(Curve2).(*cmsStageToneCurvesData)
-		if !ok {
+		mpeC1, ok1 := cmsStageData(Curve1).(*cmsStageToneCurvesData)
+		mpeC2, ok2 := cmsStageData(Curve2).(*cmsStageToneCurvesData)
+		if !ok1 || !ok2 {
 			cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsStageToneCurvesData\n")
 			return false
 		}
 		// Disable cache for this optimization
-		*dwFlags |= cmsFLAGS_NOCACHE
+		*dwFlags |= CmsFLAGS_NOCACHE
 
 		var vec cmsVEC3
 		// Set up optimization routines
@@ -1790,7 +1791,7 @@ func cmsOptimizePipeline(ar *arena.Arena, ContextID CmsContext, PtrLut **cmsPipe
 	var mpe *cmsStage
 
 	// A CLUT is being asked, so force this specific optimization.
-	if *dwFlags&cmsFLAGS_FORCE_CLUT != 0 {
+	if *dwFlags&CmsFLAGS_FORCE_CLUT != 0 {
 		PreOptimize(ar, *PtrLut)
 		return OptimizeByResampling(ar, PtrLut, Intent, InputFormat, OutputFormat, dwFlags)
 	}
@@ -1803,7 +1804,7 @@ func cmsOptimizePipeline(ar *arena.Arena, ContextID CmsContext, PtrLut **cmsPipe
 
 	// Avoid optimization for named color pipelines.
 	for mpe = cmsPipelineGetPtrToFirstStage(*PtrLut); mpe != nil; mpe = cmsStageNext(mpe) {
-		if cmsStageType(mpe) == cmsSigNamedColorElemType {
+		if cmsStageType(mpe) == CmsSigNamedColorElemType {
 			return false
 		}
 	}
@@ -1816,7 +1817,7 @@ func cmsOptimizePipeline(ar *arena.Arena, ContextID CmsContext, PtrLut **cmsPipe
 	}
 
 	// Skip optimization if explicitly disabled.
-	if *dwFlags&cmsFLAGS_NOOPTIMIZE != 0 {
+	if *dwFlags&CmsFLAGS_NOOPTIMIZE != 0 {
 		return false
 	}
 

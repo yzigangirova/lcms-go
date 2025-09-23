@@ -31,12 +31,12 @@ func TestColorSpaceIsCompatible(t *testing.T) {
 		a, b   cmsColorSpaceSignature
 		expect bool
 	}{
-		{cmsSigCmykData, cmsSigCmykData, true},
-		{cmsSig4colorData, cmsSigCmykData, true},
-		{cmsSigCmykData, cmsSig4colorData, true},
-		{cmsSigXYZData, cmsSigLabData, true},
-		{cmsSigLabData, cmsSigXYZData, true},
-		{cmsSigRgbData, cmsSigCmykData, false},
+		{CmsSigCmykData, CmsSigCmykData, true},
+		{CmsSig4colorData, CmsSigCmykData, true},
+		{CmsSigCmykData, CmsSig4colorData, true},
+		{CmsSigXYZData, CmsSigLabData, true},
+		{CmsSigLabData, CmsSigXYZData, true},
+		{CmsSigRgbData, CmsSigCmykData, false},
 	}
 	for _, tt := range tests {
 		if got := ColorSpaceIsCompatible(tt.a, tt.b); got != tt.expect {
@@ -124,7 +124,7 @@ func TestSearchIntent_DefaultList(t *testing.T) {
 	if intent == nil {
 		t.Errorf("SearchIntent failed to find INTENT_PERCEPTUAL")
 	}
-	if intent.Description != "Perceptual" {
+	if intent != nil && intent.Description != "Perceptual" {
 		t.Errorf("SearchIntent returned incorrect description: %s", intent.Description)
 	}
 }
@@ -148,7 +148,7 @@ func TestAddConversion_XYZtoLab(t *testing.T) {
 	p := cmsPipelineAlloc(nil, nil, 3, 3)
 	defer cmsPipelineFree(nil, p)
 
-	ok := AddConversion(nil, p, cmsSigXYZData, cmsSigLabData, &m, &v)
+	ok := AddConversion(nil, p, CmsSigXYZData, CmsSigLabData, &m, &v)
 	if !ok {
 		t.Errorf("AddConversion failed for XYZ → Lab")
 	}
@@ -163,7 +163,7 @@ func TestAddConversion_LabToLabWithMatrix(t *testing.T) {
 	p := cmsPipelineAlloc(nil, nil, 3, 3)
 	defer cmsPipelineFree(nil, p)
 
-	ok := AddConversion(nil, p, cmsSigLabData, cmsSigLabData, &m, &v)
+	ok := AddConversion(nil, p, CmsSigLabData, CmsSigLabData, &m, &v)
 	if !ok {
 		t.Errorf("AddConversion failed for Lab → Lab with matrix")
 	}

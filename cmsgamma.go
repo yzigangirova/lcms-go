@@ -311,9 +311,7 @@ func cmsJoinToneCurve(ar *arena.Arena, ContextID CmsContext, X, Y *CmsToneCurve,
 
 	// Allocate result array
 	Res = make([]float32, nResultingPoints)
-	if Res == nil {
-		goto Error
-	}
+
 	// Iterate and compute
 	for i := uint32(0); i < nResultingPoints; i++ {
 		t := float32(i) / float32(nResultingPoints-1)
@@ -323,12 +321,6 @@ func cmsJoinToneCurve(ar *arena.Arena, ContextID CmsContext, X, Y *CmsToneCurve,
 
 	// Build the output tone curve
 	out = cmsBuildTabulatedToneCurveFloat(ar, ContextID, nResultingPoints, Res)
-
-Error:
-
-	if Yreversed != nil {
-		CmsFreeToneCurve(Yreversed)
-	}
 
 	return out
 }

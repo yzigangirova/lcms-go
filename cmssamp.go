@@ -114,6 +114,7 @@ func debugPrintCmsTRANSFORM(prefix string, t *cmsTRANSFORM) {
 		fmt.Printf("[%s] UserData: nil\n", prefix)
 	}
 }
+//lint:ignore U1000 kept for parity with lcms; used in future ports
 func debugPrintCmsStage(prefix string, s *cmsStage) {
 	if s == nil {
 		fmt.Printf("[%s] cmsStage: nil\n", prefix)
@@ -173,15 +174,15 @@ func debugPrintCmsStage(prefix string, s *cmsStage) {
 func decodeStageSignature(sig cmsStageSignature) string {
 	// Replace with your actual signature constants if needed
 	switch sig {
-	case cmsSigMatrixElemType:
+	case CmsSigMatrixElemType:
 		return "Matrix"
-	case cmsSigCurveSetElemType:
+	case CmsSigCurveSetElemType:
 		return "CurveSet"
-	case cmsSigCLutElemType:
+	case CmsSigCLutElemType:
 		return "CLUT"
-	case cmsSigLab2XYZElemType:
+	case CmsSigLab2XYZElemType:
 		return "Lab2XYZ"
-	case cmsSigXYZ2LabElemType:
+	case CmsSigXYZ2LabElemType:
 		return "XYZ2Lab"
 	default:
 		return "Unknown"
@@ -199,7 +200,7 @@ func CreateRoundtripXForm(ar *arena.Arena,hProfile CmsHPROFILE, nIntent uint32) 
 	Intents := [4]uint32{INTENT_RELATIVE_COLORIMETRIC, nIntent, INTENT_RELATIVE_COLORIMETRIC, INTENT_RELATIVE_COLORIMETRIC}
 	xform = CmsHTRANSFORM(cmsCreateExtendedTransform(ar,
 		ContextID, 4, hProfiles[:], BPC[:], Intents[:],
-		States[:], nil, 0, TYPE_Lab_DBL, TYPE_Lab_DBL, cmsFLAGS_NOCACHE|cmsFLAGS_NOOPTIMIZE,
+		States[:], nil, 0, TYPE_Lab_DBL, TYPE_Lab_DBL, CmsFLAGS_NOCACHE|CmsFLAGS_NOOPTIMIZE,
 	))
 
 	//hlabProfile := hLab.(*cmsICCPROFILE)
@@ -267,7 +268,7 @@ func BlackPointAsDarkerColorant(ar *arena.Arena,hInput CmsHPROFILE, Intent uint3
 	// Create the transform.
 	xform = cmsCreateTransformTHR(ar,
 		ContextID, hInput, dwFormat, hLab, TYPE_Lab_DBL,
-		Intent, cmsFLAGS_NOOPTIMIZE|cmsFLAGS_NOCACHE,
+		Intent, CmsFLAGS_NOOPTIMIZE|CmsFLAGS_NOCACHE,
 	)
 
 	CmsCloseProfile(ar,hLab)
@@ -364,9 +365,9 @@ func cmsDetectBlackPoint(ar *arena.Arena,BlackPoint *cmsCIEXYZ, hProfile CmsHPRO
 
 	// Ensure the device class is adequate
 	devClass := cmsGetDeviceClass(hProfile)
-	if devClass == cmsSigLinkClass ||
-		devClass == cmsSigAbstractClass ||
-		devClass == cmsSigNamedColorClass {
+	if devClass == CmsSigLinkClass ||
+		devClass == CmsSigAbstractClass ||
+		devClass == CmsSigNamedColorClass {
 		if BlackPoint != nil {
 			BlackPoint.X, BlackPoint.Y, BlackPoint.Z = 0.0, 0.0, 0.0
 		}
@@ -395,17 +396,17 @@ func cmsDetectBlackPoint(ar *arena.Arena,BlackPoint *cmsCIEXYZ, hProfile CmsHPRO
 
 		// Use the fixed perceptual black for v4 profiles
 		if BlackPoint != nil {
-			BlackPoint.X = cmsPERCEPTUAL_BLACK_X
-			BlackPoint.Y = cmsPERCEPTUAL_BLACK_Y
-			BlackPoint.Z = cmsPERCEPTUAL_BLACK_Z
+			BlackPoint.X = CmsPERCEPTUAL_BLACK_X
+			BlackPoint.Y = CmsPERCEPTUAL_BLACK_Y
+			BlackPoint.Z = CmsPERCEPTUAL_BLACK_Z
 		}
 		return true
 	}
 
 	// Handle v2 profiles and compute the black point based on the profile class
 	if Intent == INTENT_RELATIVE_COLORIMETRIC &&
-		cmsGetDeviceClass(hProfile) == cmsSigOutputClass &&
-		CmsGetColorSpace(hProfile) == cmsSigCmykData {
+		cmsGetDeviceClass(hProfile) == CmsSigOutputClass &&
+		CmsGetColorSpace(hProfile) == CmsSigCmykData {
 		return BlackPointUsingPerceptualBlack(ar,BlackPoint, hProfile)
 	}
 
@@ -495,9 +496,9 @@ func cmsDetectDestinationBlackPoint(ar *arena.Arena,BlackPoint *cmsCIEXYZ, hProf
 
 	// Ensure the device class is adequate
 	devClass := cmsGetDeviceClass(hProfile)
-	if devClass == cmsSigLinkClass ||
-		devClass == cmsSigAbstractClass ||
-		devClass == cmsSigNamedColorClass {
+	if devClass == CmsSigLinkClass ||
+		devClass == CmsSigAbstractClass ||
+		devClass == CmsSigNamedColorClass {
 		if BlackPoint != nil {
 			BlackPoint.X, BlackPoint.Y, BlackPoint.Z = 0.0, 0.0, 0.0
 		}
@@ -523,9 +524,9 @@ func cmsDetectDestinationBlackPoint(ar *arena.Arena,BlackPoint *cmsCIEXYZ, hProf
 		}
 
 		if BlackPoint != nil {
-			BlackPoint.X = cmsPERCEPTUAL_BLACK_X
-			BlackPoint.Y = cmsPERCEPTUAL_BLACK_Y
-			BlackPoint.Z = cmsPERCEPTUAL_BLACK_Z
+			BlackPoint.X = CmsPERCEPTUAL_BLACK_X
+			BlackPoint.Y = CmsPERCEPTUAL_BLACK_Y
+			BlackPoint.Z = CmsPERCEPTUAL_BLACK_Z
 		}
 		return true
 	}
@@ -533,9 +534,9 @@ func cmsDetectDestinationBlackPoint(ar *arena.Arena,BlackPoint *cmsCIEXYZ, hProf
 	// Check if the profile is LUT-based and its color space
 	ColorSpace = CmsGetColorSpace(hProfile)
 	if !cmsIsCLUT(hProfile, Intent, LCMS_USED_AS_OUTPUT) ||
-		(ColorSpace != cmsSigGrayData &&
-			ColorSpace != cmsSigRgbData &&
-			ColorSpace != cmsSigCmykData) {
+		(ColorSpace != CmsSigGrayData &&
+			ColorSpace != CmsSigRgbData &&
+			ColorSpace != CmsSigCmykData) {
 		return cmsDetectBlackPoint(ar,BlackPoint, hProfile, Intent, dwFlags)
 	}
 

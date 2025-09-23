@@ -63,7 +63,7 @@ type cmsDICTentry struct {
 // somebody want to use this info for accessing profile header directly, so here it is.
 
 // Profile header -- it is 32-bit aligned, so no issues are expected on alignment
-type cmsICCHeader struct {
+type CmsICCHeader struct {
 	Size            uint32                   // Profile size in bytes
 	CmmId           cmsSignature             // CMM for this profile
 	Version         uint32                   // Format version number
@@ -86,13 +86,13 @@ type cmsICCHeader struct {
 }
 
 // ICC base tag
-type cmsTagBase struct {
+type CmsTagBase struct {
 	Sig      cmsTagTypeSignature
 	Reserved [4]int8
 }
 
 // A tag entry in directory
-type cmsTagEntry struct {
+type CmsTagEntry struct {
 	Sig    cmsTagSignature // The tag signature
 	Offset uint32          // Start of tag
 	Size   uint32          // Size in bytes
@@ -101,8 +101,8 @@ type cmsTagEntry struct {
 
 type CmsHPROFILE interface{}
 type CmsHANDLE interface{} // Generic handle
-type CmsHTRANSFORM interface{
-	 DestroyArena()
+type CmsHTRANSFORM interface {
+	DestroyArena()
 }
 type CmsToneCurve cms_curve_struct
 
@@ -110,20 +110,20 @@ type CmsToneCurve cms_curve_struct
 type cmsStageLoc int
 
 const (
-	cmsAT_BEGIN cmsStageLoc = iota
-	cmsAT_END
+	CmsAT_BEGIN cmsStageLoc = iota
+	CmsAT_END
 )
 
 // V4 perceptual black
 const (
-	cmsPERCEPTUAL_BLACK_X = 0.00336
-	cmsPERCEPTUAL_BLACK_Y = 0.0034731
-	cmsPERCEPTUAL_BLACK_Z = 0.00287
+	CmsPERCEPTUAL_BLACK_X = 0.00336
+	CmsPERCEPTUAL_BLACK_Y = 0.0034731
+	CmsPERCEPTUAL_BLACK_Z = 0.00287
 )
 
 // Definitions in ICC spec
-const cmsMagicNumber = 0x61637370 // 'acsp'
-const lcmsSignature = 0x6c636d73  // 'lcms'
+const CmsMagicNumber = 0x61637370 // 'acsp'
+const lCmsSignature = 0x6c636d73  // 'lcms'
 
 // Error Codes
 const (
@@ -402,42 +402,42 @@ var (
 
 // Flags
 const (
-	cmsFLAGS_NOCACHE       = 0x0040 // Inhibit 1-pixel cache
-	cmsFLAGS_NOOPTIMIZE    = 0x0100 // Inhibit optimizations
-	cmsFLAGS_NULLTRANSFORM = 0x0200 // Don't transform anyway
+	CmsFLAGS_NOCACHE       = 0x0040 // Inhibit 1-pixel cache
+	CmsFLAGS_NOOPTIMIZE    = 0x0100 // Inhibit optimizations
+	CmsFLAGS_NULLTRANSFORM = 0x0200 // Don't transform anyway
 
 	// Proofing flags
-	cmsFLAGS_GAMUTCHECK   = 0x1000 // Out of Gamut alarm
-	cmsFLAGS_SOFTPROOFING = 0x4000 // Do softproofing
+	CmsFLAGS_GAMUTCHECK   = 0x1000 // Out of Gamut alarm
+	CmsFLAGS_SOFTPROOFING = 0x4000 // Do softproofing
 
 	// Misc
-	cmsFLAGS_BLACKPOINTCOMPENSATION = 0x2000 // Black point compensation
-	cmsFLAGS_NOWHITEONWHITEFIXUP    = 0x0004 // Don't fix scum dot
-	cmsFLAGS_HIGHRESPRECALC         = 0x0400 // Use more memory for better accuracy
-	cmsFLAGS_LOWRESPRECALC          = 0x0800 // Use less memory to minimize resources
+	CmsFLAGS_BLACKPOINTCOMPENSATION = 0x2000 // Black point compensation
+	CmsFLAGS_NOWHITEONWHITEFIXUP    = 0x0004 // Don't fix scum dot
+	CmsFLAGS_HIGHRESPRECALC         = 0x0400 // Use more memory for better accuracy
+	CmsFLAGS_LOWRESPRECALC          = 0x0800 // Use less memory to minimize resources
 
 	// For devicelink creation
-	cmsFLAGS_8BITS_DEVICELINK = 0x0008 // Create 8-bit devicelinks
-	cmsFLAGS_GUESSDEVICECLASS = 0x0020 // Guess device class for transform2devicelink
-	cmsFLAGS_KEEP_SEQUENCE    = 0x0080 // Keep profile sequence for devicelink creation
+	CmsFLAGS_8BITS_DEVICELINK = 0x0008 // Create 8-bit devicelinks
+	CmsFLAGS_GUESSDEVICECLASS = 0x0020 // Guess device class for transform2devicelink
+	CmsFLAGS_KEEP_SEQUENCE    = 0x0080 // Keep profile sequence for devicelink creation
 
 	// Specific to particular optimizations
-	cmsFLAGS_FORCE_CLUT              = 0x0002 // Force CLUT optimization
-	cmsFLAGS_CLUT_POST_LINEARIZATION = 0x0001 // Create postlinearization tables if possible
-	cmsFLAGS_CLUT_PRE_LINEARIZATION  = 0x0010 // Create prelinearization tables if possible
+	CmsFLAGS_FORCE_CLUT              = 0x0002 // Force CLUT optimization
+	CmsFLAGS_CLUT_POST_LINEARIZATION = 0x0001 // Create postlinearization tables if possible
+	CmsFLAGS_CLUT_PRE_LINEARIZATION  = 0x0010 // Create prelinearization tables if possible
 
 	// Specific to unbounded mode
-	cmsFLAGS_NONEGATIVES = 0x8000 // Prevent negative numbers in floating-point transforms
+	CmsFLAGS_NONEGATIVES = 0x8000 // Prevent negative numbers in floating-point transforms
 
 	// Copy alpha channels when transforming
-	cmsFLAGS_COPY_ALPHA = 0x04000000 // Alpha channels are copied on CmsDoTransform()
+	CmsFLAGS_COPY_ALPHA = 0x04000000 // Alpha channels are copied on CmsDoTransform()
 
 	// Fine-tune control over number of gridpoints
-	cmsFLAGS_GRIDPOINTS_MASK  = 0xFF
-	cmsFLAGS_GRIDPOINTS_SHIFT = 16
+	CmsFLAGS_GRIDPOINTS_MASK  = 0xFF
+	CmsFLAGS_GRIDPOINTS_SHIFT = 16
 
 	// CRD special
-	cmsFLAGS_NODEFAULTRESOURCEDEF = 0x01000000 // No default resource definitions
+	CmsFLAGS_NODEFAULTRESOURCEDEF = 0x01000000 // No default resource definitions
 )
 
 // Common structures in ICC tags
@@ -470,253 +470,253 @@ type cmsProfileID [16]byte
 // cmsTagTypeSignature represents the base ICC type definitions.
 // Base ICC type definitions
 const (
-	cmsSigChromaticityType          cmsTagTypeSignature = 0x6368726D // 'chrm'
-	cmsSigcicpType                  cmsTagTypeSignature = 0x63696370 // 'cicp'
-	cmsSigColorantOrderType         cmsTagTypeSignature = 0x636C726F // 'clro'
-	cmsSigColorantTableType         cmsTagTypeSignature = 0x636C7274 // 'clrt'
-	cmsSigCrdInfoType               cmsTagTypeSignature = 0x63726469 // 'crdi'
-	cmsSigCurveType                 cmsTagTypeSignature = 0x63757276 // 'curv'
-	cmsSigDataType                  cmsTagTypeSignature = 0x64617461 // 'data'
-	cmsSigDictType                  cmsTagTypeSignature = 0x64696374 // 'dict'
-	cmsSigDateTimeType              cmsTagTypeSignature = 0x6474696D // 'dtim'
-	cmsSigDeviceSettingsType        cmsTagTypeSignature = 0x64657673 // 'devs'
-	cmsSigLut16Type                 cmsTagTypeSignature = 0x6d667432 // 'mft2'
-	cmsSigLut8Type                  cmsTagTypeSignature = 0x6d667431 // 'mft1'
-	cmsSigLutAtoBType               cmsTagTypeSignature = 0x6d414220 // 'mAB '
-	cmsSigLutBtoAType               cmsTagTypeSignature = 0x6d424120 // 'mBA '
-	cmsSigMeasurementType           cmsTagTypeSignature = 0x6D656173 // 'meas'
-	cmsSigMultiLocalizedUnicodeType cmsTagTypeSignature = 0x6D6C7563 // 'mluc'
-	cmsSigMultiProcessElementType   cmsTagTypeSignature = 0x6D706574 // 'mpet'
-	cmsSigNamedColorType            cmsTagTypeSignature = 0x6E636f6C // 'ncol' -- DEPRECATED!
-	cmsSigNamedColor2Type           cmsTagTypeSignature = 0x6E636C32 // 'ncl2'
-	cmsSigParametricCurveType       cmsTagTypeSignature = 0x70617261 // 'para'
-	cmsSigProfileSequenceDescType   cmsTagTypeSignature = 0x70736571 // 'pseq'
-	cmsSigProfileSequenceIdType     cmsTagTypeSignature = 0x70736964 // 'psid'
-	cmsSigResponseCurveSet16Type    cmsTagTypeSignature = 0x72637332 // 'rcs2'
-	cmsSigS15Fixed16ArrayType       cmsTagTypeSignature = 0x73663332 // 'sf32'
-	cmsSigScreeningType             cmsTagTypeSignature = 0x7363726E // 'scrn'
-	cmsSigSignatureType             cmsTagTypeSignature = 0x73696720 // 'sig '
-	cmsSigTextType                  cmsTagTypeSignature = 0x74657874 // 'text'
-	cmsSigTextDescriptionType       cmsTagTypeSignature = 0x64657363 // 'desc'
-	cmsSigU16Fixed16ArrayType       cmsTagTypeSignature = 0x75663332 // 'uf32'
-	cmsSigUcrBgType                 cmsTagTypeSignature = 0x62666420 // 'bfd '
-	cmsSigUInt16ArrayType           cmsTagTypeSignature = 0x75693136 // 'ui16'
-	cmsSigUInt32ArrayType           cmsTagTypeSignature = 0x75693332 // 'ui32'
-	cmsSigUInt64ArrayType           cmsTagTypeSignature = 0x75693634 // 'ui64'
-	cmsSigUInt8ArrayType            cmsTagTypeSignature = 0x75693038 // 'ui08'
-	cmsSigVcgtType                  cmsTagTypeSignature = 0x76636774 // 'vcgt'
-	cmsSigViewingConditionsType     cmsTagTypeSignature = 0x76696577 // 'view'
-	cmsSigXYZType                   cmsTagTypeSignature = 0x58595A20 // 'XYZ '
+	CmsSigChromaticityType          cmsTagTypeSignature = 0x6368726D // 'chrm'
+	CmsSigcicpType                  cmsTagTypeSignature = 0x63696370 // 'cicp'
+	CmsSigColorantOrderType         cmsTagTypeSignature = 0x636C726F // 'clro'
+	CmsSigColorantTableType         cmsTagTypeSignature = 0x636C7274 // 'clrt'
+	CmsSigCrdInfoType               cmsTagTypeSignature = 0x63726469 // 'crdi'
+	CmsSigCurveType                 cmsTagTypeSignature = 0x63757276 // 'curv'
+	CmsSigDataType                  cmsTagTypeSignature = 0x64617461 // 'data'
+	CmsSigDictType                  cmsTagTypeSignature = 0x64696374 // 'dict'
+	CmsSigDateTimeType              cmsTagTypeSignature = 0x6474696D // 'dtim'
+	CmsSigDeviceSettingsType        cmsTagTypeSignature = 0x64657673 // 'devs'
+	CmsSigLut16Type                 cmsTagTypeSignature = 0x6d667432 // 'mft2'
+	CmsSigLut8Type                  cmsTagTypeSignature = 0x6d667431 // 'mft1'
+	CmsSigLutAtoBType               cmsTagTypeSignature = 0x6d414220 // 'mAB '
+	CmsSigLutBtoAType               cmsTagTypeSignature = 0x6d424120 // 'mBA '
+	CmsSigMeasurementType           cmsTagTypeSignature = 0x6D656173 // 'meas'
+	CmsSigMultiLocalizedUnicodeType cmsTagTypeSignature = 0x6D6C7563 // 'mluc'
+	CmsSigMultiProcessElementType   cmsTagTypeSignature = 0x6D706574 // 'mpet'
+	CmsSigNamedColorType            cmsTagTypeSignature = 0x6E636f6C // 'ncol' -- DEPRECATED!
+	CmsSigNamedColor2Type           cmsTagTypeSignature = 0x6E636C32 // 'ncl2'
+	CmsSigParametricCurveType       cmsTagTypeSignature = 0x70617261 // 'para'
+	CmsSigProfileSequenceDescType   cmsTagTypeSignature = 0x70736571 // 'pseq'
+	CmsSigProfileSequenceIdType     cmsTagTypeSignature = 0x70736964 // 'psid'
+	CmsSigResponseCurveSet16Type    cmsTagTypeSignature = 0x72637332 // 'rcs2'
+	CmsSigS15Fixed16ArrayType       cmsTagTypeSignature = 0x73663332 // 'sf32'
+	CmsSigScreeningType             cmsTagTypeSignature = 0x7363726E // 'scrn'
+	CmsSigSignatureType             cmsTagTypeSignature = 0x73696720 // 'sig '
+	CmsSigTextType                  cmsTagTypeSignature = 0x74657874 // 'text'
+	CmsSigTextDescriptionType       cmsTagTypeSignature = 0x64657363 // 'desc'
+	CmsSigU16Fixed16ArrayType       cmsTagTypeSignature = 0x75663332 // 'uf32'
+	CmsSigUcrBgType                 cmsTagTypeSignature = 0x62666420 // 'bfd '
+	CmsSigUInt16ArrayType           cmsTagTypeSignature = 0x75693136 // 'ui16'
+	CmsSigUInt32ArrayType           cmsTagTypeSignature = 0x75693332 // 'ui32'
+	CmsSigUInt64ArrayType           cmsTagTypeSignature = 0x75693634 // 'ui64'
+	CmsSigUInt8ArrayType            cmsTagTypeSignature = 0x75693038 // 'ui08'
+	CmsSigVcgtType                  cmsTagTypeSignature = 0x76636774 // 'vcgt'
+	CmsSigViewingConditionsType     cmsTagTypeSignature = 0x76696577 // 'view'
+	CmsSigXYZType                   cmsTagTypeSignature = 0x58595A20 // 'XYZ '
 )
 
 // Base ICC tag definitions
 const (
-	cmsSigAToB0Tag                          cmsTagSignature = 0x41324230 // 'A2B0'
-	cmsSigAToB1Tag                          cmsTagSignature = 0x41324231 // 'A2B1'
-	cmsSigAToB2Tag                          cmsTagSignature = 0x41324232 // 'A2B2'
-	cmsSigBlueColorantTag                   cmsTagSignature = 0x6258595A // 'bXYZ'
-	cmsSigBlueMatrixColumnTag               cmsTagSignature = 0x6258595A // 'bXYZ'
-	cmsSigBlueTRCTag                        cmsTagSignature = 0x62545243 // 'bTRC'
-	cmsSigBToA0Tag                          cmsTagSignature = 0x42324130 // 'B2A0'
-	cmsSigBToA1Tag                          cmsTagSignature = 0x42324131 // 'B2A1'
-	cmsSigBToA2Tag                          cmsTagSignature = 0x42324132 // 'B2A2'
-	cmsSigCalibrationDateTimeTag            cmsTagSignature = 0x63616C74 // 'calt'
-	cmsSigCharTargetTag                     cmsTagSignature = 0x74617267 // 'targ'
-	cmsSigChromaticAdaptationTag            cmsTagSignature = 0x63686164 // 'chad'
-	cmsSigChromaticityTag                   cmsTagSignature = 0x6368726D // 'chrm'
-	cmsSigColorantOrderTag                  cmsTagSignature = 0x636C726F // 'clro'
-	cmsSigColorantTableTag                  cmsTagSignature = 0x636C7274 // 'clrt'
-	cmsSigColorantTableOutTag               cmsTagSignature = 0x636C6F74 // 'clot'
-	cmsSigColorimetricIntentImageStateTag   cmsTagSignature = 0x63696973 // 'ciis'
-	cmsSigCopyrightTag                      cmsTagSignature = 0x63707274 // 'cprt'
-	cmsSigCrdInfoTag                        cmsTagSignature = 0x63726469 // 'crdi'
-	cmsSigDataTag                           cmsTagSignature = 0x64617461 // 'data'
-	cmsSigDateTimeTag                       cmsTagSignature = 0x6474696D // 'dtim'
-	cmsSigDeviceMfgDescTag                  cmsTagSignature = 0x646D6E64 // 'dmnd'
-	cmsSigDeviceModelDescTag                cmsTagSignature = 0x646D6464 // 'dmdd'
-	cmsSigDeviceSettingsTag                 cmsTagSignature = 0x64657673 // 'devs'
-	cmsSigDToB0Tag                          cmsTagSignature = 0x44324230 // 'D2B0'
-	cmsSigDToB1Tag                          cmsTagSignature = 0x44324231 // 'D2B1'
-	cmsSigDToB2Tag                          cmsTagSignature = 0x44324232 // 'D2B2'
-	cmsSigDToB3Tag                          cmsTagSignature = 0x44324233 // 'D2B3'
-	cmsSigBToD0Tag                          cmsTagSignature = 0x42324430 // 'B2D0'
-	cmsSigBToD1Tag                          cmsTagSignature = 0x42324431 // 'B2D1'
-	cmsSigBToD2Tag                          cmsTagSignature = 0x42324432 // 'B2D2'
-	cmsSigBToD3Tag                          cmsTagSignature = 0x42324433 // 'B2D3'
-	cmsSigGamutTag                          cmsTagSignature = 0x67616D74 // 'gamt'
-	cmsSigGrayTRCTag                        cmsTagSignature = 0x6b545243 // 'kTRC'
-	cmsSigGreenColorantTag                  cmsTagSignature = 0x6758595A // 'gXYZ'
-	cmsSigGreenMatrixColumnTag              cmsTagSignature = 0x6758595A // 'gXYZ'
-	cmsSigGreenTRCTag                       cmsTagSignature = 0x67545243 // 'gTRC'
-	cmsSigLuminanceTag                      cmsTagSignature = 0x6C756D69 // 'lumi'
-	cmsSigMeasurementTag                    cmsTagSignature = 0x6D656173 // 'meas'
-	cmsSigMediaBlackPointTag                cmsTagSignature = 0x626B7074 // 'bkpt'
-	cmsSigMediaWhitePointTag                cmsTagSignature = 0x77747074 // 'wtpt'
-	cmsSigNamedColorTag                     cmsTagSignature = 0x6E636F6C // 'ncol' // Deprecated by the ICC
-	cmsSigNamedColor2Tag                    cmsTagSignature = 0x6E636C32 // 'ncl2'
-	cmsSigOutputResponseTag                 cmsTagSignature = 0x72657370 // 'resp'
-	cmsSigPerceptualRenderingIntentGamutTag cmsTagSignature = 0x72696730 // 'rig0'
-	cmsSigPreview0Tag                       cmsTagSignature = 0x70726530 // 'pre0'
-	cmsSigPreview1Tag                       cmsTagSignature = 0x70726531 // 'pre1'
-	cmsSigPreview2Tag                       cmsTagSignature = 0x70726532 // 'pre2'
-	cmsSigProfileDescriptionTag             cmsTagSignature = 0x64657363 // 'desc'
-	cmsSigProfileDescriptionMLTag           cmsTagSignature = 0x6473636D // 'dscm'
-	cmsSigProfileSequenceDescTag            cmsTagSignature = 0x70736571 // 'pseq'
-	cmsSigProfileSequenceIdTag              cmsTagSignature = 0x70736964 // 'psid'
-	cmsSigPs2CRD0Tag                        cmsTagSignature = 0x70736430 // 'psd0'
-	cmsSigPs2CRD1Tag                        cmsTagSignature = 0x70736431 // 'psd1'
-	cmsSigPs2CRD2Tag                        cmsTagSignature = 0x70736432 // 'psd2'
-	cmsSigPs2CRD3Tag                        cmsTagSignature = 0x70736433 // 'psd3'
-	cmsSigPs2CSATag                         cmsTagSignature = 0x70733273 // 'ps2s'
-	cmsSigPs2RenderingIntentTag             cmsTagSignature = 0x70733269 // 'ps2i'
-	cmsSigRedColorantTag                    cmsTagSignature = 0x7258595A // 'rXYZ'
-	cmsSigRedMatrixColumnTag                cmsTagSignature = 0x7258595A // 'rXYZ'
-	cmsSigRedTRCTag                         cmsTagSignature = 0x72545243 // 'rTRC'
-	cmsSigSaturationRenderingIntentGamutTag cmsTagSignature = 0x72696732 // 'rig2'
-	cmsSigScreeningDescTag                  cmsTagSignature = 0x73637264 // 'scrd'
-	cmsSigScreeningTag                      cmsTagSignature = 0x7363726E // 'scrn'
-	cmsSigTechnologyTag                     cmsTagSignature = 0x74656368 // 'tech'
-	cmsSigUcrBgTag                          cmsTagSignature = 0x62666420 // 'bfd '
-	cmsSigViewingCondDescTag                cmsTagSignature = 0x76756564 // 'vued'
-	cmsSigViewingConditionsTag              cmsTagSignature = 0x76696577 // 'view'
-	cmsSigVcgtTag                           cmsTagSignature = 0x76636774 // 'vcgt'
-	cmsSigMetaTag                           cmsTagSignature = 0x6D657461 // 'meta'
-	cmsSigcicpTag                           cmsTagSignature = 0x63696370 // 'cicp'
-	cmsSigArgyllArtsTag                     cmsTagSignature = 0x61727473 // 'arts'
+	CmsSigAToB0Tag                          cmsTagSignature = 0x41324230 // 'A2B0'
+	CmsSigAToB1Tag                          cmsTagSignature = 0x41324231 // 'A2B1'
+	CmsSigAToB2Tag                          cmsTagSignature = 0x41324232 // 'A2B2'
+	CmsSigBlueColorantTag                   cmsTagSignature = 0x6258595A // 'bXYZ'
+	CmsSigBlueMatrixColumnTag               cmsTagSignature = 0x6258595A // 'bXYZ'
+	CmsSigBlueTRCTag                        cmsTagSignature = 0x62545243 // 'bTRC'
+	CmsSigBToA0Tag                          cmsTagSignature = 0x42324130 // 'B2A0'
+	CmsSigBToA1Tag                          cmsTagSignature = 0x42324131 // 'B2A1'
+	CmsSigBToA2Tag                          cmsTagSignature = 0x42324132 // 'B2A2'
+	CmsSigCalibrationDateTimeTag            cmsTagSignature = 0x63616C74 // 'calt'
+	CmsSigCharTargetTag                     cmsTagSignature = 0x74617267 // 'targ'
+	CmsSigChromaticAdaptationTag            cmsTagSignature = 0x63686164 // 'chad'
+	CmsSigChromaticityTag                   cmsTagSignature = 0x6368726D // 'chrm'
+	CmsSigColorantOrderTag                  cmsTagSignature = 0x636C726F // 'clro'
+	CmsSigColorantTableTag                  cmsTagSignature = 0x636C7274 // 'clrt'
+	CmsSigColorantTableOutTag               cmsTagSignature = 0x636C6F74 // 'clot'
+	CmsSigColorimetricIntentImageStateTag   cmsTagSignature = 0x63696973 // 'ciis'
+	CmsSigCopyrightTag                      cmsTagSignature = 0x63707274 // 'cprt'
+	CmsSigCrdInfoTag                        cmsTagSignature = 0x63726469 // 'crdi'
+	CmsSigDataTag                           cmsTagSignature = 0x64617461 // 'data'
+	CmsSigDateTimeTag                       cmsTagSignature = 0x6474696D // 'dtim'
+	CmsSigDeviceMfgDescTag                  cmsTagSignature = 0x646D6E64 // 'dmnd'
+	CmsSigDeviceModelDescTag                cmsTagSignature = 0x646D6464 // 'dmdd'
+	CmsSigDeviceSettingsTag                 cmsTagSignature = 0x64657673 // 'devs'
+	CmsSigDToB0Tag                          cmsTagSignature = 0x44324230 // 'D2B0'
+	CmsSigDToB1Tag                          cmsTagSignature = 0x44324231 // 'D2B1'
+	CmsSigDToB2Tag                          cmsTagSignature = 0x44324232 // 'D2B2'
+	CmsSigDToB3Tag                          cmsTagSignature = 0x44324233 // 'D2B3'
+	CmsSigBToD0Tag                          cmsTagSignature = 0x42324430 // 'B2D0'
+	CmsSigBToD1Tag                          cmsTagSignature = 0x42324431 // 'B2D1'
+	CmsSigBToD2Tag                          cmsTagSignature = 0x42324432 // 'B2D2'
+	CmsSigBToD3Tag                          cmsTagSignature = 0x42324433 // 'B2D3'
+	CmsSigGamutTag                          cmsTagSignature = 0x67616D74 // 'gamt'
+	CmsSigGrayTRCTag                        cmsTagSignature = 0x6b545243 // 'kTRC'
+	CmsSigGreenColorantTag                  cmsTagSignature = 0x6758595A // 'gXYZ'
+	CmsSigGreenMatrixColumnTag              cmsTagSignature = 0x6758595A // 'gXYZ'
+	CmsSigGreenTRCTag                       cmsTagSignature = 0x67545243 // 'gTRC'
+	CmsSigLuminanceTag                      cmsTagSignature = 0x6C756D69 // 'lumi'
+	CmsSigMeasurementTag                    cmsTagSignature = 0x6D656173 // 'meas'
+	CmsSigMediaBlackPointTag                cmsTagSignature = 0x626B7074 // 'bkpt'
+	CmsSigMediaWhitePointTag                cmsTagSignature = 0x77747074 // 'wtpt'
+	CmsSigNamedColorTag                     cmsTagSignature = 0x6E636F6C // 'ncol' // Deprecated by the ICC
+	CmsSigNamedColor2Tag                    cmsTagSignature = 0x6E636C32 // 'ncl2'
+	CmsSigOutputResponseTag                 cmsTagSignature = 0x72657370 // 'resp'
+	CmsSigPerceptualRenderingIntentGamutTag cmsTagSignature = 0x72696730 // 'rig0'
+	CmsSigPreview0Tag                       cmsTagSignature = 0x70726530 // 'pre0'
+	CmsSigPreview1Tag                       cmsTagSignature = 0x70726531 // 'pre1'
+	CmsSigPreview2Tag                       cmsTagSignature = 0x70726532 // 'pre2'
+	CmsSigProfileDescriptionTag             cmsTagSignature = 0x64657363 // 'desc'
+	CmsSigProfileDescriptionMLTag           cmsTagSignature = 0x6473636D // 'dscm'
+	CmsSigProfileSequenceDescTag            cmsTagSignature = 0x70736571 // 'pseq'
+	CmsSigProfileSequenceIdTag              cmsTagSignature = 0x70736964 // 'psid'
+	CmsSigPs2CRD0Tag                        cmsTagSignature = 0x70736430 // 'psd0'
+	CmsSigPs2CRD1Tag                        cmsTagSignature = 0x70736431 // 'psd1'
+	CmsSigPs2CRD2Tag                        cmsTagSignature = 0x70736432 // 'psd2'
+	CmsSigPs2CRD3Tag                        cmsTagSignature = 0x70736433 // 'psd3'
+	CmsSigPs2CSATag                         cmsTagSignature = 0x70733273 // 'ps2s'
+	CmsSigPs2RenderingIntentTag             cmsTagSignature = 0x70733269 // 'ps2i'
+	CmsSigRedColorantTag                    cmsTagSignature = 0x7258595A // 'rXYZ'
+	CmsSigRedMatrixColumnTag                cmsTagSignature = 0x7258595A // 'rXYZ'
+	CmsSigRedTRCTag                         cmsTagSignature = 0x72545243 // 'rTRC'
+	CmsSigSaturationRenderingIntentGamutTag cmsTagSignature = 0x72696732 // 'rig2'
+	CmsSigScreeningDescTag                  cmsTagSignature = 0x73637264 // 'scrd'
+	CmsSigScreeningTag                      cmsTagSignature = 0x7363726E // 'scrn'
+	CmsSigTechnologyTag                     cmsTagSignature = 0x74656368 // 'tech'
+	CmsSigUcrBgTag                          cmsTagSignature = 0x62666420 // 'bfd '
+	CmsSigViewingCondDescTag                cmsTagSignature = 0x76756564 // 'vued'
+	CmsSigViewingConditionsTag              cmsTagSignature = 0x76696577 // 'view'
+	CmsSigVcgtTag                           cmsTagSignature = 0x76636774 // 'vcgt'
+	CmsSigMetaTag                           cmsTagSignature = 0x6D657461 // 'meta'
+	CmsSigcicpTag                           cmsTagSignature = 0x63696370 // 'cicp'
+	CmsSigArgyllArtsTag                     cmsTagSignature = 0x61727473 // 'arts'
 )
 
 type cmsColorSpaceSignature uint32
 
 const (
-	cmsSigXYZData   cmsColorSpaceSignature = 0x58595A20 // 'XYZ '
-	cmsSigLabData   cmsColorSpaceSignature = 0x4C616220 // 'Lab '
-	cmsSigLuvData   cmsColorSpaceSignature = 0x4C757620 // 'Luv '
-	cmsSigYCbCrData cmsColorSpaceSignature = 0x59436272 // 'YCbr'
-	cmsSigYxyData   cmsColorSpaceSignature = 0x59787920 // 'Yxy '
-	cmsSigRgbData   cmsColorSpaceSignature = 0x52474220 // 'RGB '
-	cmsSigGrayData  cmsColorSpaceSignature = 0x47524159 // 'GRAY'
-	cmsSigHsvData   cmsColorSpaceSignature = 0x48535620 // 'HSV '
-	cmsSigHlsData   cmsColorSpaceSignature = 0x484C5320 // 'HLS '
-	cmsSigCmykData  cmsColorSpaceSignature = 0x434D594B // 'CMYK'
-	cmsSigCmyData   cmsColorSpaceSignature = 0x434D5920 // 'CMY '
+	CmsSigXYZData   cmsColorSpaceSignature = 0x58595A20 // 'XYZ '
+	CmsSigLabData   cmsColorSpaceSignature = 0x4C616220 // 'Lab '
+	CmsSigLuvData   cmsColorSpaceSignature = 0x4C757620 // 'Luv '
+	CmsSigYCbCrData cmsColorSpaceSignature = 0x59436272 // 'YCbr'
+	CmsSigYxyData   cmsColorSpaceSignature = 0x59787920 // 'Yxy '
+	CmsSigRgbData   cmsColorSpaceSignature = 0x52474220 // 'RGB '
+	CmsSigGrayData  cmsColorSpaceSignature = 0x47524159 // 'GRAY'
+	CmsSigHsvData   cmsColorSpaceSignature = 0x48535620 // 'HSV '
+	CmsSigHlsData   cmsColorSpaceSignature = 0x484C5320 // 'HLS '
+	CmsSigCmykData  cmsColorSpaceSignature = 0x434D594B // 'CMYK'
+	CmsSigCmyData   cmsColorSpaceSignature = 0x434D5920 // 'CMY '
 
-	cmsSigMCH1Data cmsColorSpaceSignature = 0x4D434831 // 'MCH1'
-	cmsSigMCH2Data cmsColorSpaceSignature = 0x4D434832 // 'MCH2'
-	cmsSigMCH3Data cmsColorSpaceSignature = 0x4D434833 // 'MCH3'
-	cmsSigMCH4Data cmsColorSpaceSignature = 0x4D434834 // 'MCH4'
-	cmsSigMCH5Data cmsColorSpaceSignature = 0x4D434835 // 'MCH5'
-	cmsSigMCH6Data cmsColorSpaceSignature = 0x4D434836 // 'MCH6'
-	cmsSigMCH7Data cmsColorSpaceSignature = 0x4D434837 // 'MCH7'
-	cmsSigMCH8Data cmsColorSpaceSignature = 0x4D434838 // 'MCH8'
-	cmsSigMCH9Data cmsColorSpaceSignature = 0x4D434839 // 'MCH9'
-	cmsSigMCHAData cmsColorSpaceSignature = 0x4D434841 // 'MCHA'
-	cmsSigMCHBData cmsColorSpaceSignature = 0x4D434842 // 'MCHB'
-	cmsSigMCHCData cmsColorSpaceSignature = 0x4D434843 // 'MCHC'
-	cmsSigMCHDData cmsColorSpaceSignature = 0x4D434844 // 'MCHD'
-	cmsSigMCHEData cmsColorSpaceSignature = 0x4D434845 // 'MCHE'
-	cmsSigMCHFData cmsColorSpaceSignature = 0x4D434846 // 'MCHF'
+	CmsSigMCH1Data cmsColorSpaceSignature = 0x4D434831 // 'MCH1'
+	CmsSigMCH2Data cmsColorSpaceSignature = 0x4D434832 // 'MCH2'
+	CmsSigMCH3Data cmsColorSpaceSignature = 0x4D434833 // 'MCH3'
+	CmsSigMCH4Data cmsColorSpaceSignature = 0x4D434834 // 'MCH4'
+	CmsSigMCH5Data cmsColorSpaceSignature = 0x4D434835 // 'MCH5'
+	CmsSigMCH6Data cmsColorSpaceSignature = 0x4D434836 // 'MCH6'
+	CmsSigMCH7Data cmsColorSpaceSignature = 0x4D434837 // 'MCH7'
+	CmsSigMCH8Data cmsColorSpaceSignature = 0x4D434838 // 'MCH8'
+	CmsSigMCH9Data cmsColorSpaceSignature = 0x4D434839 // 'MCH9'
+	CmsSigMCHAData cmsColorSpaceSignature = 0x4D434841 // 'MCHA'
+	CmsSigMCHBData cmsColorSpaceSignature = 0x4D434842 // 'MCHB'
+	CmsSigMCHCData cmsColorSpaceSignature = 0x4D434843 // 'MCHC'
+	CmsSigMCHDData cmsColorSpaceSignature = 0x4D434844 // 'MCHD'
+	CmsSigMCHEData cmsColorSpaceSignature = 0x4D434845 // 'MCHE'
+	CmsSigMCHFData cmsColorSpaceSignature = 0x4D434846 // 'MCHF'
 
-	cmsSigNamedData  cmsColorSpaceSignature = 0x6E6D636C // 'nmcl'
-	cmsSig1colorData cmsColorSpaceSignature = 0x31434C52 // '1CLR'
-	cmsSig2colorData cmsColorSpaceSignature = 0x32434C52 // '2CLR'
-	cmsSig3colorData cmsColorSpaceSignature = 0x33434C52 // '3CLR'
-	cmsSig4colorData cmsColorSpaceSignature = 0x34434C52 // '4CLR'
-	cmsSig5colorData cmsColorSpaceSignature = 0x35434C52 // '5CLR'
-	cmsSig6colorData cmsColorSpaceSignature = 0x36434C52 // '6CLR'
-	cmsSig7colorData cmsColorSpaceSignature = 0x37434C52 // '7CLR'
-	cmsSig8colorData cmsColorSpaceSignature = 0x38434C52 // '8CLR'
-	cmsSig9colorData cmsColorSpaceSignature = 0x39434C52 // '9CLR'
+	CmsSigNamedData  cmsColorSpaceSignature = 0x6E6D636C // 'nmcl'
+	CmsSig1colorData cmsColorSpaceSignature = 0x31434C52 // '1CLR'
+	CmsSig2colorData cmsColorSpaceSignature = 0x32434C52 // '2CLR'
+	CmsSig3colorData cmsColorSpaceSignature = 0x33434C52 // '3CLR'
+	CmsSig4colorData cmsColorSpaceSignature = 0x34434C52 // '4CLR'
+	CmsSig5colorData cmsColorSpaceSignature = 0x35434C52 // '5CLR'
+	CmsSig6colorData cmsColorSpaceSignature = 0x36434C52 // '6CLR'
+	CmsSig7colorData cmsColorSpaceSignature = 0x37434C52 // '7CLR'
+	CmsSig8colorData cmsColorSpaceSignature = 0x38434C52 // '8CLR'
+	CmsSig9colorData cmsColorSpaceSignature = 0x39434C52 // '9CLR'
 
-	cmsSig10colorData cmsColorSpaceSignature = 0x41434C52 // 'ACLR'
-	cmsSig11colorData cmsColorSpaceSignature = 0x42434C52 // 'BCLR'
-	cmsSig12colorData cmsColorSpaceSignature = 0x43434C52 // 'CCLR'
-	cmsSig13colorData cmsColorSpaceSignature = 0x44434C52 // 'DCLR'
-	cmsSig14colorData cmsColorSpaceSignature = 0x45434C52 // 'ECLR'
-	cmsSig15colorData cmsColorSpaceSignature = 0x46434C52 // 'FCLR'
+	CmsSig10colorData cmsColorSpaceSignature = 0x41434C52 // 'ACLR'
+	CmsSig11colorData cmsColorSpaceSignature = 0x42434C52 // 'BCLR'
+	CmsSig12colorData cmsColorSpaceSignature = 0x43434C52 // 'CCLR'
+	CmsSig13colorData cmsColorSpaceSignature = 0x44434C52 // 'DCLR'
+	CmsSig14colorData cmsColorSpaceSignature = 0x45434C52 // 'ECLR'
+	CmsSig15colorData cmsColorSpaceSignature = 0x46434C52 // 'FCLR'
 
-	cmsSigLuvKData cmsColorSpaceSignature = 0x4C75764B // 'LuvK'
+	CmsSigLuvKData cmsColorSpaceSignature = 0x4C75764B // 'LuvK'
 )
 
 type cmsTechnologySignature uint32
 
 // ICC Technology tag
 const (
-	cmsSigDigitalCamera              cmsTechnologySignature = 0x6463616D // 'dcam'
-	cmsSigFilmScanner                cmsTechnologySignature = 0x6673636E // 'fscn'
-	cmsSigReflectiveScanner          cmsTechnologySignature = 0x7273636E // 'rscn'
-	cmsSigInkJetPrinter              cmsTechnologySignature = 0x696A6574 // 'ijet'
-	cmsSigThermalWaxPrinter          cmsTechnologySignature = 0x74776178 // 'twax'
-	cmsSigElectrophotographicPrinter cmsTechnologySignature = 0x6570686F // 'epho'
-	cmsSigElectrostaticPrinter       cmsTechnologySignature = 0x65737461 // 'esta'
-	cmsSigDyeSublimationPrinter      cmsTechnologySignature = 0x64737562 // 'dsub'
-	cmsSigPhotographicPaperPrinter   cmsTechnologySignature = 0x7270686F // 'rpho'
-	cmsSigFilmWriter                 cmsTechnologySignature = 0x6670726E // 'fprn'
-	cmsSigVideoMonitor               cmsTechnologySignature = 0x7669646D // 'vidm'
-	cmsSigVideoCamera                cmsTechnologySignature = 0x76696463 // 'vidc'
-	cmsSigProjectionTelevision       cmsTechnologySignature = 0x706A7476 // 'pjtv'
-	cmsSigCRTDisplay                 cmsTechnologySignature = 0x43525420 // 'CRT '
-	cmsSigPMDisplay                  cmsTechnologySignature = 0x504D4420 // 'PMD '
-	cmsSigAMDisplay                  cmsTechnologySignature = 0x414D4420 // 'AMD '
-	cmsSigPhotoCD                    cmsTechnologySignature = 0x4B504344 // 'KPCD'
-	cmsSigPhotoImageSetter           cmsTechnologySignature = 0x696D6773 // 'imgs'
-	cmsSigGravure                    cmsTechnologySignature = 0x67726176 // 'grav'
-	cmsSigOffsetLithography          cmsTechnologySignature = 0x6F666673 // 'offs'
-	cmsSigSilkscreen                 cmsTechnologySignature = 0x73696C6B // 'silk'
-	cmsSigFlexography                cmsTechnologySignature = 0x666C6578 // 'flex'
-	cmsSigMotionPictureFilmScanner   cmsTechnologySignature = 0x6D706673 // 'mpfs'
-	cmsSigMotionPictureFilmRecorder  cmsTechnologySignature = 0x6D706672 // 'mpfr'
-	cmsSigDigitalMotionPictureCamera cmsTechnologySignature = 0x646D7063 // 'dmpc'
-	cmsSigDigitalCinemaProjector     cmsTechnologySignature = 0x64636A70 // 'dcpj'
+	CmsSigDigitalCamera              cmsTechnologySignature = 0x6463616D // 'dcam'
+	CmsSigFilmScanner                cmsTechnologySignature = 0x6673636E // 'fscn'
+	CmsSigReflectiveScanner          cmsTechnologySignature = 0x7273636E // 'rscn'
+	CmsSigInkJetPrinter              cmsTechnologySignature = 0x696A6574 // 'ijet'
+	CmsSigThermalWaxPrinter          cmsTechnologySignature = 0x74776178 // 'twax'
+	CmsSigElectrophotographicPrinter cmsTechnologySignature = 0x6570686F // 'epho'
+	CmsSigElectrostaticPrinter       cmsTechnologySignature = 0x65737461 // 'esta'
+	CmsSigDyeSublimationPrinter      cmsTechnologySignature = 0x64737562 // 'dsub'
+	CmsSigPhotographicPaperPrinter   cmsTechnologySignature = 0x7270686F // 'rpho'
+	CmsSigFilmWriter                 cmsTechnologySignature = 0x6670726E // 'fprn'
+	CmsSigVideoMonitor               cmsTechnologySignature = 0x7669646D // 'vidm'
+	CmsSigVideoCamera                cmsTechnologySignature = 0x76696463 // 'vidc'
+	CmsSigProjectionTelevision       cmsTechnologySignature = 0x706A7476 // 'pjtv'
+	CmsSigCRTDisplay                 cmsTechnologySignature = 0x43525420 // 'CRT '
+	CmsSigPMDisplay                  cmsTechnologySignature = 0x504D4420 // 'PMD '
+	CmsSigAMDisplay                  cmsTechnologySignature = 0x414D4420 // 'AMD '
+	CmsSigPhotoCD                    cmsTechnologySignature = 0x4B504344 // 'KPCD'
+	CmsSigPhotoImageSetter           cmsTechnologySignature = 0x696D6773 // 'imgs'
+	CmsSigGravure                    cmsTechnologySignature = 0x67726176 // 'grav'
+	CmsSigOffsetLithography          cmsTechnologySignature = 0x6F666673 // 'offs'
+	CmsSigSilkscreen                 cmsTechnologySignature = 0x73696C6B // 'silk'
+	CmsSigFlexography                cmsTechnologySignature = 0x666C6578 // 'flex'
+	CmsSigMotionPictureFilmScanner   cmsTechnologySignature = 0x6D706673 // 'mpfs'
+	CmsSigMotionPictureFilmRecorder  cmsTechnologySignature = 0x6D706672 // 'mpfr'
+	CmsSigDigitalMotionPictureCamera cmsTechnologySignature = 0x646D7063 // 'dmpc'
+	CmsSigDigitalCinemaProjector     cmsTechnologySignature = 0x64636A70 // 'dcpj'
 )
 
 type cmsStageSignature uint32
 
 const (
-	cmsSigCurveSetElemType cmsStageSignature = 0x63767374 // 'cvst'
-	cmsSigMatrixElemType   cmsStageSignature = 0x6D617466 // 'matf'
-	cmsSigCLutElemType     cmsStageSignature = 0x636C7574 // 'clut'
+	CmsSigCurveSetElemType cmsStageSignature = 0x63767374 // 'cvst'
+	CmsSigMatrixElemType   cmsStageSignature = 0x6D617466 // 'matf'
+	CmsSigCLutElemType     cmsStageSignature = 0x636C7574 // 'clut'
 
-	cmsSigBAcsElemType cmsStageSignature = 0x62414353 // 'bACS'
-	cmsSigEAcsElemType cmsStageSignature = 0x65414353 // 'eACS'
+	CmsSigBAcsElemType cmsStageSignature = 0x62414353 // 'bACS'
+	CmsSigEAcsElemType cmsStageSignature = 0x65414353 // 'eACS'
 
 	// Custom from here, not in the ICC Spec
-	cmsSigXYZ2LabElemType    cmsStageSignature = 0x6C327820 // 'l2x '
-	cmsSigLab2XYZElemType    cmsStageSignature = 0x78326C20 // 'x2l '
-	cmsSigNamedColorElemType cmsStageSignature = 0x6E636C20 // 'ncl '
-	cmsSigLabV2toV4          cmsStageSignature = 0x32203420 // '2 4 '
-	cmsSigLabV4toV2          cmsStageSignature = 0x34203220 // '4 2 '
+	CmsSigXYZ2LabElemType    cmsStageSignature = 0x6C327820 // 'l2x '
+	CmsSigLab2XYZElemType    cmsStageSignature = 0x78326C20 // 'x2l '
+	CmsSigNamedColorElemType cmsStageSignature = 0x6E636C20 // 'ncl '
+	CmsSigLabV2toV4          cmsStageSignature = 0x32203420 // '2 4 '
+	CmsSigLabV4toV2          cmsStageSignature = 0x34203220 // '4 2 '
 
 	// Identities
-	cmsSigIdentityElemType cmsStageSignature = 0x69646E20 // 'idn '
+	CmsSigIdentityElemType cmsStageSignature = 0x69646E20 // 'idn '
 
 	// Float to floatPCS
-	cmsSigLab2FloatPCS          cmsStageSignature = 0x64326C20 // 'd2l '
-	cmsSigFloatPCS2Lab          cmsStageSignature = 0x6C326420 // 'l2d '
-	cmsSigXYZ2FloatPCS          cmsStageSignature = 0x64327820 // 'd2x '
-	cmsSigFloatPCS2XYZ          cmsStageSignature = 0x78326420 // 'x2d '
-	cmsSigClipNegativesElemType cmsStageSignature = 0x636c7020 // 'clp '
+	CmsSigLab2FloatPCS          cmsStageSignature = 0x64326C20 // 'd2l '
+	CmsSigFloatPCS2Lab          cmsStageSignature = 0x6C326420 // 'l2d '
+	CmsSigXYZ2FloatPCS          cmsStageSignature = 0x64327820 // 'd2x '
+	CmsSigFloatPCS2XYZ          cmsStageSignature = 0x78326420 // 'x2d '
+	CmsSigClipNegativesElemType cmsStageSignature = 0x636c7020 // 'clp '
 )
 
 // Types of CurveElements
 type cmsCurveSegSignature uint32
 
 const (
-	cmsSigFormulaCurveSeg cmsCurveSegSignature = 0x70617266 // 'parf'
-	cmsSigSampledCurveSeg cmsCurveSegSignature = 0x73616D66 // 'samf'
-	cmsSigSegmentedCurve  cmsCurveSegSignature = 0x63757266 // 'curf'
+	CmsSigFormulaCurveSeg cmsCurveSegSignature = 0x70617266 // 'parf'
+	CmsSigSampledCurveSeg cmsCurveSegSignature = 0x73616D66 // 'samf'
+	CmsSigSegmentedCurve  cmsCurveSegSignature = 0x63757266 // 'curf'
 )
 
 // Used in ResponseCurveType
 const (
-	cmsSigStatusA uint32 = 0x53746141 // 'StaA'
-	cmsSigStatusE uint32 = 0x53746145 // 'StaE'
-	cmsSigStatusI uint32 = 0x53746149 // 'StaI'
-	cmsSigStatusT uint32 = 0x53746154 // 'StaT'
-	cmsSigStatusM uint32 = 0x5374614D // 'StaM'
-	cmsSigDN      uint32 = 0x444E2020 // 'DN  '
-	cmsSigDNP     uint32 = 0x444E2050 // 'DN P'
-	cmsSigDNN     uint32 = 0x444E4E20 // 'DNN '
-	cmsSigDNNP    uint32 = 0x444E4E50 // 'DNNP'
+	CmsSigStatusA uint32 = 0x53746141 // 'StaA'
+	CmsSigStatusE uint32 = 0x53746145 // 'StaE'
+	CmsSigStatusI uint32 = 0x53746149 // 'StaI'
+	CmsSigStatusT uint32 = 0x53746154 // 'StaT'
+	CmsSigStatusM uint32 = 0x5374614D // 'StaM'
+	CmsSigDN      uint32 = 0x444E2020 // 'DN  '
+	CmsSigDNP     uint32 = 0x444E2050 // 'DN P'
+	CmsSigDNN     uint32 = 0x444E4E20 // 'DNN '
+	CmsSigDNNP    uint32 = 0x444E4E50 // 'DNNP'
 )
 
 // Device attributes, currently defined values correspond to the low 4 bytes
@@ -731,12 +731,12 @@ const (
 type cmsPlatformSignature uint32
 
 const (
-	cmsSigMacintosh cmsPlatformSignature = 0x4150504C // 'APPL'
-	cmsSigMicrosoft cmsPlatformSignature = 0x4D534654 // 'MSFT'
-	cmsSigSolaris   cmsPlatformSignature = 0x53554E57 // 'SUNW'
-	cmsSigSGI       cmsPlatformSignature = 0x53474920 // 'SGI '
-	cmsSigTaligent  cmsPlatformSignature = 0x54474E54 // 'TGNT'
-	cmsSigUnices    cmsPlatformSignature = 0x2A6E6978 // '*nix'   // From argyll -- Not official
+	CmsSigMacintosh cmsPlatformSignature = 0x4150504C // 'APPL'
+	CmsSigMicrosoft cmsPlatformSignature = 0x4D534654 // 'MSFT'
+	CmsSigSolaris   cmsPlatformSignature = 0x53554E57 // 'SUNW'
+	CmsSigSGI       cmsPlatformSignature = 0x53474920 // 'SGI '
+	CmsSigTaligent  cmsPlatformSignature = 0x54474E54 // 'TGNT'
+	CmsSigUnices    cmsPlatformSignature = 0x2A6E6978 // '*nix'   // From argyll -- Not official
 
 )
 
@@ -744,18 +744,18 @@ const (
 type cmsProfileClassSignature uint32
 
 const (
-	cmsSigInputClass      cmsProfileClassSignature = 0x73636E72 // 'scnr'
-	cmsSigDisplayClass    cmsProfileClassSignature = 0x6D6E7472 // 'mntr'
-	cmsSigOutputClass     cmsProfileClassSignature = 0x70727472 // 'prtr'
-	cmsSigLinkClass       cmsProfileClassSignature = 0x6C696E6B // 'link'
-	cmsSigAbstractClass   cmsProfileClassSignature = 0x61627374 // 'abst'
-	cmsSigColorSpaceClass cmsProfileClassSignature = 0x73706163 // 'spac'
-	cmsSigNamedColorClass cmsProfileClassSignature = 0x6E6D636C // 'nmcl'
+	CmsSigInputClass      cmsProfileClassSignature = 0x73636E72 // 'scnr'
+	CmsSigDisplayClass    cmsProfileClassSignature = 0x6D6E7472 // 'mntr'
+	CmsSigOutputClass     cmsProfileClassSignature = 0x70727472 // 'prtr'
+	CmsSigLinkClass       cmsProfileClassSignature = 0x6C696E6B // 'link'
+	CmsSigAbstractClass   cmsProfileClassSignature = 0x61627374 // 'abst'
+	CmsSigColorSpaceClass cmsProfileClassSignature = 0x73706163 // 'spac'
+	CmsSigNamedColorClass cmsProfileClassSignature = 0x6E6D636C // 'nmcl'
 )
 
 // Helper to calculate grid points
-func cmsFLAGS_GRIDPOINTS(n int) int {
-	return (n & cmsFLAGS_GRIDPOINTS_MASK) << cmsFLAGS_GRIDPOINTS_SHIFT
+func CmsFLAGS_GRIDPOINTS(n int) int {
+	return (n & CmsFLAGS_GRIDPOINTS_MASK) << CmsFLAGS_GRIDPOINTS_SHIFT
 }
 
 // cmsCIEXYZ represents a color in the CIE XYZ color space
@@ -772,7 +772,6 @@ type CmsCIExyY struct {
 	Y_small float64
 	Y_large float64 //
 }
-
 
 // cmsCIELab represents a color in the CIE Lab color space
 type cmsCIELab struct {
@@ -879,18 +878,6 @@ type (
 	cmsU16Fixed16Number uint32
 )
 
-// Ensure proper type sizes at compile-time (if desired, otherwise not necessary in Go due to well-defined type sizes).
-/*const (
-	cmsCheckUInt8Size  = uint8(math.MaxUint8) == 255
-	cmsCheckInt8Size   = int8(math.MaxInt8) == 127
-	cmsCheckUInt16Size = uint16(math.MaxUint16) == 65535
-	cmsCheckInt16Size  = int16(math.MaxInt16) == 32767
-	cmsCheckUInt32Size = uint32(math.MaxUint32) == 4294967295
-	cmsCheckInt32Size  = int32(math.MaxInt32) == 2147483647
-	cmsCheckUInt64Size = uint64(math.MaxUint64) == 18446744073709551615
-	cmsCheckInt64Size  = int64(math.MaxInt64) == 9223372036854775807
-)*/
-
 // Pixel format description:
 // Bit fields for defining the format of a pixel are defined as follows:
 //
@@ -994,9 +981,10 @@ type cmsCurveSegment struct {
 	SampledPoints []float32
 }
 
-type cmsSAMPLER16 func(ar *arena.Arena,In []uint16, Out []uint16, cargo interface{}) int32
+type cmsSAMPLER16 func(ar *arena.Arena, In []uint16, Out []uint16, cargo interface{}) int32
 
-type cmsSAMPLERFLOAT func(ar *arena.Arena,In []float32, Out []float32, cargo interface{}) int32
+//lint:ignore U1000 kept for parity with lcms; used in future ports
+type cmsSAMPLERFLOAT func(ar *arena.Arena, In []float32, Out []float32, cargo interface{}) int32
 
 // Use this flag to prevent changes being written to destination
 const SAMPLER_INSPECT = 0x01000000

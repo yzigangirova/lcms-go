@@ -264,7 +264,7 @@ func DefaultICCintents(
 		m                 cmsMAT3
 		off               cmsVEC3
 		ColorSpaceIn      cmsColorSpaceSignature
-		ColorSpaceOut     cmsColorSpaceSignature = cmsSigLabData
+		ColorSpaceOut     cmsColorSpaceSignature = CmsSigLabData
 		CurrentColorSpace cmsColorSpaceSignature
 		ClassSig          cmsProfileClassSignature
 		Intent            uint32
@@ -287,14 +287,14 @@ func DefaultICCintents(
 
 		hProfile = hProfiles[i]
 		ClassSig = cmsGetDeviceClass(hProfile)
-		lIsDeviceLink = (ClassSig == cmsSigLinkClass || ClassSig == cmsSigAbstractClass)
+		lIsDeviceLink = (ClassSig == CmsSigLinkClass || ClassSig == CmsSigAbstractClass)
 
 		// Determine if the profile is input
 		if (i == 0) && !lIsDeviceLink {
 			lIsInput = true
 		} else {
-			lIsInput = (CurrentColorSpace != cmsSigXYZData) &&
-				(CurrentColorSpace != cmsSigLabData)
+			lIsInput = (CurrentColorSpace != CmsSigXYZData) &&
+				(CurrentColorSpace != CmsSigLabData)
 		}
 
 		Intent = TheIntents[i]
@@ -313,13 +313,13 @@ func DefaultICCintents(
 		}
 
 		// If devicelink or named color class
-		if lIsDeviceLink || (ClassSig == cmsSigNamedColorClass && nProfiles == 1) {
+		if lIsDeviceLink || (ClassSig == CmsSigNamedColorClass && nProfiles == 1) {
 			Lut = cmsReadDevicelinkLUT(ar, hProfile, Intent)
 			if Lut == nil {
 				goto Error
 			}
 
-			if ClassSig == cmsSigAbstractClass && i > 0 {
+			if ClassSig == CmsSigAbstractClass && i > 0 {
 				if !ComputeConversion(ar, i, hProfiles, Intent, BPC[i], AdaptationStates[i], &m, &off) {
 					goto Error
 				}
@@ -364,14 +364,14 @@ func DefaultICCintents(
 	}
 
 	// Handle non-negatives clip
-	if dwFlags&cmsFLAGS_NONEGATIVES != 0 {
-		if ColorSpaceOut == cmsSigGrayData || ColorSpaceOut == cmsSigRgbData || ColorSpaceOut == cmsSigCmykData {
+	if dwFlags&CmsFLAGS_NONEGATIVES != 0 {
+		if ColorSpaceOut == CmsSigGrayData || ColorSpaceOut == CmsSigRgbData || ColorSpaceOut == CmsSigCmykData {
 			clip := cmsStageClipNegatives(ar, Result.ContextID, uint32(cmsChannelsOfColorSpace(ColorSpaceOut)))
 			if clip == nil {
 				goto Error
 			}
 
-			if !cmsPipelineInsertStage(Result, cmsAT_END, clip) {
+			if !cmsPipelineInsertStage(Result, CmsAT_END, clip) {
 				goto Error
 			}
 		}
@@ -385,9 +385,7 @@ Error:
 	if Lut != nil {
 		cmsPipelineFree(ar, Lut)
 	}
-	if Result != nil {
-		cmsPipelineFree(ar, Result)
-	}
+	cmsPipelineFree(ar, Result)
 	return nil
 }
 
@@ -496,43 +494,43 @@ func AddConversion(ar *arena.Arena, Result *cmsPipeline, InPCS cmsColorSpaceSign
 
 	// Handle PCS mismatches
 	switch InPCS {
-	case cmsSigXYZData: // Input profile operates in XYZ
+	case CmsSigXYZData: // Input profile operates in XYZ
 		switch OutPCS {
-		case cmsSigXYZData: // XYZ -> XYZ
+		case CmsSigXYZData: // XYZ -> XYZ
 			if !IsEmptyLayer(m, off) {
-				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(ar, Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
+				if !cmsPipelineInsertStage(Result, CmsAT_END, cmsStageAllocMatrix(ar, Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
 					return false
 				}
 			}
-		case cmsSigLabData: // XYZ -> Lab
+		case CmsSigLabData: // XYZ -> Lab
 			if !IsEmptyLayer(m, off) {
-				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(ar, Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
+				if !cmsPipelineInsertStage(Result, CmsAT_END, cmsStageAllocMatrix(ar, Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
 					return false
 				}
 			}
-			if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocXYZ2Lab(ar, Result.ContextID)) {
+			if !cmsPipelineInsertStage(Result, CmsAT_END, cmsStageAllocXYZ2Lab(ar, Result.ContextID)) {
 				return false
 			}
 		default:
 			return false // Colorspace mismatch
 		}
 
-	case cmsSigLabData: // Input profile operates in Lab
+	case CmsSigLabData: // Input profile operates in Lab
 		switch OutPCS {
-		case cmsSigXYZData: // Lab -> XYZ
-			if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocLab2XYZ(ar, Result.ContextID)) {
+		case CmsSigXYZData: // Lab -> XYZ
+			if !cmsPipelineInsertStage(Result, CmsAT_END, cmsStageAllocLab2XYZ(ar, Result.ContextID)) {
 				return false
 			}
 			if !IsEmptyLayer(m, off) {
-				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(ar, Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
+				if !cmsPipelineInsertStage(Result, CmsAT_END, cmsStageAllocMatrix(ar, Result.ContextID, 3, 3, mAsDbl, offAsDbl)) {
 					return false
 				}
 			}
-		case cmsSigLabData: // Lab -> Lab
+		case CmsSigLabData: // Lab -> Lab
 			if !IsEmptyLayer(m, off) {
-				if !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocLab2XYZ(ar, Result.ContextID)) ||
-					!cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(ar, Result.ContextID, 3, 3, mAsDbl, offAsDbl)) ||
-					!cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocXYZ2Lab(ar, Result.ContextID)) {
+				if !cmsPipelineInsertStage(Result, CmsAT_END, cmsStageAllocLab2XYZ(ar, Result.ContextID)) ||
+					!cmsPipelineInsertStage(Result, CmsAT_END, cmsStageAllocMatrix(ar, Result.ContextID, 3, 3, mAsDbl, offAsDbl)) ||
+					!cmsPipelineInsertStage(Result, CmsAT_END, cmsStageAllocXYZ2Lab(ar, Result.ContextID)) {
 					return false
 				}
 			}
@@ -559,12 +557,12 @@ func ColorSpaceIsCompatible(a, b cmsColorSpaceSignature) bool {
 	}
 
 	// Check for MCH4 substitution of CMYK.
-	if (a == cmsSig4colorData && b == cmsSigCmykData) || (a == cmsSigCmykData && b == cmsSig4colorData) {
+	if (a == CmsSig4colorData && b == CmsSigCmykData) || (a == CmsSigCmykData && b == CmsSig4colorData) {
 		return true
 	}
 
 	// Check for XYZ/Lab compatibility.
-	if (a == cmsSigXYZData && b == cmsSigLabData) || (a == cmsSigLabData && b == cmsSigXYZData) {
+	if (a == CmsSigXYZData && b == CmsSigLabData) || (a == CmsSigLabData && b == CmsSigXYZData) {
 		return true
 	}
 
@@ -659,8 +657,8 @@ func BlackPreservingKOnlyIntents(
 		hLastProfile = hProfiles[lastProfilePos-1]
 		lastProfilePos--
 
-		if CmsGetColorSpace(hLastProfile) != cmsSigCmykData ||
-			cmsGetDeviceClass(hLastProfile) != cmsSigLinkClass {
+		if CmsGetColorSpace(hLastProfile) != CmsSigCmykData ||
+			cmsGetDeviceClass(hLastProfile) != CmsSigLinkClass {
 			break
 		}
 	}
@@ -668,9 +666,9 @@ func BlackPreservingKOnlyIntents(
 	preservationProfilesCount = lastProfilePos + 1
 
 	// Check for non-CMYK profiles
-	if CmsGetColorSpace(hProfiles[0]) != cmsSigCmykData ||
-		!(CmsGetColorSpace(hLastProfile) == cmsSigCmykData ||
-			cmsGetDeviceClass(hLastProfile) == cmsSigOutputClass) {
+	if CmsGetColorSpace(hProfiles[0]) != CmsSigCmykData ||
+		!(CmsGetColorSpace(hLastProfile) == CmsSigCmykData ||
+			cmsGetDeviceClass(hLastProfile) == CmsSigOutputClass) {
 		return DefaultICCintents(ar, ContextID, nProfiles, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
 	}
 
@@ -693,7 +691,7 @@ func BlackPreservingKOnlyIntents(
 	}
 
 	// Determine the number of gridpoints
-	nGridPoints = cmsReasonableGridpointsByColorspace(cmsSigCmykData, dwFlags)
+	nGridPoints = cmsReasonableGridpointsByColorspace(CmsSigCmykData, dwFlags)
 
 	// Create the CLUT
 	CLUT = cmsStageAllocCLut16bit(ar, ContextID, nGridPoints, 4, 4, nil)
@@ -702,7 +700,7 @@ func BlackPreservingKOnlyIntents(
 	}
 
 	// Insert CLUT into the pipeline
-	if !cmsPipelineInsertStage(Result, cmsAT_BEGIN, CLUT) {
+	if !cmsPipelineInsertStage(Result, CmsAT_BEGIN, CLUT) {
 		goto Error
 	}
 
@@ -735,9 +733,7 @@ Error:
 	if bp.KTone != nil {
 		CmsFreeToneCurve(bp.KTone)
 	}
-	if Result != nil {
-		cmsPipelineFree(ar, Result)
-	}
+
 	return nil
 }
 
@@ -872,7 +868,7 @@ func BlackPreservingKPlaneIntents(
 		hLastProfile = hProfiles[lastProfilePos-1]
 		lastProfilePos--
 
-		if CmsGetColorSpace(hLastProfile) != cmsSigCmykData || cmsGetDeviceClass(hLastProfile) != cmsSigLinkClass {
+		if CmsGetColorSpace(hLastProfile) != CmsSigCmykData || cmsGetDeviceClass(hLastProfile) != CmsSigLinkClass {
 			break
 		}
 	}
@@ -880,8 +876,8 @@ func BlackPreservingKPlaneIntents(
 	preservationProfilesCount = lastProfilePos + 1
 
 	// Check for non-CMYK profiles
-	if CmsGetColorSpace(hProfiles[0]) != cmsSigCmykData ||
-		!(CmsGetColorSpace(hLastProfile) == cmsSigCmykData || cmsGetDeviceClass(hLastProfile) == cmsSigOutputClass) {
+	if CmsGetColorSpace(hProfiles[0]) != CmsSigCmykData ||
+		!(CmsGetColorSpace(hLastProfile) == CmsSigCmykData || cmsGetDeviceClass(hLastProfile) == CmsSigOutputClass) {
 		return DefaultICCintents(ar, ContextID, nProfiles, ICCIntents[:], hProfiles, BPC, AdaptationStates, dwFlags)
 	}
 
@@ -917,27 +913,27 @@ func BlackPreservingKPlaneIntents(
 
 	// Prepare proof output
 	hLab = cmsCreateLab4ProfileTHR(ar, ContextID, nil)
-	bp.HProofOutput = cmsCreateTransformTHR(ar, ContextID, hLastProfile, CHANNELS_SH(4)|BYTES_SH(2), hLab, TYPE_Lab_DBL, INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOCACHE|cmsFLAGS_NOOPTIMIZE)
+	bp.HProofOutput = cmsCreateTransformTHR(ar, ContextID, hLastProfile, CHANNELS_SH(4)|BYTES_SH(2), hLab, TYPE_Lab_DBL, INTENT_RELATIVE_COLORIMETRIC, CmsFLAGS_NOCACHE|CmsFLAGS_NOOPTIMIZE)
 	if bp.HProofOutput == nil {
 		goto Cleanup
 	}
 
 	// Prepare CMYK to Lab
-	bp.Cmyk2Lab = cmsCreateTransformTHR(ar, ContextID, hLastProfile, FLOAT_SH(1)|CHANNELS_SH(4)|BYTES_SH(4), hLab, FLOAT_SH(1)|CHANNELS_SH(3)|BYTES_SH(4), INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOCACHE|cmsFLAGS_NOOPTIMIZE)
+	bp.Cmyk2Lab = cmsCreateTransformTHR(ar, ContextID, hLastProfile, FLOAT_SH(1)|CHANNELS_SH(4)|BYTES_SH(4), hLab, FLOAT_SH(1)|CHANNELS_SH(3)|BYTES_SH(4), INTENT_RELATIVE_COLORIMETRIC, CmsFLAGS_NOCACHE|CmsFLAGS_NOOPTIMIZE)
 	if bp.Cmyk2Lab == nil {
 		goto Cleanup
 	}
 	CmsCloseProfile(ar, hLab)
 
 	// Create CLUT
-	nGridPoints = cmsReasonableGridpointsByColorspace(cmsSigCmykData, dwFlags)
+	nGridPoints = cmsReasonableGridpointsByColorspace(CmsSigCmykData, dwFlags)
 	CLUT = cmsStageAllocCLut16bit(ar, ContextID, nGridPoints, 4, 4, nil)
 	if CLUT == nil {
 		goto Cleanup
 	}
 
 	// Insert and sample CLUT
-	if !cmsPipelineInsertStage(Result, cmsAT_BEGIN, CLUT) || !cmsStageSampleCLut16bit(ar, CLUT, BlackPreservingSampler, &bp, 0) {
+	if !cmsPipelineInsertStage(Result, CmsAT_BEGIN, CLUT) || !cmsStageSampleCLut16bit(ar, CLUT, BlackPreservingSampler, &bp, 0) {
 		goto Cleanup
 	}
 

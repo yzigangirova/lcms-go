@@ -107,12 +107,12 @@ func cmsBuildKToneCurve(ar *arena.Arena, ContextID CmsContext,
 	dwFlags uint32) *CmsToneCurve {
 
 	// Ensure CMYK -> CMYK
-	if CmsGetColorSpace(hProfiles[0]) != cmsSigCmykData || CmsGetColorSpace(hProfiles[nProfiles-1]) != cmsSigCmykData {
+	if CmsGetColorSpace(hProfiles[0]) != CmsSigCmykData || CmsGetColorSpace(hProfiles[nProfiles-1]) != CmsSigCmykData {
 		return nil
 	}
 
 	// Ensure the last profile is an output profile
-	if cmsGetDeviceClass(hProfiles[nProfiles-1]) != cmsSigOutputClass {
+	if cmsGetDeviceClass(hProfiles[nProfiles-1]) != CmsSigOutputClass {
 		return nil
 	}
 
@@ -196,7 +196,7 @@ func cmsDetectTAC(ar *arena.Arena, hProfile CmsHPROFILE) float64 {
 	contextID := cmsGetProfileContextID(hProfile)
 
 	// TAC only works on output profiles
-	if cmsGetDeviceClass(hProfile) != cmsSigOutputClass {
+	if cmsGetDeviceClass(hProfile) != CmsSigOutputClass {
 		return 0
 	}
 
@@ -229,7 +229,7 @@ func cmsDetectTAC(ar *arena.Arena, hProfile CmsHPROFILE) float64 {
 		hProfile,
 		dwFormatter,
 		INTENT_PERCEPTUAL,
-		cmsFLAGS_NOOPTIMIZE|cmsFLAGS_NOCACHE,
+		CmsFLAGS_NOOPTIMIZE|CmsFLAGS_NOCACHE,
 	)
 	CmsCloseProfile(ar, hLab)
 
@@ -406,7 +406,7 @@ func cmsCreateGamutCheckPipeline(
 
 	ColorSpace = CmsGetColorSpace(hGamut)
 	nChannels = cmsChannelsOfColorSpace(ColorSpace)
-	nGridpoints = cmsReasonableGridpointsByColorspace(ColorSpace, cmsFLAGS_HIGHRESPRECALC)
+	nGridpoints = cmsReasonableGridpointsByColorspace(ColorSpace, CmsFLAGS_HIGHRESPRECALC)
 	dwFormat = CHANNELS_SH(uint32(nChannels)) | BYTES_SH(2)
 
 	// Create the input transform
@@ -421,7 +421,7 @@ func cmsCreateGamutCheckPipeline(
 		0,
 		dwFormat,
 		TYPE_Lab_DBL,
-		cmsFLAGS_NOCACHE,
+		CmsFLAGS_NOCACHE,
 	))
 
 	// Create the forward step
@@ -430,7 +430,7 @@ func cmsCreateGamutCheckPipeline(
 		hLab, TYPE_Lab_DBL,
 		hGamut, dwFormat,
 		INTENT_RELATIVE_COLORIMETRIC,
-		cmsFLAGS_NOCACHE,
+		CmsFLAGS_NOCACHE,
 	)
 
 	// Create the backwards step
@@ -439,7 +439,7 @@ func cmsCreateGamutCheckPipeline(
 		hGamut, dwFormat,
 		hLab, TYPE_Lab_DBL,
 		INTENT_RELATIVE_COLORIMETRIC,
-		cmsFLAGS_NOCACHE,
+		CmsFLAGS_NOCACHE,
 	)
 
 	// Verify all steps are created successfully
@@ -448,7 +448,7 @@ func cmsCreateGamutCheckPipeline(
 		Gamut = cmsPipelineAlloc(ar, ContextID, 3, 1)
 		if Gamut != nil {
 			CLUT = cmsStageAllocCLut16bit(ar,ContextID, nGridpoints, uint32(nChannels), 1, nil)
-			if !cmsPipelineInsertStage(Gamut, cmsAT_BEGIN, CLUT) {
+			if !cmsPipelineInsertStage(Gamut, CmsAT_BEGIN, CLUT) {
 				cmsPipelineFree(ar,Gamut)
 				Gamut = nil
 			} else {
@@ -469,9 +469,7 @@ func cmsCreateGamutCheckPipeline(
 	if Chain.hReverse != nil {
 		cmsDeleteTransform(ar,Chain.hReverse)
 	}
-	if hLab != nil {
-		CmsCloseProfile(ar, hLab)
-	}
+
 
 	// Return the computed LUT
 	return Gamut
@@ -494,14 +492,14 @@ func cmsDetectRGBProfileGamma(ar *arena.Arena, hProfile CmsHPROFILE, threshold f
 	)
 
 	// Ensure the profile is in RGB color space
-	if CmsGetColorSpace(hProfile) != cmsSigRgbData {
+	if CmsGetColorSpace(hProfile) != CmsSigRgbData {
 		return -1
 	}
 
 	// Check the profile class
 	cls = cmsGetDeviceClass(hProfile)
-	if cls != cmsSigInputClass && cls != cmsSigDisplayClass &&
-		cls != cmsSigOutputClass && cls != cmsSigColorSpaceClass {
+	if cls != CmsSigInputClass && cls != CmsSigDisplayClass &&
+		cls != CmsSigOutputClass && cls != CmsSigColorSpaceClass {
 		return -1
 	}
 
@@ -514,7 +512,7 @@ func cmsDetectRGBProfileGamma(ar *arena.Arena, hProfile CmsHPROFILE, threshold f
 
 	// Create a transform from RGB to XYZ
 	xform = cmsCreateTransformTHR(ar,ContextID, hProfile, TYPE_RGB_16, hXYZ, TYPE_XYZ_DBL,
-		INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOOPTIMIZE)
+		INTENT_RELATIVE_COLORIMETRIC, CmsFLAGS_NOOPTIMIZE)
 
 	if xform == nil {
 		CmsCloseProfile(ar, hXYZ)

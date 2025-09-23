@@ -623,7 +623,7 @@ func cmsStageAllocNamedColor(ar *arena.Arena, namedColorList *cmsNAMEDCOLORLIST,
 	// Allocate the placeholder stage.
 	return cmsStageAllocPlaceholder(ar,
 		namedColorList.ContextID,
-		cmsSigNamedColorElemType,
+		CmsSigNamedColorElemType,
 		1,                                        // Input channels are always 1.
 		outputChannels,                           // Output channels depend on `usePCS`.
 		evalFunc,                                 // Evaluation function depends on `usePCS`.
@@ -914,10 +914,6 @@ func cmsDictDup(ar *arena.Arena, hDict CmsHANDLE) CmsHANDLE {
 	}
 
 	newDict := cmsDictAlloc(ar, oldDict.ContextID)
-	if newDict == nil {
-		return nil
-	}
-
 	entry := oldDict.head
 	for entry != nil {
 		if !cmsDictAddEntry(ar, newDict, entry.Name, entry.Value, entry.DisplayName, entry.DisplayValue) {

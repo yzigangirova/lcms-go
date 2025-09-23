@@ -5,11 +5,11 @@ import (
 	"arena"
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
+	"os"
 	"unicode"
 	"unsafe"
-	"fmt"
-	"os"
 )
 
 // ---------------------------------------------------------------------------------------------------------
@@ -195,6 +195,8 @@ var cmsMemPluginChunk = cmsMemPluginChunkType{cmsMallocDefaultFn, cmsMallocZeroD
 	cmsReallocDefaultFn, cmsCallocDefaultFn, cmsDupDefaultFn}
 
 // Plug-in replacement entry
+//
+//lint:ignore U1000 kept for parity with lcms; used in future ports
 func cmsRegisterMemHandlerPlugin(context CmsContext, Data PluginIntrfc) bool {
 	var ptr *cmsMemPluginChunkType
 	if Data == nil {
@@ -603,6 +605,7 @@ func cmsTagSignature2String(sig cmsTagSignature) string {
 	})
 }
 
+//lint:ignore U1000 kept for parity with lcms; used in future ports
 func cmsstrcasecmp(s1, s2 *byte) int {
 	// Convert *byte pointers into slices to traverse
 	us1 := unsafe.Slice(s1, cmsMAX_PATH)

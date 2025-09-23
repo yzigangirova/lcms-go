@@ -5,6 +5,7 @@ import (
 	//"errors"
 	"arena"
 	"bytes"
+
 	//"fmt"
 	"math"
 	"unsafe"
@@ -115,13 +116,13 @@ func UnrollChunkyBytes(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride u
 			index = i
 		}
 
-		v := FROM_8_TO_16(accum[0])
+		v := uint32(FROM_8_TO_16(accum[0]))
 		if reverse != 0 {
-			v = REVERSE_FLAVOR_16(v)
+			v = uint32(REVERSE_FLAVOR_16(uint16(v)))
 		}
 
 		if premul != 0 && alphaFactor > 0 {
-			v = uint16(((uint32(v) << 16) / alphaFactor))
+			v = (v << 16) / alphaFactor
 			if v > 0xffff {
 				v = 0xffff
 			}
@@ -174,14 +175,14 @@ func UnrollPlanarBytes(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride u
 			index = i
 		}
 
-		v := FROM_8_TO_16(accum[0])
+		v := uint32(FROM_8_TO_16(accum[0]))
 
 		if reverse != 0 {
-			v = REVERSE_FLAVOR_16(v)
+			v = uint32(REVERSE_FLAVOR_16(uint16(v)))
 		}
 
 		if premul != 0 && alphaFactor > 0 {
-			v = (uint16)((uint32(v) << 16) / alphaFactor)
+			v = (v << 16) / alphaFactor
 			if v > 0xffff {
 				v = 0xffff
 			}
@@ -424,24 +425,24 @@ func UnrollAnyWordsPremul(info *cmsTRANSFORM, wIn []uint16, accum []uint8, strid
 			index = nChan - i - 1
 		}
 
-		v := uint16(accum[0]) | (uint16(accum[1]) << 8)
+		v := uint32(uint16(accum[0]) | (uint16(accum[1]) << 8))
 
 		if swapEndian != 0 {
-			v = CHANGE_ENDIAN(v)
+			v = uint32(CHANGE_ENDIAN(uint16(v)))
 		}
 
 		if alphaFactor > 0 {
-			v = uint16((uint32(v) << 16) / (uint32(alphaFactor)))
+			v = (v << 16) / uint32(alphaFactor)
 			if v > 0xffff {
 				v = 0xffff
 			}
 		}
 
 		if reverse != 0 {
-			v = REVERSE_FLAVOR_16(v)
+			v = uint32(REVERSE_FLAVOR_16(uint16(v)))
 		}
 
-		wIn[index] = v
+		wIn[index] = uint16(v)
 		accum = accum[2:]
 	}
 
@@ -507,24 +508,24 @@ func UnrollPlanarWordsPremul(info *cmsTRANSFORM, wIn []uint16, accum []uint8, st
 			index = nChan - i - 1
 		}
 
-		v := uint16(accum[0]) | (uint16(accum[1]) << 8)
+		v := uint32(accum[0]) | (uint32(accum[1]) << 8)
 
 		if swapEndian != 0 {
-			v = CHANGE_ENDIAN(v)
+			v = uint32(CHANGE_ENDIAN(uint16(v)))
 		}
 
 		if alphaFactor > 0 {
-			v = uint16((uint32(v) << 16) / uint32(alphaFactor))
+			v = (v << 16) / alphaFactor
 			if v > 0xffff {
 				v = 0xffff
 			}
 		}
 
 		if reverse != 0 {
-			v = REVERSE_FLAVOR_16(v)
+			v = uint32(REVERSE_FLAVOR_16(uint16(v)))
 		}
 
-		wIn[index] = v
+		wIn[index] = uint16(v)
 		accum = accum[stride:]
 	}
 
@@ -2941,10 +2942,9 @@ func cmsFormatterForPCSOfProfile(hProfile CmsHPROFILE, nBytes uint32, isFloat bo
 	colorSpace := cmsGetPCS(hProfile)
 	colorSpaceBits := cmsLCMScolorSpace(colorSpace)
 	nOutputChans := cmsChannelsOf(colorSpace)
-	//this is senseless comparison from C code
-	if nOutputChans < 0 {
-		return 0
-	}
+// cmsChannelsOf always returns a non-zero unsigned count; LCMS falls back to 3 on error.
+// (The original C had `if (nOutputChans < 0) return 0;`, which can’t happen here.)
+
 	floatFlag := uint32(0)
 	if isFloat {
 		floatFlag = 1

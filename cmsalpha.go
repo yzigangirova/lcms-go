@@ -130,7 +130,7 @@ func from8toHLF(dst, src any) {
 	}
 
 	n := float32(srcBytes[0]) / 255.0
-	dstBytes[0] = cmsFloat2Half(n) // Assumes FloatToHalf is implemented
+	dstBytes[0] = cmsFloat2Half(n) 
 }
 
 // Converts from 16-bit to 8-bit
@@ -744,7 +744,7 @@ func cmsHandleExtraChannels(
 	)
 
 	// Check if alpha copying is needed
-	if p.DwOriginalFlags&cmsFLAGS_COPY_ALPHA == 0 {
+	if p.DwOriginalFlags&CmsFLAGS_COPY_ALPHA == 0 {
 		return
 	}
 	// Type assertion for input and output

@@ -126,8 +126,8 @@ func RegisterTypesPlugin(ar *arena.Arena, id CmsContext, Data PluginIntrfc, pos 
 type PositionTableEntryFn func(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo interface{}, n, SizeOfTag uint32) bool
 
 func ReadPositionTable(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, count, baseOffset uint32, cargo interface{}, elementFn PositionTableEntryFn) bool {
-	var currentPosition uint32
-	currentPosition = uint32(io.Tell((*cms_io_handler)(io)))
+
+	var currentPosition = uint32(io.Tell((*cms_io_handler)(io)))
 	var elementOffsets, elementSizes []uint32
 	// Verify there is enough space left to read at least two uint32 items for count items
 	if ((io.ReportedSize - currentPosition) / (2 * uint32(unsafe.Sizeof(uint32(0))))) < count {
@@ -173,7 +173,12 @@ func WritePositionTable(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 
 	// Write a fake directory to be filled later
 	for i := uint32(0); i < count; i++ {
-		if !cmsWriteUInt32Number(io, 0) || !cmsWriteUInt32Number(io, 0) {
+		// offset
+		if !cmsWriteUInt32Number(io, 0) {
+			return false
+		}
+		// size
+		if !cmsWriteUInt32Number(io, 0) {
 			return false
 		}
 	}
@@ -204,10 +209,7 @@ func WritePositionTable(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 		}
 	}
 
-	if !io.Seek((*cms_io_handler)(io), currentPos) {
-		return false
-	}
-	return true
+	return io.Seek((*cms_io_handler)(io), currentPos)
 
 }
 
@@ -253,11 +255,11 @@ func TypeXYZFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) {
 
 // DecideXYZtype decides the type of XYZ tag.
 func DecideXYZtype(ICCVersion float64, Data interface{}) cmsTagTypeSignature {
-	return cmsSigXYZType
+	return CmsSigXYZType
 }
 
 // ********************************************************************************
-// Type cmsSigLut8Type
+// Type CmsSigLut8Type
 // ********************************************************************************
 
 // DecideLUTtypeA2B decides which LUT type to use when writing A2B LUTs.
@@ -269,11 +271,11 @@ func DecideLUTtypeA2B(ICCVersion float64, Data interface{}) cmsTagTypeSignature 
 	}
 	if ICCVersion < 4.0 {
 		if Lut.SaveAs8Bits {
-			return cmsSigLut8Type
+			return CmsSigLut8Type
 		}
-		return cmsSigLut16Type
+		return CmsSigLut16Type
 	} else {
-		return cmsSigLutAtoBType
+		return CmsSigLutAtoBType
 	}
 }
 
@@ -286,11 +288,11 @@ func DecideLUTtypeB2A(ICCVersion float64, Data interface{}) cmsTagTypeSignature 
 	}
 	if ICCVersion < 4.0 {
 		if Lut.SaveAs8Bits {
-			return cmsSigLut8Type
+			return CmsSigLut8Type
 		}
-		return cmsSigLut16Type
+		return CmsSigLut16Type
 	} else {
-		return cmsSigLutBtoAType
+		return CmsSigLutBtoAType
 	}
 }
 
@@ -302,19 +304,19 @@ func DecideCurveType(ICCVersion float64, Data interface{}) cmsTagTypeSignature {
 		return 0
 	}
 	if ICCVersion < 4.0 {
-		return cmsSigCurveType
+		return CmsSigCurveType
 	}
 	if Curve.nSegments != 1 {
-		return cmsSigCurveType
+		return CmsSigCurveType
 	}
 	if Curve.Segments[0].Type < 0 {
-		return cmsSigCurveType
+		return CmsSigCurveType
 	}
 	if Curve.Segments[0].Type > 5 {
-		return cmsSigCurveType
+		return CmsSigCurveType
 	}
 
-	return cmsSigParametricCurveType
+	return CmsSigParametricCurveType
 }
 
 // TypeParametricCurveRead reads a parametric curve from the IO handler.
@@ -416,9 +418,6 @@ func TypeTextRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 
 	// Allocate memory for the text, with space for null terminator
 	text = make([]byte, sizeOfTag+1)
-	if text == nil {
-		goto Error
-	}
 
 	// Read text from the IO handler
 	if io.Read((*cms_io_handler)(io), text, uint32(unsafe.Sizeof(uint8(0))), sizeOfTag) != sizeOfTag {
@@ -436,9 +435,8 @@ func TypeTextRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 	return mlu
 
 Error:
-	if mlu != nil {
-		cmsMLUfree(mlu)
-	}
+	cmsMLUfree(mlu)
+
 	return nil
 }
 
@@ -461,9 +459,6 @@ func TypeTextWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, p
 
 	// Allocate memory for the text
 	text = make([]byte, size)
-	if text == nil {
-		return false
-	}
 
 	// Retrieve the ASCII text
 	cmsMLUgetASCII(mlu, cmsNoLanguage, cmsNoCountry, text, size)
@@ -486,21 +481,21 @@ func TypeTextFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) {
 // DecideTextType determines the text type signature based on ICC version.
 func DecideTextType(iccVersion float64, Data interface{}) cmsTagTypeSignature {
 	if iccVersion >= 4.0 {
-		return cmsSigMultiLocalizedUnicodeType
+		return CmsSigMultiLocalizedUnicodeType
 	}
-	return cmsSigTextType
+	return CmsSigTextType
 }
 
 // ********************************************************************************
-// Type cmsSigTextDescriptionType
+// Type CmsSigTextDescriptionType
 // ********************************************************************************
 
 // DecideTextDescType determines the type of text description
 func DecideTextDescType(ICCVersion float64, Data interface{}) cmsTagTypeSignature {
 	if ICCVersion >= 4.0 {
-		return cmsSigMultiLocalizedUnicodeType
+		return CmsSigMultiLocalizedUnicodeType
 	}
-	return cmsSigTextDescriptionType
+	return CmsSigTextDescriptionType
 }
 func TypeTextDescriptionRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) interface{} {
 	var (
@@ -601,9 +596,8 @@ Error:
 	if len(text) > 0 {
 		text = nil // Let Go's GC handle cleanup
 	}
-	if mlu != nil {
-		cmsMLUfree(mlu)
-	}
+	cmsMLUfree(mlu)
+
 	return nil
 }
 
@@ -618,7 +612,6 @@ func TypeTextDescriptionWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsI
 	var Text []byte
 	var Wide []uint16
 	var lenASCII, lenText, lenTagRequirement, lenAligned uint32
-	var rc bool = false
 	var Filler [68]byte
 
 	// Used below for writing zeroes
@@ -674,55 +667,46 @@ func TypeTextDescriptionWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsI
 	// * cmsInt8Number         scDesc[67];     * ScriptCode Description
 	// Write values
 	if !cmsWriteUInt32Number(io, lenText) {
-		goto Error
+		return false
 	}
 	if !io.Write((*cms_io_handler)(io), lenText, Text) {
-		goto Error
+		return false
 	}
 
 	if !cmsWriteUInt32Number(io, 0) { // ucLanguageCode
-		goto Error
+		return false
 	}
 
 	if !cmsWriteUInt32Number(io, lenText) {
-		goto Error
+		return false
 	}
 
 	// Note that in some compilers sizeof(uint16) != sizeof(wchar_t)
 	if !cmsWriteWCharArray(io, lenText, Wide) {
-		goto Error
+		return false
 	}
 
 	// ScriptCode Code & count (unused)
 	if !cmsWriteUInt16Number(io, 0) {
-		goto Error
+		return false
 	}
 	if !cmsWriteUInt8Number(io, 0) {
-		goto Error
+		return false
 	}
 
 	if !io.Write((*cms_io_handler)(io), 67, Filler[:]) {
-		goto Error
+		return false
 	}
 
 	// Possibly add padding at the end of the tag
 	if lenAligned > lenTagRequirement {
 		if !io.Write((*cms_io_handler)(io), lenAligned-lenTagRequirement, Filler[:]) {
-			goto Error
+			return false
 		}
 	}
 
-	rc = true
+	return true
 
-Error:
-	if Text != nil {
-		cmsFree(self.ContextID, &Text)
-	}
-	if Wide != nil {
-		cmsFree(self.ContextID, &Wide)
-	}
-
-	return rc
 }
 
 // Type_Text_Description_Dup duplicates a cmsMLU object
@@ -803,71 +787,71 @@ var cmsMPETypePluginChunk = cmsTagTypePluginChunkType{TagTypes: nil}
 // This is the list of built-in tags. The data of this list can be modified by plug-ins
 func init() {
 	SupportedTags = []cmsTagLinkedList{
-		{cmsSigAToB0Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigLut16Type, cmsSigLutAtoBType, cmsSigLut8Type}, DecideLUTtypeA2B}, nil},
-		{cmsSigAToB1Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigLut16Type, cmsSigLutAtoBType, cmsSigLut8Type}, DecideLUTtypeA2B}, nil},
-		{cmsSigAToB2Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigLut16Type, cmsSigLutAtoBType, cmsSigLut8Type}, DecideLUTtypeA2B}, nil},
-		{cmsSigBToA0Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigLut16Type, cmsSigLutBtoAType, cmsSigLut8Type}, DecideLUTtypeB2A}, nil},
-		{cmsSigBToA1Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigLut16Type, cmsSigLutBtoAType, cmsSigLut8Type}, DecideLUTtypeB2A}, nil},
-		{cmsSigBToA2Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigLut16Type, cmsSigLutBtoAType, cmsSigLut8Type}, DecideLUTtypeB2A}, nil},
-		{cmsSigRedColorantTag, cmsTagDescriptor{1, 2, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigXYZType, cmsCorbisBrokenXYZtype}, DecideXYZtype}, nil},
-		{cmsSigGreenColorantTag, cmsTagDescriptor{1, 2, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigXYZType, cmsCorbisBrokenXYZtype}, DecideXYZtype}, nil},
-		{cmsSigBlueColorantTag, cmsTagDescriptor{1, 2, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigXYZType, cmsCorbisBrokenXYZtype}, DecideXYZtype}, nil},
-		{cmsSigRedTRCTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigCurveType, cmsSigParametricCurveType, cmsMonacoBrokenCurveType}, DecideCurveType}, nil},
-		{cmsSigGreenTRCTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigCurveType, cmsSigParametricCurveType, cmsMonacoBrokenCurveType}, DecideCurveType}, nil},
-		{cmsSigBlueTRCTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigCurveType, cmsSigParametricCurveType, cmsMonacoBrokenCurveType}, DecideCurveType}, nil},
-		{cmsSigCalibrationDateTimeTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigDateTimeType}, nil}, nil},
-		{cmsSigCharTargetTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigTextType}, nil}, nil},
-		{cmsSigChromaticAdaptationTag, cmsTagDescriptor{9, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigS15Fixed16ArrayType}, nil}, nil},
-		{cmsSigChromaticityTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigChromaticityType}, nil}, nil},
-		{cmsSigColorantOrderTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigColorantOrderType}, nil}, nil},
-		{cmsSigColorantTableTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigColorantTableType}, nil}, nil},
-		{cmsSigColorantTableOutTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigColorantTableType}, nil}, nil},
-		{cmsSigCopyrightTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigTextType, cmsSigMultiLocalizedUnicodeType, cmsSigTextDescriptionType}, DecideTextType}, nil},
-		{cmsSigDateTimeTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigDateTimeType}, nil}, nil},
-		{cmsSigDeviceMfgDescTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigTextDescriptionType, cmsSigMultiLocalizedUnicodeType, cmsSigTextType}, DecideTextDescType}, nil},
-		{cmsSigDeviceModelDescTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigTextDescriptionType, cmsSigMultiLocalizedUnicodeType, cmsSigTextType}, DecideTextDescType}, nil},
-		{cmsSigGamutTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigLut16Type, cmsSigLutBtoAType, cmsSigLut8Type}, DecideLUTtypeB2A}, nil},
-		{cmsSigGrayTRCTag, cmsTagDescriptor{1, 2, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigCurveType, cmsSigParametricCurveType}, DecideCurveType}, nil},
-		{cmsSigLuminanceTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigXYZType}, nil}, nil},
-		{cmsSigMediaBlackPointTag, cmsTagDescriptor{1, 2, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigXYZType, cmsCorbisBrokenXYZtype}, nil}, nil},
-		{cmsSigMediaWhitePointTag, cmsTagDescriptor{1, 2, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigXYZType, cmsCorbisBrokenXYZtype}, nil}, nil},
-		{cmsSigNamedColor2Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigNamedColor2Type}, nil}, nil},
-		{cmsSigPreview0Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigLut16Type, cmsSigLutBtoAType, cmsSigLut8Type}, DecideLUTtypeB2A}, nil},
-		{cmsSigPreview1Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigLut16Type, cmsSigLutBtoAType, cmsSigLut8Type}, DecideLUTtypeB2A}, nil},
-		{cmsSigPreview2Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigLut16Type, cmsSigLutBtoAType, cmsSigLut8Type}, DecideLUTtypeB2A}, nil},
-		{cmsSigProfileDescriptionTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigTextDescriptionType, cmsSigMultiLocalizedUnicodeType, cmsSigTextType}, DecideTextDescType}, nil},
-		{cmsSigProfileSequenceDescTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigProfileSequenceDescType}, nil}, nil},
-		{cmsSigTechnologyTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigSignatureType}, nil}, nil},
-		{cmsSigColorimetricIntentImageStateTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigSignatureType}, nil}, nil},
-		{cmsSigPerceptualRenderingIntentGamutTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigSignatureType}, nil}, nil},
-		{cmsSigSaturationRenderingIntentGamutTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigSignatureType}, nil}, nil},
-		{cmsSigMeasurementTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigMeasurementType}, nil}, nil},
-		{cmsSigPs2CRD0Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigDataType}, nil}, nil},
-		{cmsSigPs2CRD1Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigDataType}, nil}, nil},
-		{cmsSigPs2CRD2Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigDataType}, nil}, nil},
-		{cmsSigPs2CRD3Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigDataType}, nil}, nil},
-		{cmsSigPs2CSATag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigDataType}, nil}, nil},
-		{cmsSigPs2RenderingIntentTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigDataType}, nil}, nil},
-		{cmsSigViewingCondDescTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigTextDescriptionType, cmsSigMultiLocalizedUnicodeType, cmsSigTextType}, DecideTextDescType}, nil},
-		{cmsSigUcrBgTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigUcrBgType}, nil}, nil},
-		{cmsSigCrdInfoTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigCrdInfoType}, nil}, nil},
-		{cmsSigDToB0Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigMultiProcessElementType}, nil}, nil},
-		{cmsSigDToB1Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigMultiProcessElementType}, nil}, nil},
-		{cmsSigDToB2Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigMultiProcessElementType}, nil}, nil},
-		{cmsSigDToB3Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigMultiProcessElementType}, nil}, nil},
-		{cmsSigBToD0Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigMultiProcessElementType}, nil}, nil},
-		{cmsSigBToD1Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigMultiProcessElementType}, nil}, nil},
-		{cmsSigBToD2Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigMultiProcessElementType}, nil}, nil},
-		{cmsSigBToD3Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigMultiProcessElementType}, nil}, nil},
-		{cmsSigScreeningDescTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigTextDescriptionType}, nil}, nil},
-		{cmsSigViewingConditionsTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigViewingConditionsType}, nil}, nil},
-		{cmsSigScreeningTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigScreeningType}, nil}, nil},
-		{cmsSigVcgtTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigVcgtType}, nil}, nil},
-		{cmsSigMetaTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigDictType}, nil}, nil},
-		{cmsSigProfileSequenceIdTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigProfileSequenceIdType}, nil}, nil},
-		{cmsSigProfileDescriptionMLTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigMultiLocalizedUnicodeType}, nil}, nil},
-		{cmsSigcicpTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigcicpType}, nil}, nil},
-		{cmsSigArgyllArtsTag, cmsTagDescriptor{9, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{cmsSigS15Fixed16ArrayType}, nil}, nil},
+		{CmsSigAToB0Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigLut16Type, CmsSigLutAtoBType, CmsSigLut8Type}, DecideLUTtypeA2B}, nil},
+		{CmsSigAToB1Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigLut16Type, CmsSigLutAtoBType, CmsSigLut8Type}, DecideLUTtypeA2B}, nil},
+		{CmsSigAToB2Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigLut16Type, CmsSigLutAtoBType, CmsSigLut8Type}, DecideLUTtypeA2B}, nil},
+		{CmsSigBToA0Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigLut16Type, CmsSigLutBtoAType, CmsSigLut8Type}, DecideLUTtypeB2A}, nil},
+		{CmsSigBToA1Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigLut16Type, CmsSigLutBtoAType, CmsSigLut8Type}, DecideLUTtypeB2A}, nil},
+		{CmsSigBToA2Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigLut16Type, CmsSigLutBtoAType, CmsSigLut8Type}, DecideLUTtypeB2A}, nil},
+		{CmsSigRedColorantTag, cmsTagDescriptor{1, 2, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigXYZType, cmsCorbisBrokenXYZtype}, DecideXYZtype}, nil},
+		{CmsSigGreenColorantTag, cmsTagDescriptor{1, 2, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigXYZType, cmsCorbisBrokenXYZtype}, DecideXYZtype}, nil},
+		{CmsSigBlueColorantTag, cmsTagDescriptor{1, 2, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigXYZType, cmsCorbisBrokenXYZtype}, DecideXYZtype}, nil},
+		{CmsSigRedTRCTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigCurveType, CmsSigParametricCurveType, cmsMonacoBrokenCurveType}, DecideCurveType}, nil},
+		{CmsSigGreenTRCTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigCurveType, CmsSigParametricCurveType, cmsMonacoBrokenCurveType}, DecideCurveType}, nil},
+		{CmsSigBlueTRCTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigCurveType, CmsSigParametricCurveType, cmsMonacoBrokenCurveType}, DecideCurveType}, nil},
+		{CmsSigCalibrationDateTimeTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigDateTimeType}, nil}, nil},
+		{CmsSigCharTargetTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigTextType}, nil}, nil},
+		{CmsSigChromaticAdaptationTag, cmsTagDescriptor{9, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigS15Fixed16ArrayType}, nil}, nil},
+		{CmsSigChromaticityTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigChromaticityType}, nil}, nil},
+		{CmsSigColorantOrderTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigColorantOrderType}, nil}, nil},
+		{CmsSigColorantTableTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigColorantTableType}, nil}, nil},
+		{CmsSigColorantTableOutTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigColorantTableType}, nil}, nil},
+		{CmsSigCopyrightTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigTextType, CmsSigMultiLocalizedUnicodeType, CmsSigTextDescriptionType}, DecideTextType}, nil},
+		{CmsSigDateTimeTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigDateTimeType}, nil}, nil},
+		{CmsSigDeviceMfgDescTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigTextDescriptionType, CmsSigMultiLocalizedUnicodeType, CmsSigTextType}, DecideTextDescType}, nil},
+		{CmsSigDeviceModelDescTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigTextDescriptionType, CmsSigMultiLocalizedUnicodeType, CmsSigTextType}, DecideTextDescType}, nil},
+		{CmsSigGamutTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigLut16Type, CmsSigLutBtoAType, CmsSigLut8Type}, DecideLUTtypeB2A}, nil},
+		{CmsSigGrayTRCTag, cmsTagDescriptor{1, 2, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigCurveType, CmsSigParametricCurveType}, DecideCurveType}, nil},
+		{CmsSigLuminanceTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigXYZType}, nil}, nil},
+		{CmsSigMediaBlackPointTag, cmsTagDescriptor{1, 2, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigXYZType, cmsCorbisBrokenXYZtype}, nil}, nil},
+		{CmsSigMediaWhitePointTag, cmsTagDescriptor{1, 2, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigXYZType, cmsCorbisBrokenXYZtype}, nil}, nil},
+		{CmsSigNamedColor2Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigNamedColor2Type}, nil}, nil},
+		{CmsSigPreview0Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigLut16Type, CmsSigLutBtoAType, CmsSigLut8Type}, DecideLUTtypeB2A}, nil},
+		{CmsSigPreview1Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigLut16Type, CmsSigLutBtoAType, CmsSigLut8Type}, DecideLUTtypeB2A}, nil},
+		{CmsSigPreview2Tag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigLut16Type, CmsSigLutBtoAType, CmsSigLut8Type}, DecideLUTtypeB2A}, nil},
+		{CmsSigProfileDescriptionTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigTextDescriptionType, CmsSigMultiLocalizedUnicodeType, CmsSigTextType}, DecideTextDescType}, nil},
+		{CmsSigProfileSequenceDescTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigProfileSequenceDescType}, nil}, nil},
+		{CmsSigTechnologyTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigSignatureType}, nil}, nil},
+		{CmsSigColorimetricIntentImageStateTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigSignatureType}, nil}, nil},
+		{CmsSigPerceptualRenderingIntentGamutTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigSignatureType}, nil}, nil},
+		{CmsSigSaturationRenderingIntentGamutTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigSignatureType}, nil}, nil},
+		{CmsSigMeasurementTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigMeasurementType}, nil}, nil},
+		{CmsSigPs2CRD0Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigDataType}, nil}, nil},
+		{CmsSigPs2CRD1Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigDataType}, nil}, nil},
+		{CmsSigPs2CRD2Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigDataType}, nil}, nil},
+		{CmsSigPs2CRD3Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigDataType}, nil}, nil},
+		{CmsSigPs2CSATag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigDataType}, nil}, nil},
+		{CmsSigPs2RenderingIntentTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigDataType}, nil}, nil},
+		{CmsSigViewingCondDescTag, cmsTagDescriptor{1, 3, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigTextDescriptionType, CmsSigMultiLocalizedUnicodeType, CmsSigTextType}, DecideTextDescType}, nil},
+		{CmsSigUcrBgTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigUcrBgType}, nil}, nil},
+		{CmsSigCrdInfoTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigCrdInfoType}, nil}, nil},
+		{CmsSigDToB0Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigMultiProcessElementType}, nil}, nil},
+		{CmsSigDToB1Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigMultiProcessElementType}, nil}, nil},
+		{CmsSigDToB2Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigMultiProcessElementType}, nil}, nil},
+		{CmsSigDToB3Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigMultiProcessElementType}, nil}, nil},
+		{CmsSigBToD0Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigMultiProcessElementType}, nil}, nil},
+		{CmsSigBToD1Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigMultiProcessElementType}, nil}, nil},
+		{CmsSigBToD2Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigMultiProcessElementType}, nil}, nil},
+		{CmsSigBToD3Tag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigMultiProcessElementType}, nil}, nil},
+		{CmsSigScreeningDescTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigTextDescriptionType}, nil}, nil},
+		{CmsSigViewingConditionsTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigViewingConditionsType}, nil}, nil},
+		{CmsSigScreeningTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigScreeningType}, nil}, nil},
+		{CmsSigVcgtTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigVcgtType}, nil}, nil},
+		{CmsSigMetaTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigDictType}, nil}, nil},
+		{CmsSigProfileSequenceIdTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigProfileSequenceIdType}, nil}, nil},
+		{CmsSigProfileDescriptionMLTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigMultiLocalizedUnicodeType}, nil}, nil},
+		{CmsSigcicpTag, cmsTagDescriptor{1, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigcicpType}, nil}, nil},
+		{CmsSigArgyllArtsTag, cmsTagDescriptor{9, 1, [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature{CmsSigS15Fixed16ArrayType}, nil}, nil},
 	}
 	// Assign the Next pointers
 	for i := 0; i < len(SupportedTags)-1; i++ {
@@ -879,38 +863,38 @@ func init() {
 	// ********************************************************************************
 	// Definition of SupportedTagTypes using cmsTagTypeHandler
 	SupportedTagTypes = []cmsTagTypeLinkedList{
-		{cmsTagTypeHandler{Signature: cmsSigChromaticityType, ReadFn: TypeChromaticityRead, WriteFn: TypeChromaticityWrite, DupFn: TypeChromaticityDup, FreeFn: TypeChromaticityFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigColorantOrderType, ReadFn: TypeColorantOrderTypeRead, WriteFn: TypeColorantOrderTypeWrite, DupFn: TypeColorantOrderTypeDup, FreeFn: TypeColorantOrderTypeFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigS15Fixed16ArrayType, ReadFn: TypeS15Fixed16Read, WriteFn: TypeS15Fixed16Write, DupFn: TypeS15Fixed16Dup, FreeFn: TypeS15Fixed16Free}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigU16Fixed16ArrayType, ReadFn: TypeU16Fixed16Read, WriteFn: TypeU16Fixed16Write, DupFn: TypeU16Fixed16Dup, FreeFn: TypeU16Fixed16Free}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigTextType, ReadFn: TypeTextRead, WriteFn: TypeTextWrite, DupFn: TypeTextDup, FreeFn: TypeTextFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigTextDescriptionType, ReadFn: TypeTextDescriptionRead, WriteFn: TypeTextDescriptionWrite, DupFn: TypeTextDescriptionDup, FreeFn: TypeTextDescriptionFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigCurveType, ReadFn: TypeCurveRead, WriteFn: TypeCurveWrite, DupFn: TypeCurveDup, FreeFn: TypeCurveFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigParametricCurveType, ReadFn: TypeParametricCurveRead, WriteFn: TypeParametricCurveWrite, DupFn: TypeParametricCurveDup, FreeFn: TypeParametricCurveFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigDateTimeType, ReadFn: TypeDateTimeRead, WriteFn: TypeDateTimeWrite, DupFn: TypeDateTimeDup, FreeFn: TypeDateTimeFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigLut8Type, ReadFn: TypeLUT8Read, WriteFn: TypeLUT8Write, DupFn: TypeLUT8Dup, FreeFn: TypeLUT8Free}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigLut16Type, ReadFn: TypeLUT16Read, WriteFn: TypeLUT16Write, DupFn: TypeLUT16Dup, FreeFn: TypeLUT16Free}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigColorantTableType, ReadFn: TypeColorantTableRead, WriteFn: TypeColorantTableWrite, DupFn: TypeColorantTableDup, FreeFn: TypeColorantTableFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigNamedColor2Type, ReadFn: TypeNamedColorRead, WriteFn: TypeNamedColorWrite, DupFn: TypeNamedColorDup, FreeFn: TypeNamedColorFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigMultiLocalizedUnicodeType, ReadFn: TypeMLURead, WriteFn: TypeMLUWrite, DupFn: TypeMLUDup, FreeFn: TypeMLUFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigProfileSequenceDescType, ReadFn: TypeProfileSequenceDescRead, WriteFn: TypeProfileSequenceDescWrite, DupFn: TypeProfileSequenceDescDup, FreeFn: TypeProfileSequenceDescFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigSignatureType, ReadFn: TypeSignatureRead, WriteFn: TypeSignatureWrite, DupFn: TypeSignatureDup, FreeFn: TypeSignatureFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigMeasurementType, ReadFn: TypeMeasurementRead, WriteFn: TypeMeasurementWrite, DupFn: TypeMeasurementDup, FreeFn: TypeMeasurementFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigDataType, ReadFn: TypeDataRead, WriteFn: TypeDataWrite, DupFn: TypeDataDup, FreeFn: TypeDataFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigLutAtoBType, ReadFn: TypeLUTA2BRead, WriteFn: TypeLUTA2BWrite, DupFn: TypeLUTA2BDup, FreeFn: TypeLUTA2BFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigLutBtoAType, ReadFn: TypeLUTB2ARead, WriteFn: TypeLUTB2AWrite, DupFn: TypeLUTB2ADup, FreeFn: TypeLUTB2AFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigUcrBgType, ReadFn: TypeUcrBgRead, WriteFn: TypeUcrBgWrite, DupFn: TypeUcrBgDup, FreeFn: TypeUcrBgFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigCrdInfoType, ReadFn: TypeCrdInfoRead, WriteFn: TypeCrdInfoWrite, DupFn: TypeCrdInfoDup, FreeFn: TypeCrdInfoFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigMultiProcessElementType, ReadFn: TypeMPERead, WriteFn: TypeMPEWrite, DupFn: TypeMPEDup, FreeFn: TypeMPEFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigScreeningType, ReadFn: TypeScreeningRead, WriteFn: TypeScreeningWrite, DupFn: TypeScreeningDup, FreeFn: TypeScreeningFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigViewingConditionsType, ReadFn: TypeViewingConditionsRead, WriteFn: TypeViewingConditionsWrite, DupFn: TypeViewingConditionsDup, FreeFn: TypeViewingConditionsFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigXYZType, ReadFn: TypeXYZRead, WriteFn: TypeXYZWrite, DupFn: TypeXYZDup, FreeFn: TypeXYZFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigChromaticityType, ReadFn: TypeChromaticityRead, WriteFn: TypeChromaticityWrite, DupFn: TypeChromaticityDup, FreeFn: TypeChromaticityFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigColorantOrderType, ReadFn: TypeColorantOrderTypeRead, WriteFn: TypeColorantOrderTypeWrite, DupFn: TypeColorantOrderTypeDup, FreeFn: TypeColorantOrderTypeFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigS15Fixed16ArrayType, ReadFn: TypeS15Fixed16Read, WriteFn: TypeS15Fixed16Write, DupFn: TypeS15Fixed16Dup, FreeFn: TypeS15Fixed16Free}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigU16Fixed16ArrayType, ReadFn: TypeU16Fixed16Read, WriteFn: TypeU16Fixed16Write, DupFn: TypeU16Fixed16Dup, FreeFn: TypeU16Fixed16Free}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigTextType, ReadFn: TypeTextRead, WriteFn: TypeTextWrite, DupFn: TypeTextDup, FreeFn: TypeTextFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigTextDescriptionType, ReadFn: TypeTextDescriptionRead, WriteFn: TypeTextDescriptionWrite, DupFn: TypeTextDescriptionDup, FreeFn: TypeTextDescriptionFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigCurveType, ReadFn: TypeCurveRead, WriteFn: TypeCurveWrite, DupFn: TypeCurveDup, FreeFn: TypeCurveFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigParametricCurveType, ReadFn: TypeParametricCurveRead, WriteFn: TypeParametricCurveWrite, DupFn: TypeParametricCurveDup, FreeFn: TypeParametricCurveFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigDateTimeType, ReadFn: TypeDateTimeRead, WriteFn: TypeDateTimeWrite, DupFn: TypeDateTimeDup, FreeFn: TypeDateTimeFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigLut8Type, ReadFn: TypeLUT8Read, WriteFn: TypeLUT8Write, DupFn: TypeLUT8Dup, FreeFn: TypeLUT8Free}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigLut16Type, ReadFn: TypeLUT16Read, WriteFn: TypeLUT16Write, DupFn: TypeLUT16Dup, FreeFn: TypeLUT16Free}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigColorantTableType, ReadFn: TypeColorantTableRead, WriteFn: TypeColorantTableWrite, DupFn: TypeColorantTableDup, FreeFn: TypeColorantTableFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigNamedColor2Type, ReadFn: TypeNamedColorRead, WriteFn: TypeNamedColorWrite, DupFn: TypeNamedColorDup, FreeFn: TypeNamedColorFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigMultiLocalizedUnicodeType, ReadFn: TypeMLURead, WriteFn: TypeMLUWrite, DupFn: TypeMLUDup, FreeFn: TypeMLUFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigProfileSequenceDescType, ReadFn: TypeProfileSequenceDescRead, WriteFn: TypeProfileSequenceDescWrite, DupFn: TypeProfileSequenceDescDup, FreeFn: TypeProfileSequenceDescFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigSignatureType, ReadFn: TypeSignatureRead, WriteFn: TypeSignatureWrite, DupFn: TypeSignatureDup, FreeFn: TypeSignatureFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigMeasurementType, ReadFn: TypeMeasurementRead, WriteFn: TypeMeasurementWrite, DupFn: TypeMeasurementDup, FreeFn: TypeMeasurementFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigDataType, ReadFn: TypeDataRead, WriteFn: TypeDataWrite, DupFn: TypeDataDup, FreeFn: TypeDataFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigLutAtoBType, ReadFn: TypeLUTA2BRead, WriteFn: TypeLUTA2BWrite, DupFn: TypeLUTA2BDup, FreeFn: TypeLUTA2BFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigLutBtoAType, ReadFn: TypeLUTB2ARead, WriteFn: TypeLUTB2AWrite, DupFn: TypeLUTB2ADup, FreeFn: TypeLUTB2AFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigUcrBgType, ReadFn: TypeUcrBgRead, WriteFn: TypeUcrBgWrite, DupFn: TypeUcrBgDup, FreeFn: TypeUcrBgFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigCrdInfoType, ReadFn: TypeCrdInfoRead, WriteFn: TypeCrdInfoWrite, DupFn: TypeCrdInfoDup, FreeFn: TypeCrdInfoFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigMultiProcessElementType, ReadFn: TypeMPERead, WriteFn: TypeMPEWrite, DupFn: TypeMPEDup, FreeFn: TypeMPEFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigScreeningType, ReadFn: TypeScreeningRead, WriteFn: TypeScreeningWrite, DupFn: TypeScreeningDup, FreeFn: TypeScreeningFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigViewingConditionsType, ReadFn: TypeViewingConditionsRead, WriteFn: TypeViewingConditionsWrite, DupFn: TypeViewingConditionsDup, FreeFn: TypeViewingConditionsFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigXYZType, ReadFn: TypeXYZRead, WriteFn: TypeXYZWrite, DupFn: TypeXYZDup, FreeFn: TypeXYZFree}, nil},
 		{cmsTagTypeHandler{Signature: cmsCorbisBrokenXYZtype, ReadFn: TypeXYZRead, WriteFn: TypeXYZWrite, DupFn: TypeXYZDup, FreeFn: TypeXYZFree}, nil},
 		{cmsTagTypeHandler{Signature: cmsMonacoBrokenCurveType, ReadFn: TypeCurveRead, WriteFn: TypeCurveWrite, DupFn: TypeCurveDup, FreeFn: TypeCurveFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigProfileSequenceIdType, ReadFn: TypeProfileSequenceIdRead, WriteFn: TypeProfileSequenceIdWrite, DupFn: TypeProfileSequenceIdDup, FreeFn: TypeProfileSequenceIdFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigDictType, ReadFn: TypeDictionaryRead, WriteFn: TypeDictionaryWrite, DupFn: TypeDictionaryDup, FreeFn: TypeDictionaryFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigcicpType, ReadFn: TypeVideoSignalRead, WriteFn: TypeVideoSignalWrite, DupFn: TypeVideoSignalDup, FreeFn: TypeVideoSignalFree}, nil},
-		{cmsTagTypeHandler{Signature: cmsSigVcgtType, ReadFn: TypeVcgtRead, WriteFn: TypeVcgtWrite, DupFn: TypeVcgtDup, FreeFn: TypeVcgtFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigProfileSequenceIdType, ReadFn: TypeProfileSequenceIdRead, WriteFn: TypeProfileSequenceIdWrite, DupFn: TypeProfileSequenceIdDup, FreeFn: TypeProfileSequenceIdFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigDictType, ReadFn: TypeDictionaryRead, WriteFn: TypeDictionaryWrite, DupFn: TypeDictionaryDup, FreeFn: TypeDictionaryFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigcicpType, ReadFn: TypeVideoSignalRead, WriteFn: TypeVideoSignalWrite, DupFn: TypeVideoSignalDup, FreeFn: TypeVideoSignalFree}, nil},
+		{cmsTagTypeHandler{Signature: CmsSigVcgtType, ReadFn: TypeVcgtRead, WriteFn: TypeVcgtWrite, DupFn: TypeVcgtDup, FreeFn: TypeVcgtFree}, nil},
 	}
 
 	// Assign the Next pointers
@@ -924,7 +908,7 @@ func init() {
 	SupportedMPEtypes = []cmsTagTypeLinkedList{
 		{
 			Handler: cmsTagTypeHandler{
-				Signature: cmsTagTypeSignature(cmsSigBAcsElemType),
+				Signature: cmsTagTypeSignature(CmsSigBAcsElemType),
 				ReadFn:    nil, // Ignored elements
 				WriteFn:   nil, // Ignored elements
 				DupFn:     nil,
@@ -934,7 +918,7 @@ func init() {
 		},
 		{
 			Handler: cmsTagTypeHandler{
-				Signature: cmsTagTypeSignature(cmsSigEAcsElemType),
+				Signature: cmsTagTypeSignature(CmsSigEAcsElemType),
 				ReadFn:    nil, // Ignored elements
 				WriteFn:   nil, // Ignored elements
 				DupFn:     nil,
@@ -944,7 +928,7 @@ func init() {
 		},
 		{
 			Handler: cmsTagTypeHandler{
-				Signature: cmsTagTypeSignature(cmsSigCurveSetElemType),
+				Signature: cmsTagTypeSignature(CmsSigCurveSetElemType),
 				ReadFn:    TypeMPEcurveRead,  // Specific function for reading MPE curves
 				WriteFn:   TypeMPEcurveWrite, // Specific function for writing MPE curves
 				DupFn:     GenericMPEDup,
@@ -954,7 +938,7 @@ func init() {
 		},
 		{
 			Handler: cmsTagTypeHandler{
-				Signature: cmsTagTypeSignature(cmsSigMatrixElemType),
+				Signature: cmsTagTypeSignature(CmsSigMatrixElemType),
 				ReadFn:    TypeMPEmatrixRead,  // Specific function for reading matrices
 				WriteFn:   TypeMPEmatrixWrite, // Specific function for writing matrices
 				DupFn:     GenericMPEDup,
@@ -964,7 +948,7 @@ func init() {
 		},
 		{
 			Handler: cmsTagTypeHandler{
-				Signature: cmsTagTypeSignature(cmsSigCLutElemType),
+				Signature: cmsTagTypeSignature(CmsSigCLutElemType),
 				ReadFn:    TypeMPEclutRead,  // Specific function for reading CLUTs
 				WriteFn:   TypeMPEclutWrite, // Specific function for writing CLUTs
 				DupFn:     GenericMPEDup,
@@ -1038,7 +1022,7 @@ func cmsGetTagDescriptor(ContextID CmsContext, sig cmsTagSignature) *cmsTagDescr
 }
 
 // ********************************************************************************
-// Type cmsSigScreeningType
+// Type CmsSigScreeningType
 // ********************************************************************************
 //
 // The screeningType describes various screening parameters including screen
@@ -1070,9 +1054,8 @@ func TypeScreeningRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 	return sc
 
 Error:
-	if sc != nil {
-		cmsFree(self.ContextID, sc)
-	}
+	cmsFree(self.ContextID, sc)
+
 	return nil
 }
 
@@ -1240,7 +1223,7 @@ func TypeChromaticityFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interfac
 }
 
 // ********************************************************************************
-// Type cmsSigColorantOrderType
+// Type CmsSigColorantOrderType
 // ********************************************************************************
 
 // This is an optional tag which specifies the laydown order in which colorants will
@@ -1311,7 +1294,7 @@ func TypeColorantOrderTypeFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr int
 }
 
 // ********************************************************************************
-// Type cmsSigS15Fixed16ArrayType
+// Type CmsSigS15Fixed16ArrayType
 // ********************************************************************************
 // This type represents an array of generic 4-byte/32-bit fixed point quantity.
 // The number of values is determined from the size of the tag.
@@ -1324,9 +1307,6 @@ func TypeS15Fixed16Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 
 	// Allocate memory for the array
 	arrayDouble := make([]float64, n)
-	if arrayDouble == nil {
-		return nil
-	}
 
 	// Read
 	for i := uint32(0); i < n; i++ {
@@ -1383,18 +1363,12 @@ func TypeS15Fixed16Dup(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}
 
 	case *cmsMAT3:
 		var dup cmsMAT3
-		for i := 0; i < len(v.V); i++ {
-			for j := 0; j < len(v.V[i].N); j++ {
-				dup.V[i].N[j] = v.V[i].N[j]
-			}
-		}
+		dup.V = v.V
 		return &dup
 
 	case *cmsVEC3:
 		var dup cmsVEC3
-		for i := 0; i < len(v.N); i++ {
-			dup.N[i] = v.N[i]
-		}
+		dup.N = v.N
 		return &dup
 
 	default:
@@ -1408,7 +1382,7 @@ func TypeS15Fixed16Free(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{
 }
 
 // ********************************************************************************
-// Type cmsSigU16Fixed16ArrayType
+// Type CmsSigU16Fixed16ArrayType
 // ********************************************************************************
 // This type represents an array of generic 4-byte/32-bit quantity.
 // The number of values is determined from the size of the tag.
@@ -1417,9 +1391,6 @@ func TypeU16Fixed16Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 	n := sizeOfTag / uint32(unsafe.Sizeof(uint32(0)))
 	// Allocate memory for the array
 	arrayDouble := make([]float64, n)
-	if arrayDouble == nil {
-		return nil
-	}
 
 	for i := uint32(0); i < n; i++ {
 		var v uint32
@@ -1468,16 +1439,16 @@ func TypeU16Fixed16Free(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{
 }
 
 // ********************************************************************************
-// Type cmsSigSignatureType
+// Type CmsSigSignatureType
 // ********************************************************************************
 //
 // The signatureType contains a four-byte sequence, Sequences of less than four
 // characters are padded at the end with spaces, 20h.
 // Typically this type is used for registered tags that can be displayed on many
 // development systems as a sequence of four characters.
-// TypeSignatureRead reads a cmsSignature from the io handler.
+// TypeSignatureRead reads a CmsSignature from the io handler.
 func TypeSignatureRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) interface{} {
-	//sigPtr := (*cmsSignature)(cmsMalloc(self.ContextID, uint32(unsafe.Sizeof(cmsSignature(0)))))
+	//sigPtr := (*CmsSignature)(cmsMalloc(self.ContextID, uint32(unsafe.Sizeof(CmsSignature(0)))))
 	var sigPtr uint32
 	if !cmsReadUInt32Number(io, &sigPtr) {
 		cmsFree(self.ContextID, &sigPtr)
@@ -1488,17 +1459,17 @@ func TypeSignatureRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 	return sigPtr
 }
 
-// TypeSignatureWrite writes a cmsSignature to the io handler.
+// TypeSignatureWrite writes a CmsSignature to the io handler.
 func TypeSignatureWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
 	sigPtr, ok := ptr.(*cmsSignature)
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsSignature\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *CmsSignature\n")
 		return false
 	}
 	return cmsWriteUInt32Number(io, uint32(*sigPtr))
 }
 
-// TypeSignatureDup duplicates a cmsSignature.
+// TypeSignatureDup duplicates a CmsSignature.
 func TypeSignatureDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}, n uint32) interface{} {
 	original, ok := ptr.([]uint32)
 	if !ok {
@@ -1514,7 +1485,7 @@ func TypeSignatureFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}
 }
 
 // ********************************************************************************
-// Type cmsSigCurveType
+// Type CmsSigCurveType
 // ********************************************************************************
 
 func TypeCurveRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) interface{} {
@@ -1600,7 +1571,7 @@ func TypeCurveFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) {
 }
 
 // ********************************************************************************
-// Type cmsSigDateTimeType
+// Type CmsSigDateTimeType
 // ********************************************************************************
 
 // A 12-byte value representation of the time and date, where the byte usage is assigned
@@ -1702,7 +1673,7 @@ func TypeMeasurementFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface
 }
 
 // ********************************************************************************
-// Type cmsSigMultiLocalizedUnicodeType
+// Type CmsSigMultiLocalizedUnicodeType
 // ********************************************************************************
 //
 //	Do NOT trust SizeOfTag as there is an issue on the definition of profileSequenceDescTag. See the TechNote from
@@ -1729,7 +1700,7 @@ func TypeMLURead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nIt
 	}
 
 	mlu.UsedEntries = count
-	sizeOfHeader = 12*count + uint32(unsafe.Sizeof(cmsTagBase{}))
+	sizeOfHeader = 12*count + uint32(unsafe.Sizeof(CmsTagBase{}))
 	largestPosition = 0
 
 	for i := uint32(0); i < count; i++ {
@@ -1776,9 +1747,8 @@ func TypeMLURead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nIt
 	return mlu
 
 Error:
-	if mlu != nil {
-		cmsFree(self.ContextID, mlu)
-	}
+
+	cmsFree(self.ContextID, mlu)
 	return nil
 }
 
@@ -1799,7 +1769,7 @@ func TypeMLUWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, pt
 		return false
 	}
 
-	headerSize = 12*mlu.UsedEntries + uint32(unsafe.Sizeof(cmsTagBase{}))
+	headerSize = 12*mlu.UsedEntries + uint32(unsafe.Sizeof(CmsTagBase{}))
 
 	for i := uint32(0); i < mlu.UsedEntries; i++ {
 		len = mlu.Entries[i].Len * uint32(unsafe.Sizeof(uint16(0)))
@@ -1874,7 +1844,7 @@ func TypeLUT8Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 	// Insert the matrix if it isn't identity
 	mat = SliceToMat(matrix[:])
 	if inputChannels == 3 && !cmsMAT3isIdentity(&mat) {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_BEGIN, cmsStageAllocMatrix(ar, self.ContextID, 3, 3, matrix[:], nil)) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_BEGIN, cmsStageAllocMatrix(ar, self.ContextID, 3, 3, matrix[:], nil)) {
 
 			goto Error
 		}
@@ -1896,17 +1866,10 @@ func TypeLUT8Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 
 		// Allocate slice instead of raw memory allocation
 		T = make([]uint16, nTabSize)
-		PtrW = T      // PtrW now references the same slice
-		if T == nil { // No need to check nil in Go, but keeping for safety
-			goto Error
-		}
+		PtrW = T // PtrW now references the same slice
 
 		// Allocate temporary slice for 8-bit values
 		Temp = make([]uint8, nTabSize)
-		if Temp == nil {
-			T = nil // Free memory reference
-			goto Error
-		}
 
 		// Read `nTabSize` bytes into Temp
 		if io.Read((*cms_io_handler)(io), Temp, nTabSize, 1) != 1 { // `io.Read()` should match the correct signature
@@ -1924,7 +1887,7 @@ func TypeLUT8Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 		Temp = nil
 
 		// Insert stage into LUT
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, cmsStageAllocCLut16bit(ar, self.ContextID, uint32(clutPoints), uint32(inputChannels), uint32(outputChannels), T)) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, cmsStageAllocCLut16bit(ar, self.ContextID, uint32(clutPoints), uint32(inputChannels), uint32(outputChannels), T)) {
 			T = nil
 			goto Error
 		}
@@ -1966,7 +1929,7 @@ func TypeLUT8Write(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, p
 
 	// Disassemble the LUT into components
 	mpe = newLUT.Elements
-	if mpe.Type == cmsSigMatrixElemType {
+	if mpe.Type == CmsSigMatrixElemType {
 		if mpe.InputChannels != 3 || mpe.OutputChannels != 3 {
 			return false
 		}
@@ -1974,17 +1937,17 @@ func TypeLUT8Write(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, p
 		mpe = mpe.Next
 	}
 
-	if mpe != nil && mpe.Type == cmsSigCurveSetElemType {
+	if mpe != nil && mpe.Type == CmsSigCurveSetElemType {
 		preMPE = mpe.Data.(*cmsStageToneCurvesData)
 		mpe = mpe.Next
 	}
 
-	if mpe != nil && mpe.Type == cmsSigCLutElemType {
+	if mpe != nil && mpe.Type == CmsSigCLutElemType {
 		clut = mpe.Data.(*cmsStageCLutData)
 		mpe = mpe.Next
 	}
 
-	if mpe != nil && mpe.Type == cmsSigCurveSetElemType {
+	if mpe != nil && mpe.Type == CmsSigCurveSetElemType {
 		postMPE = mpe.Data.(*cmsStageToneCurvesData)
 		mpe = mpe.Next
 	}
@@ -2090,9 +2053,7 @@ func Read8bitTables(ar *arena.Arena, ContextID CmsContext, io *cmsIOHANDLER, lut
 
 	var tables [cmsMAXCHANNELS]*CmsToneCurve
 	temp := make([]uint8, 256)
-	if temp == nil {
-		return false
-	}
+
 	//defer cmsFree(ContextID, unsafe.Pointer(temp))
 
 	// Allocate tone curves
@@ -2115,7 +2076,7 @@ func Read8bitTables(ar *arena.Arena, ContextID CmsContext, io *cmsIOHANDLER, lut
 	}
 
 	// Insert tone curves into the pipeline
-	if !cmsPipelineInsertStage(lut, cmsAT_END, cmsStageAllocToneCurves(ar, ContextID, nChannels, tables[:])) {
+	if !cmsPipelineInsertStage(lut, CmsAT_END, cmsStageAllocToneCurves(ar, ContextID, nChannels, tables[:])) {
 		goto Error
 	}
 
@@ -2183,7 +2144,7 @@ func uipow(n, a, b uint32) uint32 {
 }
 
 // ********************************************************************************
-// Type cmsSigLut16Type
+// Type CmsSigLut16Type
 // ********************************************************************************
 func Read16bitTables(ar *arena.Arena, ContextID CmsContext, io *cmsIOHANDLER, lut *cmsPipeline, nChannels, nEntries uint32) bool {
 	if nEntries <= 0 {
@@ -2205,7 +2166,7 @@ func Read16bitTables(ar *arena.Arena, ContextID CmsContext, io *cmsIOHANDLER, lu
 		}
 	}
 
-	if !cmsPipelineInsertStage(lut, cmsAT_END, cmsStageAllocToneCurves(ar, ContextID, nChannels, tables[:])) {
+	if !cmsPipelineInsertStage(lut, CmsAT_END, cmsStageAllocToneCurves(ar, ContextID, nChannels, tables[:])) {
 		goto Error
 	}
 
@@ -2273,7 +2234,7 @@ func TypeLUT16Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, n
 
 	// Only operates on 3 channels
 	if inputChannels == 3 && !cmsMAT3isIdentity(&mat3) {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, cmsStageAllocMatrix(ar, self.ContextID, 3, 3, matrix[:], nil)) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, cmsStageAllocMatrix(ar, self.ContextID, 3, 3, matrix[:], nil)) {
 			cmsPipelineFree(ar, newLUT)
 			return nil
 		}
@@ -2301,7 +2262,7 @@ func TypeLUT16Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, n
 			cmsPipelineFree(ar, newLUT)
 			return nil
 		}
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, cmsStageAllocCLut16bit(ar, self.ContextID, uint32(clutPoints), uint32(inputChannels), uint32(outputChannels), t)) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, cmsStageAllocCLut16bit(ar, self.ContextID, uint32(clutPoints), uint32(inputChannels), uint32(outputChannels), t)) {
 			cmsPipelineFree(ar, newLUT)
 			return nil
 		}
@@ -2330,7 +2291,7 @@ func TypeLUT16Write(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 
 	mpe := newLUT.Elements
 
-	if mpe != nil && mpe.Type == cmsSigMatrixElemType {
+	if mpe != nil && mpe.Type == CmsSigMatrixElemType {
 		matMPE = mpe.Data.(*cmsStageMatrixData)
 		if mpe.InputChannels != 3 || mpe.OutputChannels != 3 {
 			return false
@@ -2338,17 +2299,17 @@ func TypeLUT16Write(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 		mpe = mpe.Next
 	}
 
-	if mpe != nil && mpe.Type == cmsSigCurveSetElemType {
+	if mpe != nil && mpe.Type == CmsSigCurveSetElemType {
 		preMPE = mpe.Data.(*cmsStageToneCurvesData)
 		mpe = mpe.Next
 	}
 
-	if mpe != nil && mpe.Type == cmsSigCLutElemType {
+	if mpe != nil && mpe.Type == CmsSigCLutElemType {
 		clut = mpe.Data.(*cmsStageCLutData)
 		mpe = mpe.Next
 	}
 
-	if mpe != nil && mpe.Type == cmsSigCurveSetElemType {
+	if mpe != nil && mpe.Type == CmsSigCurveSetElemType {
 		postMPE = mpe.Data.(*cmsStageToneCurvesData)
 		mpe = mpe.Next
 	}
@@ -2461,7 +2422,7 @@ func TypeLUT16Free(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) {
 }
 
 // ********************************************************************************
-// Type cmsSigColorantTableType
+// Type CmsSigColorantTableType
 // ********************************************************************************
 /*
 The purpose of this tag is to identify the colorants used in the profile by a
@@ -2593,7 +2554,7 @@ func TypeColorantTableFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interfa
     return true*/
 
 // ********************************************************************************
-// Type cmsSigNamedColor2Type
+// Type CmsSigNamedColor2Type
 // ********************************************************************************
 //
 // The namedColor2Type is a count value and array of structures that provide color
@@ -2717,7 +2678,7 @@ func TypeNamedColorFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{
 }
 
 // ********************************************************************************
-// Type cmsSigProfileSequenceDescType
+// Type CmsSigProfileSequenceDescType
 // ********************************************************************************
 
 // This type is an array of structures, each of which contains information from the
@@ -2729,21 +2690,21 @@ func TypeNamedColorFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{
 func ReadEmbeddedText(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, mlu **cmsMLU, sizeOfTag uint32) bool {
 	baseType := cmsReadTypeBase(io)
 	switch baseType {
-	case cmsSigTextType:
+	case CmsSigTextType:
 		if *mlu != nil {
 			cmsMLUfree(*mlu)
 		}
 		*mlu = TypeTextRead(ar, self, io, new(uint32), sizeOfTag).(*cmsMLU)
 		return *mlu != nil
 
-	case cmsSigTextDescriptionType:
+	case CmsSigTextDescriptionType:
 		if *mlu != nil {
 			cmsMLUfree(*mlu)
 		}
 		*mlu = TypeTextDescriptionRead(ar, self, io, new(uint32), sizeOfTag).(*cmsMLU)
 		return *mlu != nil
 
-	case cmsSigMultiLocalizedUnicodeType:
+	case CmsSigMultiLocalizedUnicodeType:
 		if *mlu != nil {
 			cmsMLUfree(*mlu)
 		}
@@ -2820,12 +2781,12 @@ Error:
 
 func SaveDescription(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, text *cmsMLU) bool {
 	if self.ICCVersion < 0x4000000 {
-		if !cmsWriteTypeBase(io, cmsSigTextDescriptionType) {
+		if !cmsWriteTypeBase(io, CmsSigTextDescriptionType) {
 			return false
 		}
 		return TypeTextDescriptionWrite(ar, self, io, text, 1)
 	} else {
-		if !cmsWriteTypeBase(io, cmsSigMultiLocalizedUnicodeType) {
+		if !cmsWriteTypeBase(io, CmsSigMultiLocalizedUnicodeType) {
 			return false
 		}
 		return TypeMLUWrite(ar, self, io, text, 1)
@@ -2869,7 +2830,7 @@ func TypeProfileSequenceDescFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr i
 }
 
 // ********************************************************************************
-// Type cmsSigProfileSequenceIdType
+// Type CmsSigProfileSequenceIdType
 // ********************************************************************************
 /*
 In certain workflows using ICC Device Link Profiles, it is necessary to identify the
@@ -2902,7 +2863,7 @@ func TypeProfileSequenceIdRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cms
 	*nItems = 0
 
 	// Get actual position as a basis for element offsets
-	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(cmsTagBase{}))
+	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(CmsTagBase{}))
 
 	// Get table count
 	if !cmsReadUInt32Number(io, &count) {
@@ -2956,7 +2917,7 @@ func TypeProfileSequenceIdWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cm
 		return false
 	}
 
-	baseOffset := uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(cmsTagBase{}))
+	baseOffset := uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(CmsTagBase{}))
 
 	// Write the table count
 	if !cmsWriteUInt32Number(io, seq.n) {
@@ -2986,7 +2947,7 @@ func TypeProfileSequenceIdFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr int
 }
 
 // ********************************************************************************
-// Type cmsSigUcrBgType
+// Type CmsSigUcrBgType
 // ********************************************************************************
 /*
 This type contains curves representing the under color removal and black
@@ -3127,7 +3088,7 @@ func TypeUcrBgFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) {
 }
 
 // ********************************************************************************
-// Type cmsSigCrdInfoType
+// Type CmsSigCrdInfoType
 // ********************************************************************************
 
 /*
@@ -3186,10 +3147,6 @@ func ReadCountAndString(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 func WriteCountAndString(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, mlu *cmsMLU, section string) bool {
 	textSize := cmsMLUgetASCII(mlu, "PS", section, nil, 0)
 	text := make([]byte, textSize)
-
-	if text == nil {
-		return false
-	}
 
 	// Write size of string
 	if !cmsWriteUInt32Number(io, textSize) {
@@ -3262,14 +3219,14 @@ func TypeCrdInfoFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) 
 }
 
 // ********************************************************************************
-// Type cmsSigScreeningType
+// Type CmsSigScreeningType
 // ********************************************************************************
 //
 //The screeningType describes various screening parameters including screen
 //frequency, screening angle, and spot shape.
 
 // ********************************************************************************
-// Type cmsSigDataType
+// Type CmsSigDataType
 // ********************************************************************************
 func TypeDataRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) interface{} {
 	// Minimum size must include the flag (4 bytes)
@@ -3369,7 +3326,7 @@ A - CLUT - M - Matrix - B
 */
 func TypeLUTA2BRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) interface{} {
 	var (
-		baseOffset = io.Tell((*cms_io_handler)(io)) - uint32(unsafe.Sizeof(cmsTagBase{}))
+		baseOffset = io.Tell((*cms_io_handler)(io)) - uint32(unsafe.Sizeof(CmsTagBase{}))
 		inputChan  uint8
 		outputChan uint8
 		offsetB    uint32
@@ -3400,31 +3357,31 @@ func TypeLUTA2BRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 
 	// Process each offset and add corresponding stages to the pipeline
 	if offsetA != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetA, uint32(inputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetA, uint32(inputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetC != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadCLUT(ar, self, io, baseOffset+offsetC, uint32(inputChan), uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadCLUT(ar, self, io, baseOffset+offsetC, uint32(inputChan), uint32(outputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetM != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetM, uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetM, uint32(outputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetMat != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadMatrix(ar, self, io, baseOffset+offsetMat)) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadMatrix(ar, self, io, baseOffset+offsetMat)) {
 			goto Error
 		}
 	}
 
 	if offsetB != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetB, uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetB, uint32(outputChan))) {
 			goto Error
 		}
 	}
@@ -3450,16 +3407,16 @@ func TypeLUTA2BWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 	)
 
 	// Get the base for all offsets
-	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(cmsTagBase{}))
+	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(CmsTagBase{}))
 
 	// Check and retrieve stages
 	// Check and retrieve stages
 	// Check and retrieve stages
 	if lut.Elements != nil {
-		if !(cmsPipelineCheckAndRetrieveStages(lut, 1, []cmsStageSignature{cmsSigCurveSetElemType}, &b) ||
-			cmsPipelineCheckAndRetrieveStages(lut, 3, []cmsStageSignature{cmsSigCurveSetElemType, cmsSigMatrixElemType, cmsSigCurveSetElemType}, &m, &matrix, &b) ||
-			cmsPipelineCheckAndRetrieveStages(lut, 3, []cmsStageSignature{cmsSigCurveSetElemType, cmsSigCLutElemType, cmsSigCurveSetElemType}, &a, &clut, &b) ||
-			cmsPipelineCheckAndRetrieveStages(lut, 5, []cmsStageSignature{cmsSigCurveSetElemType, cmsSigCLutElemType, cmsSigCurveSetElemType, cmsSigMatrixElemType, cmsSigCurveSetElemType}, &a, &clut, &m, &matrix, &b)) {
+		if !(cmsPipelineCheckAndRetrieveStages(lut, 1, []cmsStageSignature{CmsSigCurveSetElemType}, &b) ||
+			cmsPipelineCheckAndRetrieveStages(lut, 3, []cmsStageSignature{CmsSigCurveSetElemType, CmsSigMatrixElemType, CmsSigCurveSetElemType}, &m, &matrix, &b) ||
+			cmsPipelineCheckAndRetrieveStages(lut, 3, []cmsStageSignature{CmsSigCurveSetElemType, CmsSigCLutElemType, CmsSigCurveSetElemType}, &a, &clut, &b) ||
+			cmsPipelineCheckAndRetrieveStages(lut, 5, []cmsStageSignature{CmsSigCurveSetElemType, CmsSigCLutElemType, CmsSigCurveSetElemType, CmsSigMatrixElemType, CmsSigCurveSetElemType}, &a, &clut, &m, &matrix, &b)) {
 			cmsSignalError(self.ContextID, cmsERROR_NOT_SUITABLE, "LUT is not suitable to be saved as LutAToB")
 			return false
 		}
@@ -3498,7 +3455,7 @@ func TypeLUTA2BWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 	// Write the stages
 	if a != nil {
 		offsetA = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar, self, io, cmsSigParametricCurveType, a) {
+		if !WriteSetOfCurves(ar, self, io, CmsSigParametricCurveType, a) {
 			return false
 		}
 	}
@@ -3516,7 +3473,7 @@ func TypeLUTA2BWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 
 	if m != nil {
 		offsetM = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar, self, io, cmsSigParametricCurveType, m) {
+		if !WriteSetOfCurves(ar, self, io, CmsSigParametricCurveType, m) {
 			return false
 		}
 	}
@@ -3530,7 +3487,7 @@ func TypeLUTA2BWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 
 	if b != nil {
 		offsetB = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar, self, io, cmsSigParametricCurveType, b) {
+		if !WriteSetOfCurves(ar, self, io, CmsSigParametricCurveType, b) {
 			return false
 		}
 	}
@@ -3605,7 +3562,7 @@ func WriteSetOfCurves(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER
 		if curves[i].Segments != nil {
 			// Determine the curve type
 			if curves[i].nSegments == 0 || (curves[i].nSegments == 2 && curves[i].Segments[1].Type == 0) || curves[i].Segments[0].Type < 0 {
-				currentType = cmsSigCurveType
+				currentType = CmsSigCurveType
 			}
 		}
 
@@ -3616,11 +3573,11 @@ func WriteSetOfCurves(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER
 
 		// Write the curve data
 		switch currentType {
-		case cmsSigCurveType:
+		case CmsSigCurveType:
 			if !TypeCurveWrite(ar, self, io, curves[i], 1) {
 				return false
 			}
-		case cmsSigParametricCurveType:
+		case CmsSigParametricCurveType:
 			if !TypeParametricCurveWrite(ar, self, io, curves[i], 1) {
 				return false
 			}
@@ -3779,9 +3736,9 @@ func ReadEmbeddedCurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 	baseType := cmsReadTypeBase(io)
 
 	switch baseType {
-	case cmsSigCurveType:
+	case CmsSigCurveType:
 		return TypeCurveRead(ar, self, io, nil, 0).(*CmsToneCurve)
-	case cmsSigParametricCurveType:
+	case CmsSigParametricCurveType:
 		return TypeParametricCurveRead(ar, self, io, nil, 0).(*CmsToneCurve)
 	default:
 		//	str := cmsTagSignature2String(sig)
@@ -3835,7 +3792,7 @@ func TypeLUTB2ARead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 		newLUT                                                    *cmsPipeline
 	)
 
-	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(cmsTagBase{}))
+	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(CmsTagBase{}))
 
 	if !cmsReadUInt8Number(io, &inputChan) || !cmsReadUInt8Number(io, &outputChan) {
 		return nil
@@ -3863,31 +3820,31 @@ func TypeLUTB2ARead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 	}
 
 	if offsetB != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetB, uint32(inputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetB, uint32(inputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetMat != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadMatrix(ar, self, io, baseOffset+offsetMat)) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadMatrix(ar, self, io, baseOffset+offsetMat)) {
 			goto Error
 		}
 	}
 
 	if offsetM != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetM, uint32(inputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetM, uint32(inputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetC != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadCLUT(ar, self, io, baseOffset+offsetC, uint32(inputChan), uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadCLUT(ar, self, io, baseOffset+offsetC, uint32(inputChan), uint32(outputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetA != 0 {
-		if !cmsPipelineInsertStage(newLUT, cmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetA, uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetA, uint32(outputChan))) {
 			goto Error
 		}
 	}
@@ -3913,13 +3870,13 @@ func TypeLUTB2AWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 		offsetB, offsetMat, offsetM, offsetC, offsetA, baseOffset, directoryPos, currentPos uint32
 	)
 
-	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(cmsTagBase{}))
+	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(CmsTagBase{}))
 
 	// Check and retrieve stages
-	if !cmsPipelineCheckAndRetrieveStages(lut, 1, []cmsStageSignature{cmsSigCurveSetElemType}, &b) &&
-		!cmsPipelineCheckAndRetrieveStages(lut, 3, []cmsStageSignature{cmsSigCurveSetElemType, cmsSigMatrixElemType, cmsSigCurveSetElemType}, &b, &matrix, &m) &&
-		!cmsPipelineCheckAndRetrieveStages(lut, 3, []cmsStageSignature{cmsSigCurveSetElemType, cmsSigCLutElemType, cmsSigCurveSetElemType}, &b, &clut, &a) &&
-		!cmsPipelineCheckAndRetrieveStages(lut, 5, []cmsStageSignature{cmsSigCurveSetElemType, cmsSigMatrixElemType, cmsSigCurveSetElemType, cmsSigCLutElemType, cmsSigCurveSetElemType}, &b, &matrix, &m, &clut, &a) {
+	if !cmsPipelineCheckAndRetrieveStages(lut, 1, []cmsStageSignature{CmsSigCurveSetElemType}, &b) &&
+		!cmsPipelineCheckAndRetrieveStages(lut, 3, []cmsStageSignature{CmsSigCurveSetElemType, CmsSigMatrixElemType, CmsSigCurveSetElemType}, &b, &matrix, &m) &&
+		!cmsPipelineCheckAndRetrieveStages(lut, 3, []cmsStageSignature{CmsSigCurveSetElemType, CmsSigCLutElemType, CmsSigCurveSetElemType}, &b, &clut, &a) &&
+		!cmsPipelineCheckAndRetrieveStages(lut, 5, []cmsStageSignature{CmsSigCurveSetElemType, CmsSigMatrixElemType, CmsSigCurveSetElemType, CmsSigCLutElemType, CmsSigCurveSetElemType}, &b, &matrix, &m, &clut, &a) {
 		cmsSignalError(self.ContextID, cmsERROR_NOT_SUITABLE, "LUT is not suitable to be saved as LutBToA")
 		return false
 	}
@@ -3933,13 +3890,25 @@ func TypeLUTB2AWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 
 	directoryPos = uint32(io.Tell((*cms_io_handler)(io)))
 
-	if !cmsWriteUInt32Number(io, 0) || !cmsWriteUInt32Number(io, 0) || !cmsWriteUInt32Number(io, 0) || !cmsWriteUInt32Number(io, 0) || !cmsWriteUInt32Number(io, 0) {
+	if !cmsWriteUInt32Number(io, 0) {
+		return false
+	}
+	if !cmsWriteUInt32Number(io, 0) {
+		return false
+	}
+	if !cmsWriteUInt32Number(io, 0) {
+		return false
+	}
+	if !cmsWriteUInt32Number(io, 0) {
+		return false
+	}
+	if !cmsWriteUInt32Number(io, 0) {
 		return false
 	}
 
 	if a != nil {
 		offsetA = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar, self, io, cmsSigParametricCurveType, a) {
+		if !WriteSetOfCurves(ar, self, io, CmsSigParametricCurveType, a) {
 			return false
 		}
 	}
@@ -3957,7 +3926,7 @@ func TypeLUTB2AWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 
 	if m != nil {
 		offsetM = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar, self, io, cmsSigParametricCurveType, m) {
+		if !WriteSetOfCurves(ar, self, io, CmsSigParametricCurveType, m) {
 			return false
 		}
 	}
@@ -3971,7 +3940,7 @@ func TypeLUTB2AWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 
 	if b != nil {
 		offsetB = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar, self, io, cmsSigParametricCurveType, b) {
+		if !WriteSetOfCurves(ar, self, io, CmsSigParametricCurveType, b) {
 			return false
 		}
 	}
@@ -4038,7 +4007,7 @@ func ReadMPEElem(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, car
 	if typeHandler.ReadFn != nil {
 		// Read the MPE and insert it into the pipeline
 		stage := typeHandler.ReadFn(ar, self, io, &nItems, sizeOfTag).(*cmsStage)
-		if stage == nil || !cmsPipelineInsertStage(newLUT, cmsAT_END, stage) {
+		if stage == nil || !cmsPipelineInsertStage(newLUT, CmsAT_END, stage) {
 			return false
 		}
 	}
@@ -4056,7 +4025,7 @@ func TypeMPERead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nIt
 	)
 
 	// Get current file position as base offset
-	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(cmsTagBase{}))
+	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(CmsTagBase{}))
 
 	// Read input and output channel counts
 	if !cmsReadUInt16Number(io, &inputChans) || !cmsReadUInt16Number(io, &outputChans) {
@@ -4093,9 +4062,8 @@ func TypeMPERead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nIt
 	return newLUT
 
 Error:
-	if newLUT != nil {
-		cmsPipelineFree(ar, newLUT)
-	}
+	cmsPipelineFree(ar, newLUT)
+
 	*nItems = 0
 	return nil
 }
@@ -4120,7 +4088,7 @@ func TypeMPEWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, pt
 		return false
 	}
 
-	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(cmsTagBase{}))
+	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(CmsTagBase{}))
 
 	// Retrieve input/output channels and element count
 	inputChan := cmsPipelineInputChannels(lut)
@@ -4211,7 +4179,7 @@ func TypeMPEFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) {
 }
 
 // ********************************************************************************
-// Type cmsSigDictType
+// Type CmsSigDictType
 // ********************************************************************************
 type cmsDICelem struct {
 	ContextID CmsContext
@@ -4397,7 +4365,7 @@ func TypeDictionaryRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 
 	*nItems = 0
 	// Get current position as base offset
-	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(cmsTagBase{}))
+	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(CmsTagBase{}))
 
 	// Read name-value record count
 	signedSizeOfTag -= int32(unsafe.Sizeof(count))
@@ -4419,10 +4387,6 @@ func TypeDictionaryRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 
 	// Create an empty dictionary
 	hDict = cmsDictAlloc(ar, self.ContextID)
-	if hDict == nil {
-		return nil
-	}
-
 	// Allocate column arrays
 	if !AllocArray(self.ContextID, &a, count, length) {
 		goto Error
@@ -4473,9 +4437,7 @@ func TypeDictionaryRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 
 Error:
 	FreeArray(&a)
-	if hDict != nil {
-		cmsDictFree(hDict)
-	}
+	cmsDictFree(hDict)
 	return nil
 }
 
@@ -4496,7 +4458,7 @@ func TypeDictionaryWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHAND
 		return false
 	}
 
-	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(cmsTagBase{}))
+	baseOffset = uint32(io.Tell((*cms_io_handler)(io))) - uint32(unsafe.Sizeof(CmsTagBase{}))
 
 	// Analyze the dictionary
 	count = 0
@@ -4597,9 +4559,8 @@ func TypeVideoSignalRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHAND
 	return cicp
 
 Error:
-	if cicp != nil {
-		cmsFree(self.ContextID, cicp)
-	}
+	cmsFree(self.ContextID, cicp)
+
 	return nil
 }
 
@@ -4778,10 +4739,6 @@ func TypeVcgtWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, p
 func TypeVcgtDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}, n uint32) interface{} {
 	oldCurves := ptr.([]*CmsToneCurve)
 	NewCurves := make([]*CmsToneCurve, 3)
-	if NewCurves == nil {
-		return nil
-	}
-
 	NewCurves[0] = cmsDupToneCurve(ar, oldCurves[0])
 	NewCurves[1] = cmsDupToneCurve(ar, oldCurves[1])
 	NewCurves[2] = cmsDupToneCurve(ar, oldCurves[2])
@@ -4802,7 +4759,7 @@ func TypeVcgtFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}) {
 }
 
 // ********************************************************************************
-// Type cmsSigMultiProcessElementType
+// Type CmsSigMultiProcessElementType
 // ********************************************************************************
 
 func GenericMPEDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr interface{}, n uint32) interface{} {
@@ -4832,7 +4789,7 @@ func ReadSegmentedCurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 	}
 
 	// Ensure it's a segmented curve
-	if elementSig != cmsSigSegmentedCurve {
+	if elementSig != CmsSigSegmentedCurve {
 		return nil
 	}
 
@@ -4866,7 +4823,7 @@ func ReadSegmentedCurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 		}
 
 		switch elementSig {
-		case cmsSigFormulaCurveSeg:
+		case CmsSigFormulaCurveSeg:
 			var curveType uint16
 			paramsByType := []uint32{4, 5, 5}
 
@@ -4887,7 +4844,7 @@ func ReadSegmentedCurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 				segments[i].Params[j] = float64(param)
 			}
 
-		case cmsSigSampledCurveSeg:
+		case CmsSigSampledCurveSeg:
 			var count uint32
 			if !cmsReadUInt32Number(io, &count) {
 				return nil
@@ -4934,7 +4891,7 @@ func ReadMPECurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ca
 // Type_MPEcurve_Read reads MPE curve type
 func TypeMPEcurveRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) interface{} {
 	var inputChans, outputChans uint16
-	baseOffset := io.Tell((*cms_io_handler)(io)) - uint32(unsafe.Sizeof(cmsTagBase{}))
+	baseOffset := io.Tell((*cms_io_handler)(io)) - uint32(unsafe.Sizeof(CmsTagBase{}))
 
 	if !cmsReadUInt16Number(io, &inputChans) || !cmsReadUInt16Number(io, &outputChans) {
 		return nil
@@ -4973,7 +4930,7 @@ func WriteSegmentedCurve(io *cmsIOHANDLER, curve *CmsToneCurve) bool {
 	nSegments := curve.nSegments
 	segments := curve.Segments
 
-	if !cmsWriteUInt32Number(io, uint32(cmsSigSegmentedCurve)) || !cmsWriteUInt32Number(io, 0) ||
+	if !cmsWriteUInt32Number(io, uint32(CmsSigSegmentedCurve)) || !cmsWriteUInt32Number(io, 0) ||
 		!cmsWriteUInt16Number(io, uint16(nSegments)) || !cmsWriteUInt16Number(io, 0) {
 		return false
 	}
@@ -4989,7 +4946,7 @@ func WriteSegmentedCurve(io *cmsIOHANDLER, curve *CmsToneCurve) bool {
 		actualSeg := segments[i]
 		switch actualSeg.Type {
 		case 0: // Sampled curve
-			if !cmsWriteUInt32Number(io, uint32(cmsSigSampledCurveSeg)) || !cmsWriteUInt32Number(io, 0) ||
+			if !cmsWriteUInt32Number(io, uint32(CmsSigSampledCurveSeg)) || !cmsWriteUInt32Number(io, 0) ||
 				!cmsWriteUInt32Number(io, actualSeg.NGridPoints-1) {
 				return false
 			}
@@ -5006,7 +4963,7 @@ func WriteSegmentedCurve(io *cmsIOHANDLER, curve *CmsToneCurve) bool {
 			if curveType < 0 || curveType > 2 {
 				return false
 			}
-			if !cmsWriteUInt32Number(io, uint32(cmsSigFormulaCurveSeg)) || !cmsWriteUInt32Number(io, 0) ||
+			if !cmsWriteUInt32Number(io, uint32(CmsSigFormulaCurveSeg)) || !cmsWriteUInt32Number(io, 0) ||
 				!cmsWriteUInt16Number(io, uint16(curveType)) || !cmsWriteUInt16Number(io, 0) {
 				return false
 			}
@@ -5034,14 +4991,14 @@ func WriteMPECurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, c
 
 // Type_MPEcurve_Write writes the MPE curve type
 func TypeMPEcurveWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
-	mpe, ok := ptr.(*cmsStage)
-	curves, ok := mpe.Data.(*cmsStageToneCurvesData)
-	if !ok {
+	mpe, ok1 := ptr.(*cmsStage)
+	curves, ok2 := mpe.Data.(*cmsStageToneCurvesData)
+	if !ok1 || !ok2 {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsStageToneCurvesData\n")
 		return false
 	}
 
-	baseOffset := io.Tell((*cms_io_handler)(io)) - uint32(unsafe.Sizeof(cmsTagBase{}))
+	baseOffset := io.Tell((*cms_io_handler)(io)) - uint32(unsafe.Sizeof(CmsTagBase{}))
 
 	// Write header
 	if !cmsWriteUInt16Number(io, uint16(mpe.InputChannels)) {
@@ -5089,9 +5046,9 @@ func TypeMPEmatrixRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 }
 
 func TypeMPEmatrixWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr interface{}, nItems uint32) bool {
-	mpe, ok := ptr.(*cmsStage)
-	matrix, ok := mpe.Data.(*cmsStageMatrixData)
-	if !ok {
+	mpe, ok1 := ptr.(*cmsStage)
+	matrix, ok2 := mpe.Data.(*cmsStageMatrixData)
+	if !ok1 || !ok2 {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsStageMatrixData\n")
 		return false
 	}

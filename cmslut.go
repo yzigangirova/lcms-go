@@ -64,7 +64,7 @@ func EvaluateIdentity(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStag
 }
 func cmsStageAllocIdentity(ar *arena.Arena, ContextID CmsContext, nChannels uint32) *cmsStage {
 	return cmsStageAllocPlaceholder(ar, ContextID,
-		cmsSigIdentityElemType,
+		CmsSigIdentityElemType,
 		nChannels, nChannels,
 		EvaluateIdentity,
 		nil,
@@ -140,7 +140,7 @@ func Clipper(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage) {
 func cmsStageClipNegatives(ar *arena.Arena, ContextID CmsContext, nChannels uint32) *cmsStage {
 	return cmsStageAllocPlaceholder(ar,
 		ContextID,
-		cmsSigClipNegativesElemType,
+		CmsSigClipNegativesElemType,
 		nChannels,
 		nChannels,
 		Clipper,
@@ -261,7 +261,7 @@ Error:
 func cmsStageAllocToneCurves(ar *arena.Arena, ContextID CmsContext, nChannels uint32, Curves []*CmsToneCurve) *cmsStage {
 	//fmt.Println("start cmsStageAllocToneCurves")
 	// Allocate the placeholder for the stage
-	newMPE := cmsStageAllocPlaceholder(ar, ContextID, cmsSigCurveSetElemType, nChannels, nChannels, EvaluateCurves, CurveSetDup, CurveSetElemTypeFree, nil)
+	newMPE := cmsStageAllocPlaceholder(ar, ContextID, CmsSigCurveSetElemType, nChannels, nChannels, EvaluateCurves, CurveSetDup, CurveSetElemTypeFree, nil)
 	if newMPE == nil {
 		return nil
 	}
@@ -309,7 +309,7 @@ func cmsStageAllocIdentityCurves(ar *arena.Arena, ContextID CmsContext, nChannel
 	if mpe == nil {
 		return nil
 	}
-	mpe.Implements = cmsSigIdentityElemType
+	mpe.Implements = CmsSigIdentityElemType
 	return mpe
 }
 
@@ -414,7 +414,7 @@ func cmsStageAllocMatrix(
 
 	NewMPE := cmsStageAllocPlaceholder(ar,
 		ContextID,
-		cmsSigMatrixElemType,
+		CmsSigMatrixElemType,
 		Cols,
 		Rows,
 		EvaluateMatrix,
@@ -472,7 +472,7 @@ func EvaluateXYZ2Lab(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage
 }
 
 func cmsStageAllocXYZ2Lab(ar *arena.Arena, ContextID CmsContext) *cmsStage {
-	return cmsStageAllocPlaceholder(ar, ContextID, cmsSigXYZ2LabElemType, 3, 3, EvaluateXYZ2Lab, nil, nil, nil)
+	return cmsStageAllocPlaceholder(ar, ContextID, CmsSigXYZ2LabElemType, 3, 3, EvaluateXYZ2Lab, nil, nil, nil)
 }
 
 // This routine does a sweep on whole input space, and calls its callback
@@ -536,7 +536,7 @@ func cmsSliceSpaceFloat(ar *arena.Arena, nInputs uint32, clutPoints []uint32, Sa
 }
 
 // ********************************************************************************
-// Type cmsSigLab2XYZElemType
+// Type CmsSigLab2XYZElemType
 // ********************************************************************************
 
 func EvaluateLab2XYZ(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage) {
@@ -565,7 +565,7 @@ func EvaluateLab2XYZ(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage
 
 // No dup or free routines needed, as the structure has no pointers in it.
 func cmsStageAllocLab2XYZ(ar *arena.Arena, ContextID CmsContext) *cmsStage {
-	return cmsStageAllocPlaceholder(ar, ContextID, cmsSigLab2XYZElemType, 3, 3, EvaluateLab2XYZ, nil, nil, nil)
+	return cmsStageAllocPlaceholder(ar, ContextID, CmsSigLab2XYZElemType, 3, 3, EvaluateLab2XYZ, nil, nil, nil)
 }
 
 // ********************************************************************************
@@ -614,7 +614,7 @@ func cmsStageAllocLabV2ToV4curves(ar *arena.Arena, ContextID CmsContext) *cmsSta
 	}
 
 	// Set the implementation signature
-	mpe.Implements = cmsStageSignature(cmsSigLabV2toV4)
+	mpe.Implements = cmsStageSignature(CmsSigLabV2toV4)
 	return mpe
 }
 
@@ -631,7 +631,7 @@ func cmsStageAllocLabV2ToV4(ar *arena.Arena, ContextID CmsContext) *cmsStage {
 	if mpe == nil {
 		return nil
 	}
-	mpe.Implements = cmsStageSignature(cmsSigLabV2toV4)
+	mpe.Implements = cmsStageSignature(CmsSigLabV2toV4)
 	return mpe
 }
 
@@ -647,7 +647,7 @@ func cmsStageAllocLabV4ToV2(ar *arena.Arena, ContextID CmsContext) *cmsStage {
 	if mpe == nil {
 		return nil
 	}
-	mpe.Implements = cmsStageSignature(cmsSigLabV4toV2)
+	mpe.Implements = cmsStageSignature(CmsSigLabV4toV2)
 	return mpe
 }
 
@@ -675,7 +675,7 @@ func cmsStageNormalizeFromLabFloat(ar *arena.Arena, ContextID CmsContext) *cmsSt
 	if mpe == nil {
 		return nil
 	}
-	mpe.Implements = cmsSigLab2FloatPCS
+	mpe.Implements = CmsSigLab2FloatPCS
 	return mpe
 }
 
@@ -691,7 +691,7 @@ func cmsStageNormalizeFromXyzFloat(ar *arena.Arena, ContextID CmsContext) *cmsSt
 	if mpe == nil {
 		return nil
 	}
-	mpe.Implements = cmsSigXYZ2FloatPCS
+	mpe.Implements = CmsSigXYZ2FloatPCS
 	return mpe
 }
 
@@ -713,7 +713,7 @@ func cmsStageNormalizeToLabFloat(ar *arena.Arena, ContextID CmsContext) *cmsStag
 	if mpe == nil {
 		return nil
 	}
-	mpe.Implements = cmsSigFloatPCS2Lab
+	mpe.Implements = CmsSigFloatPCS2Lab
 	return mpe
 }
 
@@ -729,7 +729,7 @@ func cmsStageNormalizeToXyzFloat(ar *arena.Arena, ContextID CmsContext) *cmsStag
 	if mpe == nil {
 		return nil
 	}
-	mpe.Implements = cmsSigFloatPCS2XYZ
+	mpe.Implements = CmsSigFloatPCS2XYZ
 	return mpe
 }
 
@@ -1017,11 +1017,11 @@ func cmsPipelineInsertStage(lut *cmsPipeline, loc cmsStageLoc, mpe *cmsStage) bo
 	}
 
 	switch loc {
-	case cmsAT_BEGIN:
+	case CmsAT_BEGIN:
 		mpe.Next = lut.Elements
 		lut.Elements = mpe
 
-	case cmsAT_END:
+	case CmsAT_END:
 		if lut.Elements == nil {
 			lut.Elements = mpe
 		} else {
@@ -1051,13 +1051,13 @@ func cmsPipelineUnlinkStage(ar *arena.Arena, lut *cmsPipeline, loc cmsStageLoc, 
 	var unlinked *cmsStage
 
 	switch loc {
-	case cmsAT_BEGIN:
+	case CmsAT_BEGIN:
 		elem := lut.Elements
 		lut.Elements = elem.Next
 		elem.Next = nil
 		unlinked = elem
 
-	case cmsAT_END:
+	case CmsAT_END:
 		var anterior, last *cmsStage
 		for pt := lut.Elements; pt != nil; pt = pt.Next {
 			anterior = last
@@ -1088,7 +1088,7 @@ func cmsPipelineCat(ar *arena.Arena, l1 *cmsPipeline, l2 *cmsPipeline) bool {
 	}
 
 	for mpe := l2.Elements; mpe != nil; mpe = mpe.Next {
-		if !cmsPipelineInsertStage(l1, cmsAT_END, cmsStageDup(ar, mpe)) {
+		if !cmsPipelineInsertStage(l1, CmsAT_END, cmsStageDup(ar, mpe)) {
 			return false
 		}
 	}
@@ -1424,7 +1424,7 @@ func cmsStageAllocCLut16bitGranular(
 		return nil
 	}
 
-	NewMPE := cmsStageAllocPlaceholder(ar, ContextID, cmsSigCLutElemType, inputChan, outputChan, EvaluateCLUTfloatIn16, CLUTElemDup, CLutElemTypeFree, nil)
+	NewMPE := cmsStageAllocPlaceholder(ar, ContextID, CmsSigCLutElemType, inputChan, outputChan, EvaluateCLUTfloatIn16, CLUTElemDup, CLutElemTypeFree, nil)
 	if NewMPE == nil {
 		return nil
 	}
@@ -1506,7 +1506,7 @@ func cmsStageAllocCLutFloatGranular(
 		return nil
 	}
 
-	NewMPE := cmsStageAllocPlaceholder(ar, ContextID, cmsSigCLutElemType, inputChan, outputChan, EvaluateCLUTfloat, CLUTElemDup, CLutElemTypeFree, nil)
+	NewMPE := cmsStageAllocPlaceholder(ar, ContextID, CmsSigCLutElemType, inputChan, outputChan, EvaluateCLUTfloat, CLUTElemDup, CLutElemTypeFree, nil)
 	if NewMPE == nil {
 		return nil
 	}
@@ -1593,7 +1593,7 @@ func cmsStageAllocIdentityCLut(ar *arena.Arena, ContextID CmsContext, nChan uint
 		return nil
 	}
 
-	mpe.Implements = cmsSigIdentityElemType
+	mpe.Implements = CmsSigIdentityElemType
 	return mpe
 }
 

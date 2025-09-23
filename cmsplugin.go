@@ -15,7 +15,7 @@ import (
 // Check if the platform is little-endian
 
 // Platform endianess determined at runtime
-var platformEndian binary.ByteOrder
+/* var platformEndian binary.ByteOrder
 
 func init() {
 	if isBigEndian() {
@@ -23,7 +23,7 @@ func init() {
 	} else {
 		platformEndian = binary.LittleEndian
 	}
-}
+}*/
 
 /*// Adjust a 16-bit value for the platform endianess
 func cmsAdjustEndianess16(word uint16) uint16 {
@@ -137,7 +137,6 @@ func cmsReadFloat32Number(io *cmsIOHANDLER, n *float32) bool {
 	}
 
 	if n != nil {
-		tmp.Integer = tmp.Integer
 		*n = math.Float32frombits(tmp.Integer)
 
 		// Safeguard against absurd values
@@ -340,8 +339,8 @@ func cmsEncodeDateTimeNumber(dest *cmsDateTimeNumber, t time.Time) {
 // Read/Write Base Tag
 
 func cmsReadTypeBase(io *cmsIOHANDLER) cmsTagTypeSignature {
-	var base cmsTagBase
-	base, err := ReadStruct[cmsTagBase](io, binary.BigEndian, 1)
+	var base CmsTagBase
+	base, err := ReadStruct[CmsTagBase](io, binary.BigEndian, 1)
 	if err != nil {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Failed to read uint32: %v", err)
 		return 0
@@ -350,12 +349,12 @@ func cmsReadTypeBase(io *cmsIOHANDLER) cmsTagTypeSignature {
 }
 
 func cmsWriteTypeBase(io *cmsIOHANDLER, sig cmsTagTypeSignature) bool {
-	var base cmsTagBase
+	var base CmsTagBase
 	base.Sig = sig
 	for i := range base.Reserved {
 		base.Reserved[i] = 0
 	}
-	return WriteStruct[cmsTagBase](io, base, binary.BigEndian)
+	return WriteStruct[CmsTagBase](io, base, binary.BigEndian)
 }
 
 // Alignment Functions
@@ -418,6 +417,7 @@ func cmsPlugin(ar *arena.Arena, plugin PluginIntrfc) bool {
 }
 
 // Plugin dispatcher for a specific thread
+//lint:ignore U1000 kept for parity with lcms; used in future ports
 func cmsPluginTHR(ar *arena.Arena, contextID CmsContext, plugin PluginIntrfc) bool {
 	currentPlugin, ok := plugin.(*cmsPluginBase)
 	if !ok {
@@ -601,6 +601,7 @@ func cmsGetContext(ContextID CmsContext) CmsContext {
 // plug-in, as a single call to cmsPluginTHR() function may register
 // many different plug-ins simultaneously, then there is no way to
 // identify which plug-in to unregister.
+//lint:ignore U1000 kept for parity with lcms; used in future ports
 func cmsUnregisterPluginsTHR(ar *arena.Arena, ContextID CmsContext) {
 	cmsRegisterMemHandlerPlugin(ContextID, nil)
 	cmsRegisterInterpPlugin(ContextID, nil)

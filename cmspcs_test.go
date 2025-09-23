@@ -66,18 +66,21 @@ func TestCIE2000DeltaE(t *testing.T) {
 		t.Errorf("Unexpected CIE2000DeltaE: got %f", d)
 	}
 }
-/*func TestCmsFloat2LabEncodedAndBack(t *testing.T) {
-	labIn := &cmsCIELab{L: 75.5, a: -23.7, b: 15.2}
-	var encoded [3]uint16
-	cmsFloat2LabEncoded(encoded, labIn)
 
-	var decoded cmsCIELab
-	cmsLabEncoded2Float(&decoded, encoded)
+/*
+	func TestCmsFloat2LabEncodedAndBack(t *testing.T) {
+		labIn := &cmsCIELab{L: 75.5, a: -23.7, b: 15.2}
+		var encoded [3]uint16
+		cmsFloat2LabEncoded(encoded, labIn)
 
-	if !almostEq(labIn.L, decoded.L) || !almostEq(labIn.a, decoded.a) || !almostEq(labIn.b, decoded.b) {
-		t.Errorf("Lab encode/decode mismatch: got %v", decoded)
+		var decoded cmsCIELab
+		cmsLabEncoded2Float(&decoded, encoded)
+
+		if !almostEq(labIn.L, decoded.L) || !almostEq(labIn.a, decoded.a) || !almostEq(labIn.b, decoded.b) {
+			t.Errorf("Lab encode/decode mismatch: got %v", decoded)
+		}
 	}
-}*/
+*/
 func TestCmsBFDdeltaE(t *testing.T) {
 	a := &cmsCIELab{L: 60, a: 5, b: 10}
 	b := &cmsCIELab{L: 62, a: 4, b: 12}
@@ -89,10 +92,10 @@ func TestCmsBFDdeltaE(t *testing.T) {
 }
 
 func TestCmsChannelsOf(t *testing.T) {
-	if cmsChannelsOf(cmsSigGrayData) != 1 {
+	if cmsChannelsOf(CmsSigGrayData) != 1 {
 		t.Errorf("Gray should have 1 channel")
 	}
-	if cmsChannelsOf(cmsSigCmykData) != 4 {
+	if cmsChannelsOf(CmsSigCmykData) != 4 {
 		t.Errorf("CMYK should have 4 channels")
 	}
 }
@@ -102,9 +105,15 @@ func TestXYZEncodingRangeClamp(t *testing.T) {
 	var encoded [3]uint16
 	cmsFloat2XYZEncoded(&encoded, in)
 
-	if encoded[0] != 0 || encoded[1] > 0xffff {
-		t.Errorf("XYZ encoding range clamp failed: %v", encoded)
+	// X below range → clamp to 0
+	if encoded[0] != 0x0000 {
+		t.Fatalf("X clamp failed: got 0x%04x, want 0x0000", encoded[0])
 	}
+	// Y above range → clamp to max
+	if encoded[1] != 0xFFFF {
+		t.Fatalf("Y clamp failed: got 0x%04x, want 0xFFFF", encoded[1])
+	}
+
 }
 
 func TestLabEncodingRangeClamp(t *testing.T) {
@@ -112,7 +121,16 @@ func TestLabEncodingRangeClamp(t *testing.T) {
 	var encoded [3]uint16
 	cmsFloat2LabEncoded(encoded[:], in)
 
-	if encoded[0] > 0xffff || encoded[2] > 0xffff {
-		t.Errorf("Lab encoding clamp out of bounds: %v", encoded)
+	// L* > 100 → clamp to max
+	if encoded[0] != 0xFFFF {
+		t.Fatalf("L* clamp failed: got 0x%04x, want 0xFFFF", encoded[0])
+	}
+	// a* < -128 → clamp to min
+	if encoded[1] != 0x0000 {
+		t.Fatalf("a* clamp failed: got 0x%04x, want 0x0000", encoded[1])
+	}
+	// b* > +127 → clamp to max
+	if encoded[2] != 0xFFFF {
+		t.Fatalf("b* clamp failed: got 0x%04x, want 0xFFFF", encoded[2])
 	}
 }

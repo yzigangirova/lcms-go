@@ -130,6 +130,7 @@ func cmsOpenIOhandlerFromNULL(ar *arena.Arena, ContextID CmsContext) *cmsIOHANDL
 	return iohandler
 }
 
+//lint:ignore U1000 kept for parity with lcms; used in future ports
 func cmsOpenIOhandlerFromStream(ar *arena.Arena, ContextID CmsContext, stream *os.File) *cmsIOHANDLER {
 	if stream == nil {
 		cmsSignalError(ContextID, cmsERROR_FILE, "Stream cannot be nil")
@@ -532,10 +533,11 @@ func freeOneTag(ar *arena.Arena, Icc *cmsICCPROFILE, i uint32) {
 func CmsCloseProfile(ar *arena.Arena, hProfile CmsHPROFILE) bool {
 	Icc := hProfile.(*cmsICCPROFILE)
 	var rc bool = true
-	mm := &Icc.UsrMutex
 	if Icc == nil {
 		return false
-	}
+	}	
+	mm := &Icc.UsrMutex
+
 
 	if Icc.IsWrite {
 		Icc.IsWrite = false
@@ -725,7 +727,7 @@ func cmsCreateProfilePlaceholder(ar *arena.Arena, ContextID CmsContext) CmsHPROF
 	Icc.Version = 0x02100000
 
 	// Set default device class
-	Icc.DeviceClass = cmsSigDisplayClass
+	Icc.DeviceClass = CmsSigDisplayClass
 
 	// Set creation date/time
 	if !cmsGetTime(&Icc.Created) {
@@ -1035,19 +1037,19 @@ func validDeviceClass(cl cmsProfileClassSignature) bool {
 	}
 
 	switch cl {
-	case cmsSigInputClass:
+	case CmsSigInputClass:
 		return true
-	case cmsSigDisplayClass:
+	case CmsSigDisplayClass:
 		return true
-	case cmsSigOutputClass:
+	case CmsSigOutputClass:
 		return true
-	case cmsSigLinkClass:
+	case CmsSigLinkClass:
 		return true
-	case cmsSigAbstractClass:
+	case CmsSigAbstractClass:
 		return true
-	case cmsSigColorSpaceClass:
+	case CmsSigColorSpaceClass:
 		return true
-	case cmsSigNamedColorClass:
+	case CmsSigNamedColorClass:
 		return true
 	default:
 		return false
@@ -1077,18 +1079,18 @@ func ReadStruct[T any](io *cmsIOHANDLER, endian binary.ByteOrder, count uint32) 
 
 // cmsReadHeader reads and validates the profile header.
 func cmsReadHeader(Icc *cmsICCPROFILE) bool {
-	var Tag cmsTagEntry
-	var Header cmsICCHeader
+	var Tag CmsTagEntry
+	var Header CmsICCHeader
 	var TagCount uint32
 	io := Icc.IOhandler
 
-	Header, err := ReadStruct[cmsICCHeader](io, binary.BigEndian, 1)
+	Header, err := ReadStruct[CmsICCHeader](io, binary.BigEndian, 1)
 	if err != nil {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Failed to read ICC header: %v", err)
 	}
 
 	// Validate file as an ICC profile
-	if Header.Magic != cmsMagicNumber {
+	if Header.Magic != CmsMagicNumber {
 		cmsSignalError(Icc.ContextID, cmsERROR_BAD_SIGNATURE, "not an ICC profile, invalid signature")
 		return false
 	}
@@ -1199,20 +1201,20 @@ func WriteStruct[T any](io *cmsIOHANDLER, value T, endian binary.ByteOrder) bool
 
 // cmsWriteHeader saves the profile header.
 func cmsWriteHeader(Icc *cmsICCPROFILE, UsedSpace uint32) bool {
-	var Header cmsICCHeader
-	var Tag cmsTagEntry
+	var Header CmsICCHeader
+	var Tag CmsTagEntry
 	var Count uint32
 
 	Header.Size = UsedSpace
-	Header.CmmId = lcmsSignature
+	Header.CmmId = lCmsSignature
 	Header.Version = Icc.Version
 	Header.DeviceClass = Icc.DeviceClass
 	Header.ColorSpace = Icc.ColorSpace
 	Header.PCS = Icc.PCS
 	cmsEncodeDateTimeNumber(&Header.Date, Icc.Created)
-	Header.Magic = cmsMagicNumber
+	Header.Magic = CmsMagicNumber
 
-	Header.Platform = cmsSigMicrosoft
+	Header.Platform = CmsSigMicrosoft
 	Header.Flags = Icc.Flags
 	Header.Manufacturer = cmsSignature(Icc.Manufacturer)
 	Header.Model = Icc.Model
@@ -1221,13 +1223,13 @@ func cmsWriteHeader(Icc *cmsICCPROFILE, UsedSpace uint32) bool {
 	Header.Illuminant.X = cmsDoubleTo15Fixed16(cmsD50_XYZ().X)
 	Header.Illuminant.Y = cmsDoubleTo15Fixed16(cmsD50_XYZ().Y)
 	Header.Illuminant.Z = cmsDoubleTo15Fixed16(cmsD50_XYZ().Z)
-	Header.Creator = lcmsSignature
+	Header.Creator = lCmsSignature
 
 	// Set profile ID. Endianness is always big endian
 	copy(Header.ProfileID[:], Icc.ProfileID[:])
 
 	// Write header
-	if !WriteStruct[cmsICCHeader](Icc.IOhandler, Header, binary.BigEndian) {
+	if !WriteStruct[CmsICCHeader](Icc.IOhandler, Header, binary.BigEndian) {
 		return false
 	}
 
@@ -1252,7 +1254,7 @@ func cmsWriteHeader(Icc *cmsICCPROFILE, UsedSpace uint32) bool {
 		Tag.Offset = Icc.TagOffsets[i]
 		Tag.Size = Icc.TagSizes[i]
 
-		if !WriteStruct[cmsTagEntry](Icc.IOhandler, Tag, binary.BigEndian) {
+		if !WriteStruct[CmsTagEntry](Icc.IOhandler, Tag, binary.BigEndian) {
 			return false
 		}
 	}
@@ -1449,9 +1451,6 @@ func MemoryWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 		// If Stream is not a *FILENULL, do nothing
 		return false
 	}
-	if resData == nil {
-		return false
-	}
 
 	// Check for available space
 	if resData.Pointer+size > resData.Size {
@@ -1596,9 +1595,8 @@ Error:
 		}
 		cmsFree(ContextID, fm)
 	}
-	if iohandler != nil {
 		cmsFree(ContextID, iohandler)
-	}
+
 	return nil
 }
 

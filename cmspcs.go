@@ -136,10 +136,11 @@ func cmsLab2XYZ(whitePoint *cmsCIEXYZ, xyz *cmsCIEXYZ, lab *cmsCIELab) {
 }
 
 // Helper functions to convert Lab values to float and back
+//lint:ignore U1000 kept for parity with lcms; used in future ports
 func L2float2(v uint16) float64 {
 	return float64(v) / 652.800
 }
-
+//lint:ignore U1000 kept for parity with lcms; used in future ports
 func ab2float2(v uint16) float64 {
 	return float64(v)/256.0 - 128.0
 }
@@ -149,6 +150,7 @@ func L2Fix2(L float64) uint16 {
 	return cmsQuickSaturateWord(L * 652.8)
 }
 
+//lint:ignore U1000 kept for parity with lcms; used in future ports
 func ab2Fix2(ab float64) uint16 {
 	return cmsQuickSaturateWord((ab + 128.0) * 256.0)
 }
@@ -528,7 +530,7 @@ func cmsReasonableGridpointsByColorspace(Colorspace cmsColorSpaceSignature, Flag
 
 	nChannels := cmsChannelsOf(Colorspace)
 
-	if Flags&cmsFLAGS_HIGHRESPRECALC != 0 {
+	if Flags&CmsFLAGS_HIGHRESPRECALC != 0 {
 		if nChannels > 4 {
 			return 7
 		}
@@ -538,7 +540,7 @@ func cmsReasonableGridpointsByColorspace(Colorspace cmsColorSpaceSignature, Flag
 		return 49
 	}
 
-	if Flags&cmsFLAGS_LOWRESPRECALC != 0 {
+	if Flags&CmsFLAGS_LOWRESPRECALC != 0 {
 		if nChannels > 4 {
 			return 6
 		}
@@ -580,7 +582,7 @@ func cmsReasonableGridpointsByColorspace(Colorspace cmsColorSpaceSignature, Flag
 	)
 
 	switch space {
-	case cmsSigGrayData:
+	case CmsSigGrayData:
 		if white != nil {
 			*white = &GrayWhite[0]
 		}
@@ -592,7 +594,7 @@ func cmsReasonableGridpointsByColorspace(Colorspace cmsColorSpaceSignature, Flag
 		}
 		return true
 
-	case cmsSigRgbData:
+	case CmsSigRgbData:
 		if white != nil {
 			*white = &RGBwhite[0]
 		}
@@ -604,7 +606,7 @@ func cmsReasonableGridpointsByColorspace(Colorspace cmsColorSpaceSignature, Flag
 		}
 		return true
 
-	case cmsSigLabData:
+	case CmsSigLabData:
 		if white != nil {
 			*white = &LABwhite[0]
 		}
@@ -616,7 +618,7 @@ func cmsReasonableGridpointsByColorspace(Colorspace cmsColorSpaceSignature, Flag
 		}
 		return true
 
-	case cmsSigCmykData:
+	case CmsSigCmykData:
 		if white != nil {
 			*white = &CMYKwhite[0]
 		}
@@ -628,7 +630,7 @@ func cmsReasonableGridpointsByColorspace(Colorspace cmsColorSpaceSignature, Flag
 		}
 		return true
 
-	case cmsSigCmyData:
+	case CmsSigCmyData:
 		if white != nil {
 			*white = &CMYwhite[0]
 		}
@@ -665,7 +667,7 @@ func cmsEndPointsBySpace(
 	)
 
 	switch space {
-	case cmsSigGrayData:
+	case CmsSigGrayData:
 		if white != nil {
 			*white = GrayWhite
 		}
@@ -677,7 +679,7 @@ func cmsEndPointsBySpace(
 		}
 		return true
 
-	case cmsSigRgbData:
+	case CmsSigRgbData:
 		if white != nil {
 			*white = RGBwhite
 		}
@@ -689,7 +691,7 @@ func cmsEndPointsBySpace(
 		}
 		return true
 
-	case cmsSigLabData:
+	case CmsSigLabData:
 		if white != nil {
 			*white = LABwhite
 		}
@@ -701,7 +703,7 @@ func cmsEndPointsBySpace(
 		}
 		return true
 
-	case cmsSigCmykData:
+	case CmsSigCmykData:
 		if white != nil {
 			*white = CMYKwhite
 		}
@@ -713,7 +715,7 @@ func cmsEndPointsBySpace(
 		}
 		return true
 
-	case cmsSigCmyData:
+	case CmsSigCmyData:
 		if white != nil {
 			*white = CMYwhite
 		}
@@ -734,59 +736,59 @@ func cmsEndPointsBySpace(
 func cmsICCcolorSpace(ourNotation int) cmsColorSpaceSignature {
 	switch ourNotation {
 	case 1, PT_GRAY:
-		return cmsSigGrayData
+		return CmsSigGrayData
 	case 2, PT_RGB:
-		return cmsSigRgbData
+		return CmsSigRgbData
 	case PT_CMY:
-		return cmsSigCmyData
+		return CmsSigCmyData
 	case PT_CMYK:
-		return cmsSigCmykData
+		return CmsSigCmykData
 	case PT_YCbCr:
-		return cmsSigYCbCrData
+		return CmsSigYCbCrData
 	case PT_YUV:
-		return cmsSigLuvData
+		return CmsSigLuvData
 	case PT_XYZ:
-		return cmsSigXYZData
+		return CmsSigXYZData
 	case PT_LabV2, PT_Lab:
-		return cmsSigLabData
+		return CmsSigLabData
 	case PT_YUVK:
-		return cmsSigLuvKData
+		return CmsSigLuvKData
 	case PT_HSV:
-		return cmsSigHsvData
+		return CmsSigHsvData
 	case PT_HLS:
-		return cmsSigHlsData
+		return CmsSigHlsData
 	case PT_Yxy:
-		return cmsSigYxyData
+		return CmsSigYxyData
 	case PT_MCH1:
-		return cmsSigMCH1Data
+		return CmsSigMCH1Data
 	case PT_MCH2:
-		return cmsSigMCH2Data
+		return CmsSigMCH2Data
 	case PT_MCH3:
-		return cmsSigMCH3Data
+		return CmsSigMCH3Data
 	case PT_MCH4:
-		return cmsSigMCH4Data
+		return CmsSigMCH4Data
 	case PT_MCH5:
-		return cmsSigMCH5Data
+		return CmsSigMCH5Data
 	case PT_MCH6:
-		return cmsSigMCH6Data
+		return CmsSigMCH6Data
 	case PT_MCH7:
-		return cmsSigMCH7Data
+		return CmsSigMCH7Data
 	case PT_MCH8:
-		return cmsSigMCH8Data
+		return CmsSigMCH8Data
 	case PT_MCH9:
-		return cmsSigMCH9Data
+		return CmsSigMCH9Data
 	case PT_MCH10:
-		return cmsSigMCHAData
+		return CmsSigMCHAData
 	case PT_MCH11:
-		return cmsSigMCHBData
+		return CmsSigMCHBData
 	case PT_MCH12:
-		return cmsSigMCHCData
+		return CmsSigMCHCData
 	case PT_MCH13:
-		return cmsSigMCHDData
+		return CmsSigMCHDData
 	case PT_MCH14:
-		return cmsSigMCHEData
+		return CmsSigMCHEData
 	case PT_MCH15:
-		return cmsSigMCHFData
+		return CmsSigMCHFData
 	default:
 		return cmsColorSpaceSignature(0)
 	}
@@ -795,59 +797,59 @@ func cmsICCcolorSpace(ourNotation int) cmsColorSpaceSignature {
 // Translate from ICC representation to our colorspace.
 func cmsLCMScolorSpace(profileSpace cmsColorSpaceSignature) int {
 	switch profileSpace {
-	case cmsSigGrayData:
+	case CmsSigGrayData:
 		return PT_GRAY
-	case cmsSigRgbData:
+	case CmsSigRgbData:
 		return PT_RGB
-	case cmsSigCmyData:
+	case CmsSigCmyData:
 		return PT_CMY
-	case cmsSigCmykData:
+	case CmsSigCmykData:
 		return PT_CMYK
-	case cmsSigYCbCrData:
+	case CmsSigYCbCrData:
 		return PT_YCbCr
-	case cmsSigLuvData:
+	case CmsSigLuvData:
 		return PT_YUV
-	case cmsSigXYZData:
+	case CmsSigXYZData:
 		return PT_XYZ
-	case cmsSigLabData:
+	case CmsSigLabData:
 		return PT_Lab
-	case cmsSigLuvKData:
+	case CmsSigLuvKData:
 		return PT_YUVK
-	case cmsSigHsvData:
+	case CmsSigHsvData:
 		return PT_HSV
-	case cmsSigHlsData:
+	case CmsSigHlsData:
 		return PT_HLS
-	case cmsSigYxyData:
+	case CmsSigYxyData:
 		return PT_Yxy
-	case cmsSigMCH1Data, cmsSig1colorData:
+	case CmsSigMCH1Data, CmsSig1colorData:
 		return PT_MCH1
-	case cmsSigMCH2Data, cmsSig2colorData:
+	case CmsSigMCH2Data, CmsSig2colorData:
 		return PT_MCH2
-	case cmsSigMCH3Data, cmsSig3colorData:
+	case CmsSigMCH3Data, CmsSig3colorData:
 		return PT_MCH3
-	case cmsSigMCH4Data, cmsSig4colorData:
+	case CmsSigMCH4Data, CmsSig4colorData:
 		return PT_MCH4
-	case cmsSigMCH5Data, cmsSig5colorData:
+	case CmsSigMCH5Data, CmsSig5colorData:
 		return PT_MCH5
-	case cmsSigMCH6Data, cmsSig6colorData:
+	case CmsSigMCH6Data, CmsSig6colorData:
 		return PT_MCH6
-	case cmsSigMCH7Data, cmsSig7colorData:
+	case CmsSigMCH7Data, CmsSig7colorData:
 		return PT_MCH7
-	case cmsSigMCH8Data, cmsSig8colorData:
+	case CmsSigMCH8Data, CmsSig8colorData:
 		return PT_MCH8
-	case cmsSigMCH9Data, cmsSig9colorData:
+	case CmsSigMCH9Data, CmsSig9colorData:
 		return PT_MCH9
-	case cmsSigMCHAData, cmsSig10colorData:
+	case CmsSigMCHAData, CmsSig10colorData:
 		return PT_MCH10
-	case cmsSigMCHBData, cmsSig11colorData:
+	case CmsSigMCHBData, CmsSig11colorData:
 		return PT_MCH11
-	case cmsSigMCHCData, cmsSig12colorData:
+	case CmsSigMCHCData, CmsSig12colorData:
 		return PT_MCH12
-	case cmsSigMCHDData, cmsSig13colorData:
+	case CmsSigMCHDData, CmsSig13colorData:
 		return PT_MCH13
-	case cmsSigMCHEData, cmsSig14colorData:
+	case CmsSigMCHEData, CmsSig14colorData:
 		return PT_MCH14
-	case cmsSigMCHFData, cmsSig15colorData:
+	case CmsSigMCHFData, CmsSig15colorData:
 		return PT_MCH15
 	default:
 		return 0
@@ -857,35 +859,35 @@ func cmsLCMScolorSpace(profileSpace cmsColorSpaceSignature) int {
 // Get the number of channels in a color space
 func cmsChannelsOfColorSpace(ColorSpace cmsColorSpaceSignature) int32 {
 	switch ColorSpace {
-	case cmsSigGrayData, cmsSig1colorData, cmsSigMCH1Data:
+	case CmsSigGrayData, CmsSig1colorData, CmsSigMCH1Data:
 		return 1
-	case cmsSig2colorData, cmsSigMCH2Data:
+	case CmsSig2colorData, CmsSigMCH2Data:
 		return 2
-	case cmsSigRgbData, cmsSigLabData, cmsSigXYZData, cmsSigYCbCrData, cmsSigYxyData, cmsSigHsvData, cmsSigHlsData, cmsSigCmyData, cmsSig3colorData, cmsSigMCH3Data:
+	case CmsSigRgbData, CmsSigLabData, CmsSigXYZData, CmsSigYCbCrData, CmsSigYxyData, CmsSigHsvData, CmsSigHlsData, CmsSigCmyData, CmsSig3colorData, CmsSigMCH3Data:
 		return 3
-	case cmsSigCmykData, cmsSig4colorData, cmsSigMCH4Data:
+	case CmsSigCmykData, CmsSig4colorData, CmsSigMCH4Data:
 		return 4
-	case cmsSig5colorData, cmsSigMCH5Data:
+	case CmsSig5colorData, CmsSigMCH5Data:
 		return 5
-	case cmsSig6colorData, cmsSigMCH6Data:
+	case CmsSig6colorData, CmsSigMCH6Data:
 		return 6
-	case cmsSig7colorData, cmsSigMCH7Data:
+	case CmsSig7colorData, CmsSigMCH7Data:
 		return 7
-	case cmsSig8colorData, cmsSigMCH8Data:
+	case CmsSig8colorData, CmsSigMCH8Data:
 		return 8
-	case cmsSig9colorData, cmsSigMCH9Data:
+	case CmsSig9colorData, CmsSigMCH9Data:
 		return 9
-	case cmsSig10colorData, cmsSigMCHAData:
+	case CmsSig10colorData, CmsSigMCHAData:
 		return 10
-	case cmsSig11colorData, cmsSigMCHBData:
+	case CmsSig11colorData, CmsSigMCHBData:
 		return 11
-	case cmsSig12colorData, cmsSigMCHCData:
+	case CmsSig12colorData, CmsSigMCHCData:
 		return 12
-	case cmsSig13colorData, cmsSigMCHDData:
+	case CmsSig13colorData, CmsSigMCHDData:
 		return 13
-	case cmsSig14colorData, cmsSigMCHEData:
+	case CmsSig14colorData, CmsSigMCHEData:
 		return 14
-	case cmsSig15colorData, cmsSigMCHFData:
+	case CmsSig15colorData, CmsSigMCHFData:
 		return 15
 	default:
 		return -1
