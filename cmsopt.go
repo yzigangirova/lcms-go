@@ -235,7 +235,7 @@ func Eval16nop1D(Input []uint16, Output []uint16, params *cmsInterpParams) {
 }
 
 // PrelinEval16 implements the optimized interpolation for 16-bit input
-func PrelinEval16(ar *arena.Arena, Input []uint16, Output []uint16, D interface{}) {
+func PrelinEval16(ar *arena.Arena, Input []uint16, Output []uint16, D any) {
 	p16, ok := D.(*Prelin16Data)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *Prelin16Data\n")
@@ -260,7 +260,7 @@ func PrelinEval16(ar *arena.Arena, Input []uint16, Output []uint16, D interface{
 }
 
 // PrelinOpt16free frees memory associated with Prelin16Data
-func PrelinOpt16free(ContextID CmsContext, ptr interface{}) {
+func PrelinOpt16free(ContextID CmsContext, ptr any) {
 	p16, ok := ptr.(*Prelin16Data)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *Prelin16Data\n")
@@ -271,7 +271,7 @@ func PrelinOpt16free(ContextID CmsContext, ptr interface{}) {
 
 // Prelin16dup duplicates the Prelin16Data structure
 
-func Prelin16dup(_ CmsContext, ptr interface{}) interface{} {
+func Prelin16dup(_ CmsContext, ptr any) any {
 	p16, ok := ptr.(*Prelin16Data)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *Prelin16Data\n")
@@ -349,7 +349,7 @@ func PrelinOpt16alloc(ar *arena.Arena, ContextID CmsContext, ColorMap *cmsInterp
 
 const PRELINEARIZATION_POINTS = 4096
 
-func XFormSampler16(ar *arena.Arena, In []uint16, Out []uint16, cargo interface{}) int32 {
+func XFormSampler16(ar *arena.Arena, In []uint16, Out []uint16, cargo any) int32 {
 	Lut, ok := cargo.(*cmsPipeline)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsPipeline\n")
@@ -686,7 +686,7 @@ func OptimizeByResampling(ar *arena.Arena, Lut **cmsPipeline, Intent uint32, Inp
 
 	if DataSetIn == nil && DataSetOut == nil {
 		cmsPipelineSetOptimizationParameters(Dest,
-			func(ar *arena.Arena, In, Out []uint16, Data interface{}) {
+			func(ar *arena.Arena, In, Out []uint16, Data any) {
 				Data.(*cmsInterpParams).Interpolation.Lerp16(In, Out, Data.(*cmsInterpParams))
 			},
 			DataCLUT.Params, nil, nil)
@@ -799,11 +799,11 @@ func PrelinOpt8alloc(ar *arena.Arena, ContextID CmsContext, p *cmsInterpParams, 
 	return p8
 }
 
-func Prelin8free(ContextID CmsContext, ptr interface{}) {
+func Prelin8free(ContextID CmsContext, ptr any) {
 	cmsFree(ContextID, ptr)
 }
 
-func Prelin8dup(ContextID CmsContext, ptr interface{}) interface{} {
+func Prelin8dup(ContextID CmsContext, ptr any) any {
 	p, ok := ptr.(*Prelin8Data)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *Prelin8Data\n")
@@ -814,7 +814,7 @@ func Prelin8dup(ContextID CmsContext, ptr interface{}) interface{} {
 	return copied
 }
 
-func PrelinEval8(ar *arena.Arena, Input []uint16, Output []uint16, D interface{}) {
+func PrelinEval8(ar *arena.Arena, Input []uint16, Output []uint16, D any) {
 	var r, g, b uint8
 	var rx, ry, rz cmsS15Fixed16Number
 	var c0, c1, c2, c3, Rest cmsS15Fixed16Number
@@ -830,8 +830,8 @@ func PrelinEval8(ar *arena.Arena, Input []uint16, Output []uint16, D interface{}
 	// Ensure `p.Table` is a `[]uint16`
 	LutTable, ok := p.Table.([]uint16)
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "p.Table is not of type []uint16 in LinLerp1D")
-		return
+		panic("p.Table is not of type []uint16 in LinLerp1D")
+		
 	}
 	// DENS implementation
 	DENS := func(i, j, k, outChan uint32) cmsS15Fixed16Number {
@@ -1136,12 +1136,12 @@ func ConvertToToneCurveArray(curves []*CmsToneCurve) [3]*CmsToneCurve {
 	copy(result[:], curves[:3]) // Convert slice to array
 	return result
 }
-func CurvesFree(ContextID CmsContext, ptr interface{}) {
+func CurvesFree(ContextID CmsContext, ptr any) {
 	cmsFree(ContextID, ptr)
 }
 
 // CurvesDup duplicates a Curves16Data structure
-func CurvesDup(ContextID CmsContext, ptr interface{}) interface{} {
+func CurvesDup(ContextID CmsContext, ptr any) any {
 	srcData, ok := ptr.(*Curves16Data)
 	if srcData == nil {
 		return nil
@@ -1197,7 +1197,7 @@ func CurvesAlloc(ContextID CmsContext, nCurves, nElements uint32, G []*CmsToneCu
 	return c16
 }
 
-func FastEvaluateCurves8(ar *arena.Arena, In []uint16, Out []uint16, D interface{}) {
+func FastEvaluateCurves8(ar *arena.Arena, In []uint16, Out []uint16, D any) {
 	data, ok := D.(*Curves16Data)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *Curves16Data\n")
@@ -1226,7 +1226,7 @@ func FastEvaluateCurves8(ar *arena.Arena, In []uint16, Out []uint16, D interface
 	}
 }
 
-func FastEvaluateCurves16(ar *arena.Arena, In []uint16, Out []uint16, D interface{}) {
+func FastEvaluateCurves16(ar *arena.Arena, In []uint16, Out []uint16, D any) {
 	data, ok := D.(*Curves16Data)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *Curves16Data\n")
@@ -1250,7 +1250,7 @@ func FastEvaluateCurves16(ar *arena.Arena, In []uint16, Out []uint16, D interfac
 		Out[i] = data.Curves[i][inValue]
 	}
 }
-func FastIdentity16(ar *arena.Arena, In []uint16, Out []uint16, D interface{}) {
+func FastIdentity16(ar *arena.Arena, In []uint16, Out []uint16, D any) {
 	Lut, ok := D.(*cmsPipeline)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsPipeline\n")
@@ -1406,12 +1406,12 @@ Error:
 	return false
 }
 
-func FreeMatShaper(ContextID CmsContext, Data interface{}) {
+func FreeMatShaper(ContextID CmsContext, Data any) {
 	if Data != nil {
 		cmsFree(ContextID, Data)
 	}
 }
-func DupMatShaper(ContextID CmsContext, Data interface{}) interface{} {
+func DupMatShaper(ContextID CmsContext, Data any) any {
 	p, ok := Data.(*MatShaper8Data)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *MatShaper8Data\n")
@@ -1420,7 +1420,7 @@ func DupMatShaper(ContextID CmsContext, Data interface{}) interface{} {
 	copied := *p // struct copy
 	return &copied
 }
-func MatShaperEval16(ar *arena.Arena, In []uint16, Out []uint16, D interface{}) {
+func MatShaperEval16(ar *arena.Arena, In []uint16, Out []uint16, D any) {
 	p, ok := D.(*MatShaper8Data)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *MatShaper8Data\n")
@@ -1759,8 +1759,8 @@ func cmsRegisterOptimizationPlugin(ar *arena.Arena, ContextID CmsContext, Data P
 	}
 	plugin, ok := Data.(*cmsPluginOptimization)
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginOptimization\n")
-		return false
+		panic("Plugin is not of the type cmsPluginOptimization\n")
+	
 	}
 	var newNode *cmsOptimizationCollection
 	// Ensure the optimizer callback is present.

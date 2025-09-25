@@ -123,7 +123,6 @@ func cmsMAT3perFromSlices(a, b []float64) cmsMAT3 {
 	}
 }
 
-
 // Inverse of a matrix b = a^(-1)
 func cmsMAT3inverse(a, b *cmsMAT3) bool {
 	var det, c0, c1, c2 float64
@@ -162,7 +161,6 @@ func cmsMAT3solve(x *cmsVEC3, a *cmsMAT3, b *cmsVEC3) bool {
 	cmsMAT3eval(x, &a_1, b)
 	return true
 }
-
 
 // Evaluate a vector across a matrix
 func cmsMAT3eval(r *cmsVEC3, a *cmsMAT3, v *cmsVEC3) {

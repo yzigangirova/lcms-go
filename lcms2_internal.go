@@ -226,7 +226,7 @@ type cmsTRANSFORM struct {
 	AdaptationState float64                // float64
 	RenderingIntent uint32                 // uint32
 	ContextID       CmsContext             // CmsContext
-	UserData        interface{}            // void*
+	UserData        any                    // void*
 	FreeUserData    cmsFreeUserDataFn      // cmsFreeUserDataFn (function pointer, requires C interop)
 	OldXform        cmsTransformFn         // cmsTransformFn (function pointer, requires C interop)
 	Worker          cmsTransform2Fn        // cmsTransform2Fn (function pointer, requires C interop)
@@ -287,7 +287,7 @@ type cmsStage struct {
 	EvalPtr        cmsStageEvalFn     // Points to fn that evaluates the stage (always in floating point)
 	DupElemPtr     cmsStageDupElemFn  // Points to a fn that duplicates the *data* of the stage
 	FreePtr        cmsStageFreeElemFn // Points to a fn that sets the *data* of the stage free
-	Data           interface{}        // A generic pointer to whatever memory needed by the stage
+	Data           any                // A generic pointer to whatever memory needed by the stage
 	Next           *cmsStage          // Pointer to the next stage in the linked list
 }
 
@@ -296,7 +296,7 @@ type cmsStage struct {
 // Pipelines, Multi Process Elements.
 // Define function pointer types
 type cmsStageEvalFn func(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage)
-type cmsStageDupElemFn func(ar *arena.Arena, mpe *cmsStage) interface{}
+type cmsStageDupElemFn func(ar *arena.Arena, mpe *cmsStage) any
 type cmsStageFreeElemFn func(ar *arena.Arena, mpe *cmsStage)
 
 type cmsPipeline struct {
@@ -305,7 +305,7 @@ type cmsPipeline struct {
 	OutputChannels uint32
 
 	// Data & evaluators
-	Data interface{}
+	Data any
 
 	Eval16Fn    cmsPipelineEval16Fn
 	EvalFloatFn cmsPipelineEvalFloatFn
@@ -335,9 +335,9 @@ type cmsMLU struct {
 	UsedEntries      uint32 // Number of used entries
 	Entries          []cmsMLUentry
 
-	PoolSize uint32      // Maximum allocated size of the pool
-	PoolUsed uint32      // Currently used size of the pool
-	MemPool  interface{} // Pointer to the beginning of the memory pool
+	PoolSize uint32 // Maximum allocated size of the pool
+	PoolUsed uint32 // Currently used size of the pool
+	MemPool  any    // Pointer to the beginning of the memory pool
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -619,7 +619,7 @@ func SliceToVec(s []float64) cmsVEC3 {
 
 // memset sets a block of memory to a specified value.
 // Equivalent to C's memset function.
-func memset(ptr interface{}, value int, num uintptr) {
+func memset(ptr any, value int, num uintptr) {
 	// Convert value to byte (0-255).
 	byteValue := byte(value)
 

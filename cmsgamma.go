@@ -48,8 +48,8 @@ func cmsRegisterParametricCurvesPlugin(ar *arena.Arena, ContextID CmsContext, Da
 	}
 	plugin, ok := Data.(*cmsPluginParametricCurves)
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginParametricCurves\n")
-		return false
+		panic("Plugin is not of the type cmsPluginParametricCurves\n")
+		
 	}
 	// Allocate memory for a new parametric curves collection.
 	//fl = (*cmsParametricCurvesCollection)(cmsPluginMalloc(ContextID, uint32(unsafe.Sizeof(cmsParametricCurvesCollection{}))))
@@ -340,9 +340,8 @@ func cmsIsToneCurveLinear(Curve *CmsToneCurve) bool {
 
 // cmsIsToneCurveMonotonic checks if a tone curve is monotonic.
 func cmsIsToneCurveMonotonic(t *CmsToneCurve) bool {
-	if t == nil {
-		panic("ToneCurve cannot be nil")
-	}
+    cmsAssert(t != nil,"ToneCurve cannot be nil")
+
 
 	// Degenerate curves are monotonic. Allow them.
 	n := t.nEntries
@@ -378,17 +377,15 @@ func cmsIsToneCurveMonotonic(t *CmsToneCurve) bool {
 
 // cmsIsToneCurveDescending checks if a tone curve is descending.
 func cmsIsToneCurveDescending(t *CmsToneCurve) bool {
-	if t == nil {
-		panic("ToneCurve cannot be nil")
-	}
+  cmsAssert(t != nil,"ToneCurve cannot be nil")
+
 	return t.Table16[0] > t.Table16[t.nEntries-1]
 }
 
 // cmsIsToneCurveMultisegment checks if a tone curve is multisegment.
 func cmsIsToneCurveMultisegment(t *CmsToneCurve) bool {
-	if t == nil {
-		panic("ToneCurve cannot be nil")
-	}
+  cmsAssert(t != nil,"ToneCurve cannot be nil")
+
 
 	return t.nSegments > 1
 }
@@ -396,9 +393,8 @@ func cmsIsToneCurveMultisegment(t *CmsToneCurve) bool {
 // cmsGetToneCurveParametricType retrieves the parametric type of a tone curve.
 // Returns 0 if the tone curve is not parametric or multisegment.
 func cmsGetToneCurveParametricType(t *CmsToneCurve) int32 {
-	if t == nil {
-		panic("ToneCurve cannot be nil")
-	}
+  cmsAssert(t != nil,"ToneCurve cannot be nil")
+
 
 	// Check if the tone curve has only one segment
 	if t.nSegments != 1 {
@@ -411,9 +407,8 @@ func cmsGetToneCurveParametricType(t *CmsToneCurve) int32 {
 func cmsEvalToneCurveFloat(curve *CmsToneCurve, v float32) float32 {
 	//fmt.Printf("cmsEvalToneCurveFloat %.7f\n", v)
 
-	if curve == nil {
-		panic("ToneCurve cannot be nil")
-	}
+  cmsAssert(curve != nil,"ToneCurve cannot be nil")
+
 	// Check if this is a limited-precision tone curve with 16-bit table.
 	if curve.nSegments == 0 {
 		inValue := uint16(cmsQuickSaturateWord(float64(v) * 65535.0))
@@ -426,7 +421,6 @@ func cmsEvalToneCurveFloat(curve *CmsToneCurve, v float32) float32 {
 	return float32(EvalSegmentedFn(curve, float64(v)))
 }
 
-// cmsEvalToneCurve16 evaluates a tone curve at a specific point (16-bit input and output).
 /*func cmsEvalToneCurve16(Curve *CmsToneCurve, v uint16) uint16 {
 	var out uint16
 
@@ -443,6 +437,7 @@ var toneBufferPool = sync.Pool{
 	},
 }
 
+// cmsEvalToneCurve16 evaluates a tone curve at a specific point (16-bit input and output).
 func cmsEvalToneCurve16(Curve *CmsToneCurve, v uint16) uint16 {
 	cmsAssert(Curve != nil, "curve is nil")
 
@@ -498,9 +493,8 @@ func cmsEstimateGamma(t *CmsToneCurve, Precision float64) float64 {
 }
 func cmsGetToneCurveParams(t *CmsToneCurve) []float64 {
 	// Ensure the tone curve is not nil
-	if t == nil {
-		panic("CmsToneCurve is nil")
-	}
+  cmsAssert(t != nil,"ToneCurve cannot be nil")
+
 
 	// Check if the curve has only one segment
 	if t.nSegments != 1 {
@@ -798,9 +792,7 @@ func DefaultEvalParametricFn(Type int32, Params []float64, R float64) float64 {
 // EvalSegmentedFn evaluates a segmented function for a single value.
 // Returns math.Inf(-1) if no valid segment is found.
 // If the function type is 0, performs interpolation on the table.
-// EvalSegmentedFn evaluates a segmented function for a single value.
-// Returns math.Inf(-1) if no valid segment is found.
-// If the function type is 0, performs interpolation on the table.
+
 func EvalSegmentedFn(g *CmsToneCurve, R float64) float64 {
 	//fmt.Println("start EvalSegmentedFn")
 	var Out float64
@@ -818,8 +810,7 @@ func EvalSegmentedFn(g *CmsToneCurve, R float64) float64 {
 				// Ensure Table is of type []float32
 				table, ok := g.SegInterp[i].Table.([]float32)
 				if !ok {
-					cmsSignalError(nil, cmsERROR_UNDEFINED, "Table is not of type []float32")
-					return math.Inf(-1) // Return invalid result
+					panic("Table is not of type []float32")
 				}
 
 				// Copy SampledPoints into Table

@@ -23,7 +23,7 @@ func cmsChain2Lab(ar *arena.Arena, ContextID CmsContext,
 	}
 
 	// Create Lab profile
-	hLab := cmsCreateLab4ProfileTHR(ar,ContextID, nil)
+	hLab := cmsCreateLab4ProfileTHR(ar, ContextID, nil)
 	if hLab == nil {
 		return nil
 	}
@@ -49,7 +49,7 @@ func cmsChain2Lab(ar *arena.Arena, ContextID CmsContext,
 	IntentList[nProfiles] = INTENT_RELATIVE_COLORIMETRIC
 
 	// Create the transform
-	xform := cmsCreateExtendedTransform(ar,ContextID, nProfiles+1, ProfileList[:],
+	xform := cmsCreateExtendedTransform(ar, ContextID, nProfiles+1, ProfileList[:],
 		BPCList[:],
 		IntentList[:],
 		AdaptationList[:],
@@ -83,14 +83,14 @@ func ComputeKToLstar(ar *arena.Arena, ContextID CmsContext,
 	for i := uint32(0); i < nPoints; i++ {
 		cmyk := [4]float32{0, 0, 0, float32((float64(i) * 100.0) / float64(nPoints-1))}
 		var Lab cmsCIELab
-		CmsDoTransform(ar,xform, cmyk, Lab, 1)
+		CmsDoTransform(ar, xform, cmyk, Lab, 1)
 
 		// Calculate the offset for the current index and assign the value
 		SampledPoints[i] = float32(1.0 - Lab.L/100.0) // Negate K for easier operation
 	}
 
 	out := cmsBuildTabulatedToneCurveFloat(ar, ContextID, nPoints, SampledPoints)
-	cmsDeleteTransform(ar,xform)
+	cmsDeleteTransform(ar, xform)
 	return out
 }
 
@@ -159,7 +159,7 @@ type cmsTACestimator struct {
 }
 
 // EstimateTAC is the callback function to calculate maximum TAC.
-func EstimateTAC(ar *arena.Arena, in []uint16, out []uint16, cargo interface{}) int32 {
+func EstimateTAC(ar *arena.Arena, in []uint16, out []uint16, cargo any) int32 {
 	bp, ok := cargo.(*cmsTACestimator)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsTACestimator\n")
@@ -169,7 +169,7 @@ func EstimateTAC(ar *arena.Arena, in []uint16, out []uint16, cargo interface{}) 
 	var sum float32
 
 	// Evaluate the transform
-	CmsDoTransform(ar,bp.hRoundTrip, in, roundTrip, 1)
+	CmsDoTransform(ar, bp.hRoundTrip, in, roundTrip, 1)
 
 	// Sum all amounts of ink
 	for i := 0; i < int(bp.nOutputChans); i++ {
@@ -216,7 +216,7 @@ func cmsDetectTAC(ar *arena.Arena, hProfile CmsHPROFILE) float64 {
 		return 0
 	}
 
-	hLab := cmsCreateLab4ProfileTHR(ar,contextID, nil)
+	hLab := cmsCreateLab4ProfileTHR(ar, contextID, nil)
 	if hLab == nil {
 		return 0
 	}
@@ -246,7 +246,7 @@ func cmsDetectTAC(ar *arena.Arena, hProfile CmsHPROFILE) float64 {
 		bp.MaxTAC = 0
 	}
 
-	cmsDeleteTransform(ar,bp.hRoundTrip)
+	cmsDeleteTransform(ar, bp.hRoundTrip)
 
 	// Results in %
 	return float64(bp.MaxTAC)
@@ -264,13 +264,9 @@ type GAMUTCHAIN struct {
 
 const ERR_THRESHOLD = 5
 
-// This sampler does compute gamut boundaries by comparing original
-// values with a transform going back and forth. Values above ERR_THRESHOLD
-// of maximum are considered out of gamut.
-
 // GamutSampler computes gamut boundaries by comparing original values with a transform
 // going back and forth. Values above ERR_THRESHOLD are considered out of gamut.
-func GamutSampler(ar *arena.Arena, In []uint16, Out []uint16, cargo interface{}) int32 {
+func GamutSampler(ar *arena.Arena, In []uint16, Out []uint16, cargo any) int32 {
 	t, ok := cargo.(*GAMUTCHAIN)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *GAMUTCHAIN\n")
@@ -288,14 +284,14 @@ func GamutSampler(ar *arena.Arena, In []uint16, Out []uint16, cargo interface{})
 	// Convert input to Lab
 	//CmsDoTransform(t.hInput, In,LabIn1, 1)
 	LabIn1Slice := LabToSlice(LabIn1)
-	CmsDoTransform(ar,t.hInput, In, LabIn1Slice, 1)
+	CmsDoTransform(ar, t.hInput, In, LabIn1Slice, 1)
 
 	// Convert from PCS to colorant. This always returns in-gamut values.
-	CmsDoTransform(ar,t.hForward, LabIn1Slice, Proof[:], 1)
+	CmsDoTransform(ar, t.hForward, LabIn1Slice, Proof[:], 1)
 
 	// Convert from colorant to PCS.
 	LabOut1Slice := LabToSlice(LabOut1)
-	CmsDoTransform(ar,t.hReverse, Proof[:], LabOut1Slice, 1)
+	CmsDoTransform(ar, t.hReverse, Proof[:], LabOut1Slice, 1)
 
 	// Copy LabOut1 to LabIn2
 
@@ -305,9 +301,9 @@ func GamutSampler(ar *arena.Arena, In []uint16, Out []uint16, cargo interface{})
 	LabIn1 = SliceToLab(LabIn1Slice)
 	LabIn2 = SliceToLab(LabIn2Slice)
 	// Forward and reverse transform again, using LabOut1 as input
-	CmsDoTransform(ar,t.hForward, LabOut1Slice, Proof2[:], 1)
+	CmsDoTransform(ar, t.hForward, LabOut1Slice, Proof2[:], 1)
 	LabOut2Slice := LabToSlice(LabOut2)
-	CmsDoTransform(ar,t.hReverse, Proof2[:], LabOut2Slice, 1)
+	CmsDoTransform(ar, t.hReverse, Proof2[:], LabOut2Slice, 1)
 	LabOut2 = SliceToLab(LabOut2Slice)
 	LabOut1 = SliceToLab(LabOut1Slice)
 
@@ -378,7 +374,7 @@ func cmsCreateGamutCheckPipeline(
 		return nil
 	}
 
-	hLab = cmsCreateLab4ProfileTHR(ar,ContextID, nil)
+	hLab = cmsCreateLab4ProfileTHR(ar, ContextID, nil)
 	if hLab == nil {
 		return nil
 	}
@@ -447,12 +443,12 @@ func cmsCreateGamutCheckPipeline(
 		// Compute gamut LUT
 		Gamut = cmsPipelineAlloc(ar, ContextID, 3, 1)
 		if Gamut != nil {
-			CLUT = cmsStageAllocCLut16bit(ar,ContextID, nGridpoints, uint32(nChannels), 1, nil)
+			CLUT = cmsStageAllocCLut16bit(ar, ContextID, nGridpoints, uint32(nChannels), 1, nil)
 			if !cmsPipelineInsertStage(Gamut, CmsAT_BEGIN, CLUT) {
-				cmsPipelineFree(ar,Gamut)
+				cmsPipelineFree(ar, Gamut)
 				Gamut = nil
 			} else {
-				cmsStageSampleCLut16bit(ar,CLUT, GamutSampler, &Chain, 0)
+				cmsStageSampleCLut16bit(ar, CLUT, GamutSampler, &Chain, 0)
 			}
 		}
 	} else {
@@ -461,15 +457,14 @@ func cmsCreateGamutCheckPipeline(
 
 	// Free resources
 	if Chain.hInput != nil {
-		cmsDeleteTransform(ar,Chain.hInput)
+		cmsDeleteTransform(ar, Chain.hInput)
 	}
 	if Chain.hForward != nil {
-		cmsDeleteTransform(ar,Chain.hForward)
+		cmsDeleteTransform(ar, Chain.hForward)
 	}
 	if Chain.hReverse != nil {
-		cmsDeleteTransform(ar,Chain.hReverse)
+		cmsDeleteTransform(ar, Chain.hReverse)
 	}
-
 
 	// Return the computed LUT
 	return Gamut
@@ -505,13 +500,13 @@ func cmsDetectRGBProfileGamma(ar *arena.Arena, hProfile CmsHPROFILE, threshold f
 
 	// Obtain the context ID and create an XYZ profile
 	ContextID = cmsGetProfileContextID(hProfile)
-	hXYZ = cmsCreateXYZProfileTHR(ar,ContextID)
+	hXYZ = cmsCreateXYZProfileTHR(ar, ContextID)
 	if hXYZ == nil {
 		return -1
 	}
 
 	// Create a transform from RGB to XYZ
-	xform = cmsCreateTransformTHR(ar,ContextID, hProfile, TYPE_RGB_16, hXYZ, TYPE_XYZ_DBL,
+	xform = cmsCreateTransformTHR(ar, ContextID, hProfile, TYPE_RGB_16, hXYZ, TYPE_XYZ_DBL,
 		INTENT_RELATIVE_COLORIMETRIC, CmsFLAGS_NOOPTIMIZE)
 
 	if xform == nil {
@@ -527,10 +522,10 @@ func cmsDetectRGBProfileGamma(ar *arena.Arena, hProfile CmsHPROFILE, threshold f
 	}
 
 	// Perform the transform
-	CmsDoTransform(ar,xform, rgb[:], XYZ[:], 256)
+	CmsDoTransform(ar, xform, rgb[:], XYZ[:], 256)
 
 	// Clean up the transform and XYZ profile
-	cmsDeleteTransform(ar,xform)
+	cmsDeleteTransform(ar, xform)
 	CmsCloseProfile(ar, hXYZ)
 
 	// Normalize the Y component

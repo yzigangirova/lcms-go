@@ -65,8 +65,6 @@ func from8to16(dst, src any) {
 	dstSlice[0] = uint16(FROM_8_TO_16(n)) // Convert and store in first uint16
 }
 
-
-
 // Converts from 8-bit to 16-bit with endian swap
 func from8to16SE(dst, src any) {
 	srcBytes, okSrc := src.([]uint8)
@@ -130,7 +128,7 @@ func from8toHLF(dst, src any) {
 	}
 
 	n := float32(srcBytes[0]) / 255.0
-	dstBytes[0] = cmsFloat2Half(n) 
+	dstBytes[0] = cmsFloat2Half(n)
 }
 
 // Converts from 16-bit to 8-bit
@@ -612,7 +610,7 @@ var FormatterAlpha = [6][6]cmsFormatterAlphaFn{
 }
 
 // cmsGetFormatterAlpha implements the logic
-func cmsGetFormatterAlpha(id interface{}, in, out uint32) (cmsFormatterAlphaFn) {
+func cmsGetFormatterAlpha(id any, in, out uint32) cmsFormatterAlphaFn {
 	inN := FormatterPos(in)
 	outN := FormatterPos(out)
 
@@ -780,7 +778,6 @@ func cmsHandleExtraChannels(
 	if copyValueFn == nil {
 		return
 	}
-
 
 	if nExtra == 1 { // Optimized routine for single extra channel
 		var SourceStrideIncrement, DestStrideIncrement uint32

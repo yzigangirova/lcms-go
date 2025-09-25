@@ -50,7 +50,7 @@ func SearchIntent(ContextID CmsContext, Intent uint32) *cmsIntentsList {
 	// Retrieve the plugin chunk for intents
 	ctx, ok := CmsContextGetClientChunk(ContextID, IntentPlugin).(*cmsIntentsPluginChunkType)
 	if !ok {
-		cmsSignalError(ContextID, cmsERROR_UNDEFINED,"Error: Interface data assertion error, not cmsIntentsPluginChunkType\n")
+		cmsSignalError(ContextID, cmsERROR_UNDEFINED, "Error: Interface data assertion error, not cmsIntentsPluginChunkType\n")
 		return nil
 	}
 	// Search in the plugin intents list
@@ -601,7 +601,7 @@ type GrayOnlyParams struct {
 }
 
 // BlackPreservingGrayOnlySampler preserves black-only CMYK transformations.
-func BlackPreservingGrayOnlySampler(ar *arena.Arena, In []uint16, Out []uint16, cargo interface{}) int32 {
+func BlackPreservingGrayOnlySampler(ar *arena.Arena, In []uint16, Out []uint16, cargo any) int32 {
 	bp, ok := cargo.(*GrayOnlyParams)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *GrayOnlyParams \n")
@@ -750,10 +750,10 @@ type PreserveKPlaneParams struct {
 }
 
 // BlackPreservingSampler performs sampling for K-plane preservation.
-func BlackPreservingSampler(ar *arena.Arena, In, Out []uint16, cargo interface{}) int32 {
+func BlackPreservingSampler(ar *arena.Arena, In, Out []uint16, cargo any) int32 {
 	bp, ok := cargo.(*PreserveKPlaneParams)
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED,  "Interface data assertion error,not PreserveKPlaneParams\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error,not PreserveKPlaneParams\n")
 		return 0
 	}
 	var Inf, Outf, LabK [4]float32
@@ -1023,8 +1023,7 @@ func cmsRegisterRenderingIntentPlugin(ar *arena.Arena, id CmsContext, Data Plugi
 
 	plugin, ok := Data.(*cmsPluginRenderingIntent)
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginRenderingIntent\n")
-		return false
+		panic("Plugin is not of the type cmsPluginRenderingIntent\n")
 	}
 
 	// Allocate memory for the new intent node.

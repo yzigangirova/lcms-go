@@ -80,8 +80,8 @@ func cmsReadMediaWhitePoint(ar *arena.Arena, Dest *cmsCIEXYZ, hProfile CmsHPROFI
 	}
 	//not nil and the wrong structure
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "Tag is not of the type *cmsCIEXYZ\n")
-		return false
+		panic("Tag is not of the type *cmsCIEXYZ\n")
+		
 	}
 
 	// For V2 display profiles, return D50 as the white point
@@ -98,7 +98,7 @@ func cmsReadMediaWhitePoint(ar *arena.Arena, Dest *cmsCIEXYZ, hProfile CmsHPROFI
 }
 func cmsReadCHAD(ar *arena.Arena, Dest *cmsMAT3, hProfile CmsHPROFILE) bool {
 	if Dest == nil {
-		panic("Destination matrix cannot be nil") // Replace cmsAssert
+		cmsAssert(Dest != nil,"Destination matrix cannot be nil") 
 	}
 
 	// Attempt to read the Chromatic Adaptation Tag
@@ -108,8 +108,8 @@ func cmsReadCHAD(ar *arena.Arena, Dest *cmsMAT3, hProfile CmsHPROFILE) bool {
 		return true
 	}
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *cmsMAT3\n")
-		return false
+		panic("tag is not of the type *cmsMAT3\n")
+		
 	}
 
 	// No CHAD available, default it to identity
@@ -124,8 +124,8 @@ func cmsReadCHAD(ar *arena.Arena, Dest *cmsMAT3, hProfile CmsHPROFILE) bool {
 				return true
 			}
 			if !ok {
-				cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *cmsCIEXYZ\n")
-				return false
+				panic("tag is not of the type *cmsCIEXYZ\n")
+				
 			}
 			return cmsAdaptationMatrix(Dest, nil, White, cmsD50_XYZ())
 		}
@@ -143,8 +143,7 @@ func cmsReadFloatDevicelinkTag(ar *arena.Arena, hProfile CmsHPROFILE, tagFloat c
 		return nil
 	}
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *cmsPipeline\n")
-		return nil
+		panic("tag is not of the type *cmsPipeline\n")
 	}
 	Lut := cmsPipelineDup(ar, pl)
 	if Lut == nil {
@@ -205,8 +204,8 @@ func cmsReadDevicelinkLUT(ar *arena.Arena, hProfile CmsHPROFILE, Intent uint32) 
 			return nil
 		}
 		if !ok {
-			cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *cmsNAMEDCOLORLIST\n")
-			return nil
+			panic("tag is not of the type *cmsNAMEDCOLORLIST\n")
+			
 		}
 
 		Lut := cmsPipelineAlloc(ar, ContextID, 0, 0)
@@ -243,8 +242,8 @@ func cmsReadDevicelinkLUT(ar *arena.Arena, hProfile CmsHPROFILE, Intent uint32) 
 			return nil
 		}
 		if !ok {
-			cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *cmsPipeline\n")
-			return nil
+			panic("tag is not of the type *cmsPipeline\n")
+			
 		}
 		return cmsPipelineDup(ar, pl)
 	}
@@ -259,13 +258,14 @@ func cmsReadDevicelinkLUT(ar *arena.Arena, hProfile CmsHPROFILE, Intent uint32) 
 
 	// Read the tag
 	Lut, ok := cmsReadTag(ar, hProfile, tag16).(*cmsPipeline)
+	if !ok {
+		panic("tag is not of the type *cmsPipeline\n")
+		
+	}	
 	if Lut == nil {
 		return nil
 	}
-	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *cmsPipeline\n")
-		return nil
-	}
+
 	// Duplicate the pipeline as the profile owns the original
 	Lut = cmsPipelineDup(ar, Lut)
 	if Lut == nil {
@@ -306,33 +306,30 @@ Error2:
 
 // ReadICCMatrixRGB2XYZ translates the given function
 func ReadICCMatrixRGB2XYZ(ar *arena.Arena, r *cmsMAT3, hProfile CmsHPROFILE) bool {
-	if r == nil {
-		panic("r cannot be nil") // Equivalent to `_cmsAssert`
-	}
+	cmsAssert(r!=nil,"r cannot be nil") // Equivalent to `_cmsAssert`
 
 	PtrRed, ok := cmsReadTag(ar, hProfile, CmsSigRedColorantTag).(*cmsCIEXYZ)
 	if PtrRed == nil {
 		return false
 	}
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *cmsCIEXYZ\n")
-		return false
+		panic("tag is not of the type *cmsCIEXYZ\n")
 	}
 	PtrGreen, ok := cmsReadTag(ar, hProfile, CmsSigGreenColorantTag).(*cmsCIEXYZ)
 	if PtrGreen == nil {
 		return false
 	}
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *cmsCIEXYZ\n")
-		return false
+		panic("tag is not of the type *cmsCIEXYZ\n")
+		
 	}
 	PtrBlue, ok := cmsReadTag(ar, hProfile, CmsSigBlueColorantTag).(*cmsCIEXYZ)
 	if PtrBlue == nil {
 		return false
 	}
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *cmsCIEXYZ\n")
-		return false
+		panic("tag is not of the type *cmsCIEXYZ\n")
+		
 	}
 
 	cmsVEC3init(&r.V[0], PtrRed.X, PtrGreen.X, PtrBlue.X)
@@ -350,8 +347,7 @@ func BuildGrayInputMatrixPipeline(ar *arena.Arena, hProfile CmsHPROFILE) *cmsPip
 		return nil
 	}
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *cmsToneCurve\n")
-		return nil
+		panic( "tag is not of the type *cmsToneCurve\n")
 	}
 	Lut := cmsPipelineAlloc(ar, ContextID, 1, 3)
 	if Lut == nil {
@@ -415,8 +411,8 @@ func BuildRGBInputMatrixShaper(ar *arena.Arena, hProfile CmsHPROFILE) *cmsPipeli
 	}
 
 	if !ok1 || !ok2 || !ok3 {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *CmsToneCurve\n")
-		return nil
+		panic("tag is not of the type *CmsToneCurve\n")
+		
 	}
 	// Deep Debug: Print tone curve contents
 	/*	for i, shape := range Shapes {
@@ -506,8 +502,8 @@ func cmsReadFloatInputTag(ar *arena.Arena, hProfile CmsHPROFILE, tagFloat cmsTag
 		return nil
 	}
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *cmsPipeline\n")
-		return nil
+		panic("tag is not of the type *cmsPipeline\n")
+		
 	}
 	Lut := cmsPipelineDup(ar, pl)
 	spc := CmsGetColorSpace(hProfile)
@@ -638,8 +634,7 @@ func BuildGrayOutputPipeline(ar *arena.Arena, hProfile CmsHPROFILE) *cmsPipeline
 	}
 
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *CmsToneCurve\n")
-		return nil
+		panic("tag is not of the type *CmsToneCurve\n")
 	}
 
 	RevGrayTRC := cmsReverseToneCurve(ar, GrayTRC)
@@ -710,8 +705,7 @@ func BuildRGBOutputMatrixShaper(ar *arena.Arena, hProfile CmsHPROFILE) *cmsPipel
 	}
 
 	if !ok1 || !ok2 || !ok3 {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *CmsToneCurve\n")
-		return nil
+		panic("tag is not of the type *CmsToneCurve\n")
 	}
 
 	InvShapes[0] = cmsReverseToneCurve(ar, Shapes[0])
@@ -766,8 +760,7 @@ func cmsReadFloatOutputTag(ar *arena.Arena, hProfile CmsHPROFILE, tagFloat cmsTa
 		return nil
 	}
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *CmsToneCurve\n")
-		return nil
+		panic("tag is not of the type *CmsToneCurve\n")
 	}
 	Lut := cmsPipelineDup(ar, pl)
 
@@ -828,8 +821,7 @@ func cmsReadOutputLUT(ar *arena.Arena, hProfile CmsHPROFILE, Intent uint32) *cms
 				return nil
 			}
 			if !ok {
-				cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *CmsToneCurve\n")
-				return nil
+				panic("tag is not of the type *CmsToneCurve\n")
 			}
 
 			OriginalType := cmsGetTagTrueType(hProfile, tag16)
@@ -950,8 +942,8 @@ func cmsReadProfileSequence(ar *arena.Arena, hProfile CmsHPROFILE) *cmsSEQ {
 		return cmsDupProfileSequenceDescription(ar, ProfileSeq)
 	}
 	if !ok1 || !ok2 {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "tag is not of the type *cmsSEQ\n")
-		return nil
+		panic("tag is not of the type *cmsSEQ\n")
+		
 	}
 
 	// Check if sequence lengths match; otherwise, duplicate the description sequence

@@ -27,7 +27,7 @@ func cmsAllocAdaptationStateChunk(ar *arena.Arena, ctx CmsContext, src CmsContex
 		AdaptationState: DEFAULT_OBSERVER_ADAPTATION_STATE,
 	}
 
-	var from interface{}
+	var from any
 	if src != nil {
 		from = src.chunks[AdaptationStateContext]
 	} else {
@@ -84,9 +84,7 @@ func cmsSetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP []uint16) {
 	//defer alarmCodeMutex.Unlock()
 
 	ContextAlarmCodes := CmsContextGetClientChunk(ContextID, AlarmCodesContext).(*cmsAlarmCodesChunkType)
-	if ContextAlarmCodes == nil {
-		panic("ContextAlarmCodes is nil")
-	}
+	cmsAssert( ContextAlarmCodes != nil,"ContextAlarmCodes is nil")
 
 	MemcpySlice(ContextAlarmCodes.AlarmCodes[:], AlarmCodesP[:], 16)
 }
@@ -99,9 +97,7 @@ func cmsGetAlarmCodesTHR(ContextID CmsContext, AlarmCodesP []uint16) {
 	//defer alarmCodeMutex.Unlock()
 
 	ContextAlarmCodes := CmsContextGetClientChunk(ContextID, AlarmCodesContext).(*cmsAlarmCodesChunkType)
-	if ContextAlarmCodes == nil {
-		panic("ContextAlarmCodes is nil")
-	}
+	cmsAssert( ContextAlarmCodes != nil,"ContextAlarmCodes is nil")
 
 	MemcpySlice(AlarmCodesP[:], ContextAlarmCodes.AlarmCodes[:], 16)
 }
@@ -133,7 +129,7 @@ func cmsAllocAlarmCodesChunk(ar *arena.Arena, ctx CmsContext, src CmsContext) {
 		AlarmCodes: DEFAULT_ALARM_CODES_VALUE,
 	}
 
-	var from interface{}
+	var from any
 
 	// Check if src is not nil
 	if src != nil {
@@ -219,7 +215,7 @@ func CmsDoTransform(ar *arena.Arena, Transform CmsHTRANSFORM, InputBuffer, Outpu
 	}*/
 	p, ok := Transform.(*cmsTRANSFORM) // Cast the generic Transform to the specific type cmsTRANSFORM
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "p is not of the type cmsTransform")
+		panic("p is not of the type cmsTransform")
 	}
 	var stride cmsStride
 
@@ -1195,7 +1191,7 @@ func cmsRegisterTransformPlugin(ar *arena.Arena, ContextID CmsContext, Data Plug
 	}
 	plugin, ok := Data.(*cmsPluginTransform)
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginTransform\n")
+		panic("Plugin is not of the type cmsPluginTransform\n")
 		return false
 	}
 	// Ensure the factory callback is present.
@@ -1229,82 +1225,62 @@ func cmsRegisterTransformPlugin(ar *arena.Arena, ContextID CmsContext, Data Plug
 
 // SetTransformUserData sets the user-defined data and its cleanup function.
 func SetTransformUserData(cmmCargo *cmsTRANSFORM, ptr unsafe.Pointer, freePrivateDataFn cmsFreeUserDataFn) {
-	if cmmCargo == nil {
-		panic("CMMcargo cannot be nil")
-	}
+	cmsAssert(cmmCargo != nil, "CMMcargo cannot be nil")
 
 	cmmCargo.UserData = ptr
 	cmmCargo.FreeUserData = freePrivateDataFn
 }
 
 // GetTransformUserData retrieves the user-defined data.
-func GetTransformUserData(cmmCargo *cmsTRANSFORM) interface{} {
-	if cmmCargo == nil {
-		panic("CMMcargo cannot be nil")
-	}
+func GetTransformUserData(cmmCargo *cmsTRANSFORM) any {
+	cmsAssert(cmmCargo != nil, "CMMcargo cannot be nil")
 
 	return cmmCargo.UserData
 }
 
 // GetTransformFormatters16 retrieves the current 16-bit formatters.
 func GetTransformFormatters16(cmmCargo *cmsTRANSFORM) (fromInput, toOutput cmsFormatter16) {
-	if cmmCargo == nil {
-		panic("CMMcargo cannot be nil")
-	}
+	cmsAssert(cmmCargo != nil, "CMMcargo cannot be nil")
 
 	return cmmCargo.FromInput, cmmCargo.ToOutput
 }
 
 // GetTransformFormattersFloat retrieves the current float formatters.
 func GetTransformFormattersFloat(cmmCargo *cmsTRANSFORM) (fromInputFloat, toOutputFloat cmsFormatterFloat) {
-	if cmmCargo == nil {
-		panic("CMMcargo cannot be nil")
-	}
+	cmsAssert(cmmCargo != nil, "CMMcargo cannot be nil")
 
 	return cmmCargo.FromInputFloat, cmmCargo.ToOutputFloat
 }
 
 // GetTransformFlags retrieves the original flags.
 func GetTransformFlags(cmmCargo *cmsTRANSFORM) uint32 {
-	if cmmCargo == nil {
-		panic("CMMcargo cannot be nil")
-	}
+	cmsAssert(cmmCargo != nil, "CMMcargo cannot be nil")
 
 	return cmmCargo.DwOriginalFlags
 }
 
 // GetTransformWorker retrieves the worker callback for parallelization plugins.
 func GetTransformWorker(cmmCargo *cmsTRANSFORM) cmsTransform2Fn {
-	if cmmCargo == nil {
-		panic("CMMcargo cannot be nil")
-	}
+	cmsAssert(cmmCargo != nil, "CMMcargo cannot be nil")
 
 	return cmmCargo.Worker
 }
 
 // GetTransformMaxWorkers retrieves the maximum number of workers or -1 for auto.
 func GetTransformMaxWorkers(cmmCargo *cmsTRANSFORM) int32 {
-	if cmmCargo == nil {
-		panic("CMMcargo cannot be nil")
-	}
+	cmsAssert(cmmCargo != nil, "CMMcargo cannot be nil")
 
 	return cmmCargo.MaxWorkers
 }
 
 // GetTransformWorkerFlags retrieves the worker flags.
 func GetTransformWorkerFlags(cmmCargo *cmsTRANSFORM) uint32 {
-	if cmmCargo == nil {
-		panic("CMMcargo cannot be nil")
-	}
+	cmsAssert(cmmCargo != nil, "CMMcargo cannot be nil")
 
 	return cmmCargo.WorkerFlags
 }
 
 func ParallelizeIfSuitable(p *cmsTRANSFORM) {
-	if p == nil {
-		panic("cmsTRANSFORM pointer is nil")
-	}
-
 	ctx := CmsContextGetClientChunk(p.ContextID, ParallelizationPlugin).(*cmsParallelizationPluginChunkType)
 
 	if ctx != nil && ctx.SchedulerFn != nil {

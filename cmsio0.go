@@ -34,12 +34,10 @@ type FILENULL struct {
 }
 
 // NULLRead simulates reading from a null IOHandler.
-// func NULLRead(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32 {
-func NULLRead(iohandler *cms_io_handler, buffer interface{}, size, count uint32) uint32 {
+func NULLRead(iohandler *cms_io_handler, buffer any, size, count uint32) uint32 {
 	resData, ok := iohandler.Stream.(*FILENULL)
-	if !ok || resData == nil {
-		// If Stream is not a *FILENULL, do nothing
-		return 0
+	if !ok  {
+		panic("Stream is not a *FILENULL")
 	}
 	length := size * count
 	resData.Pointer += length
@@ -49,9 +47,8 @@ func NULLRead(iohandler *cms_io_handler, buffer interface{}, size, count uint32)
 // NULLSeek simulates seeking in a null IOHandler.
 func NULLSeek(iohandler *cms_io_handler, offset uint32) bool {
 	resData, ok := iohandler.Stream.(*FILENULL)
-	if !ok || resData == nil {
-		// If Stream is not a *FILENULL, do nothing
-		return false
+	if !ok  {
+		panic("Stream is not a *FILENULL")
 	}
 	resData.Pointer = offset
 	return true
@@ -60,9 +57,8 @@ func NULLSeek(iohandler *cms_io_handler, offset uint32) bool {
 // NULLTell retrieves the current pointer position in the null IOHandler.
 func NULLTell(iohandler *cms_io_handler) uint32 {
 	resData, ok := iohandler.Stream.(*FILENULL)
-	if !ok || resData == nil {
-		// If Stream is not a *FILENULL, do nothing
-		return 0
+	if !ok  {
+		panic("Stream is not a *FILENULL")
 	}
 	return resData.Pointer
 }
@@ -71,9 +67,8 @@ func NULLTell(iohandler *cms_io_handler) uint32 {
 // func NULLWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 func NULLWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 	resData, ok := iohandler.Stream.(*FILENULL)
-	if !ok || resData == nil {
-		// If Stream is not a *FILENULL, do nothing
-		return false
+	if !ok  {
+		panic("Stream is not a *FILENULL")
 	}
 	resData.Pointer += size
 	if resData.Pointer > iohandler.UsedSpace {
@@ -86,9 +81,8 @@ func NULLWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 // NULLClose closes the null IOHandler and releases associated memory.
 func NULLClose(iohandler *cms_io_handler) bool {
 	resData, ok := iohandler.Stream.(*FILENULL)
-	if !ok || resData == nil {
-		// If Stream is not a *FILENULL, do nothing
-		return false
+	if !ok  {
+		panic("Stream is not a *FILENULL")
 	}
 	cmsFree(iohandler.ContextID, resData)
 	cmsFree(iohandler.ContextID, iohandler)
@@ -380,7 +374,7 @@ func CmsOpenProfileFromFile(ar *arena.Arena, ICCProfile string, sAccess string) 
 	return cmsOpenProfileFromFileTHR(ar, nil, ICCProfile, sAccess)
 }
 
-func cmsOpenProfileFromMemTHR(ar *arena.Arena, ContextID CmsContext, MemPtr interface{}, dwSize uint32) CmsHPROFILE {
+func cmsOpenProfileFromMemTHR(ar *arena.Arena, ContextID CmsContext, MemPtr any, dwSize uint32) CmsHPROFILE {
 	var NewIcc *cmsICCPROFILE
 	hEmpty := cmsCreateProfilePlaceholder(ar, ContextID)
 
@@ -408,7 +402,7 @@ Error:
 	return nil
 }
 
-func CmsOpenProfileFromMem(ar *arena.Arena, MemPtr interface{}, dwSize uint32) CmsHPROFILE {
+func CmsOpenProfileFromMem(ar *arena.Arena, MemPtr any, dwSize uint32) CmsHPROFILE {
 	return cmsOpenProfileFromMemTHR(ar, nil, MemPtr, dwSize)
 }
 
@@ -535,9 +529,8 @@ func CmsCloseProfile(ar *arena.Arena, hProfile CmsHPROFILE) bool {
 	var rc bool = true
 	if Icc == nil {
 		return false
-	}	
+	}
 	mm := &Icc.UsrMutex
-
 
 	if Icc.IsWrite {
 		Icc.IsWrite = false
@@ -574,7 +567,7 @@ func IsTypeSupported(TagDescriptor *cmsTagDescriptor, Type cmsTagTypeSignature) 
 	return false
 }
 
-func cmsReadTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature) interface{} {
+func cmsReadTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature) any {
 	Icc := hProfile.(*cmsICCPROFILE)
 	var io *cmsIOHANDLER
 	var TypeHandler *cmsTagTypeHandler
@@ -762,7 +755,7 @@ func cmsGetTagTrueType(hProfile CmsHPROFILE, sig cmsTagSignature) cmsTagTypeSign
 }
 
 // cmsWriteTag translates the given function
-func cmsWriteTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, data interface{}) bool {
+func cmsWriteTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, data any) bool {
 	//	fmt.Println("WriteTag")
 	Icc := hProfile.(*cmsICCPROFILE)
 	var TypeHandler *cmsTagTypeHandler
@@ -1186,14 +1179,14 @@ func cmsReadHeader(Icc *cmsICCPROFILE) bool {
 func WriteStruct[T any](io *cmsIOHANDLER, value T, endian binary.ByteOrder) bool {
 	var buf bytes.Buffer
 	if err := binary.Write(&buf, endian, value); err != nil {
-		fmt.Println("binary.Write failed: %w", err)
-		return false
+		panic("binary.Write failed")
+		
 	}
 
 	size := buf.Len()
 	if !io.Write((*cms_io_handler)(io), uint32(size), buf.Bytes()) {
-		fmt.Println("FileWrite failed: wrote wrong number of element(s), expected 1")
-		return false
+		panic("FileWrite failed: wrote wrong number of element(s), expected 1")
+		
 	}
 
 	return true
@@ -1385,11 +1378,10 @@ type FILEMEM struct {
 }
 
 // func MemoryRead(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32 {
-func MemoryRead(iohandler *cms_io_handler, buffer interface{}, size, count uint32) uint32 {
+func MemoryRead(iohandler *cms_io_handler, buffer any, size, count uint32) uint32 {
 	resData, ok := iohandler.Stream.(*FILEMEM)
-	if !ok || resData == nil {
-		// If Stream is not a *FILENULL, do nothing
-		return 0
+	if !ok  {
+		panic("Stream is not a *FILENULL")
 	}
 	length := size * count
 
@@ -1420,9 +1412,8 @@ func MemoryRead(iohandler *cms_io_handler, buffer interface{}, size, count uint3
 // MemorySeek sets the current position in the memory block.
 func MemorySeek(iohandler *cms_io_handler, offset uint32) bool {
 	resData, ok := iohandler.Stream.(*FILEMEM)
-	if !ok || resData == nil {
-		// If Stream is not a *FILENULL, do nothing
-		return false
+	if !ok  {
+		panic("Stream is not a *FILENULL")
 	}
 
 	if offset > resData.Size {
@@ -1437,9 +1428,8 @@ func MemorySeek(iohandler *cms_io_handler, offset uint32) bool {
 // MemoryTell returns the current position in the memory block.
 func MemoryTell(iohandler *cms_io_handler) uint32 {
 	resData, ok := iohandler.Stream.(*FILEMEM)
-	if !ok || resData == nil {
-		// If Stream is not a *FILENULL, do nothing
-		return 0
+	if !ok  {
+		panic("Stream is not a *FILENULL")
 	}
 	return resData.Pointer
 }
@@ -1447,9 +1437,8 @@ func MemoryTell(iohandler *cms_io_handler) uint32 {
 // MemoryWrite writes data to the memory block and updates the used space.
 func MemoryWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 	resData, ok := iohandler.Stream.(*FILEMEM)
-	if !ok || resData == nil {
-		// If Stream is not a *FILENULL, do nothing
-		return false
+	if !ok  {
+		panic("Stream is not a *FILENULL")
 	}
 
 	// Check for available space
@@ -1477,9 +1466,8 @@ func MemoryWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 // MemoryClose closes the memory-based stream and frees resources if necessary.
 func MemoryClose(iohandler *cms_io_handler) bool {
 	resData, ok := iohandler.Stream.(*FILEMEM)
-	if !ok || resData == nil {
-		// If Stream is not a *FILENULL, do nothing
-		return false
+	if !ok  {
+		panic("Stream is not a *FILENULL")
 	}
 
 	if resData.FreeBlockOnClose {
@@ -1493,7 +1481,7 @@ func MemoryClose(iohandler *cms_io_handler) bool {
 
 	return true
 }
-func cmsOpenIOhandlerFromMem(ar *arena.Arena, ContextID CmsContext, Buffer interface{}, size uint32, AccessMode string) *cmsIOHANDLER {
+func cmsOpenIOhandlerFromMem(ar *arena.Arena, ContextID CmsContext, Buffer any, size uint32, AccessMode string) *cmsIOHANDLER {
 	if AccessMode == "" {
 		cmsSignalError(nil, cmsERROR_READ, "Access mode cannot be empty")
 		return nil
@@ -1595,7 +1583,7 @@ Error:
 		}
 		cmsFree(ContextID, fm)
 	}
-		cmsFree(ContextID, iohandler)
+	cmsFree(ContextID, iohandler)
 
 	return nil
 }
@@ -1679,12 +1667,11 @@ func cmsOpenIOhandlerFromFile(ar *arena.Arena, ContextID CmsContext, FileName st
 }
 
 // FileRead reads count elements of size bytes each from the file stream. Returns the number of elements read.
-func FileRead(iohandler *cms_io_handler, buffer interface{}, size, count uint32) uint32 {
+func FileRead(iohandler *cms_io_handler, buffer any, size, count uint32) uint32 {
 	//	fmt.Println("fileread")
 	file, ok := iohandler.Stream.(*os.File)
-	if !ok || file == nil {
-		// If Stream is not a *FILENULL, do nothing
-		return 0
+	if !ok  {
+		panic("Stream is not a *FILENULL")
 	}
 	totalBytes := int(size * count)
 
@@ -1719,10 +1706,9 @@ func FileRead(iohandler *cms_io_handler, buffer interface{}, size, count uint32)
 // FileSeek repositions the file pointer within the file. Returns true on success, false otherwise.
 func FileSeek(iohandler *cms_io_handler, offset uint32) bool {
 	file, ok := iohandler.Stream.(*os.File)
-	if !ok || file == nil {
+	if !ok {
 		// If Stream is not a *FILENULL, do nothing
-		cmsSignalError(nil, cmsERROR_FILE, "Unsupported stream type in FileSeek")
-		return false
+		panic("Unsupported stream type in FileSeek")
 	}
 
 	_, err := file.Seek(int64(offset), 0) // Equivalent to SEEK_SET
@@ -1737,10 +1723,10 @@ func FileSeek(iohandler *cms_io_handler, offset uint32) bool {
 // FileTell returns the current position of the file pointer within the file. Returns 0 on error, which is also a valid position.
 func FileTell(iohandler *cms_io_handler) uint32 {
 	file, ok := iohandler.Stream.(*os.File)
-	if !ok || file == nil {
+	if !ok  {
 		// If Stream is not a *FILENULL, do nothing
-		cmsSignalError(nil, cmsERROR_FILE, "Unsupported stream type in FileTell")
-		return 0
+		panic("Unsupported stream type in FileTell")
+		
 	}
 
 	pos, err := file.Seek(0, 1) // Equivalent to SEEK_CUR
@@ -1776,10 +1762,9 @@ func FileWrite(iohandler *cms_io_handler, size uint32, buffer []byte) bool {
 	}
 
 	file, ok := iohandler.Stream.(*os.File)
-	if !ok || file == nil {
+	if !ok  {
 		// If Stream is not a *FILENULL, do nothing
-		cmsSignalError(nil, cmsERROR_FILE, "Unsupported stream type in FileRead")
-		return false
+		panic("Unsupported stream type in FileRead")
 	}
 	nWritten, err := file.Write(buffer)
 	if err != nil || uint32(nWritten) != size {
@@ -1794,9 +1779,9 @@ func FileWrite(iohandler *cms_io_handler, size uint32, buffer []byte) bool {
 // FileClose closes the file stream. Returns true on success, false otherwise.
 func FileClose(iohandler *cms_io_handler) bool {
 	file, ok := iohandler.Stream.(*os.File)
-	if !ok || file == nil {
-		// If Stream is not a *FILENULL, do nothing
-		return false
+	if !ok  {
+		panic("Stream is not a *FILENULL, do nothing")
+		
 	}
 
 	if err := file.Close(); err != nil {
@@ -1807,7 +1792,7 @@ func FileClose(iohandler *cms_io_handler) bool {
 	cmsFree(iohandler.ContextID, iohandler)
 	return true
 }
-func cmsWriteRawTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, data interface{}, size uint32) bool {
+func cmsWriteRawTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, data any, size uint32) bool {
 	Icc := hProfile.(*cmsICCPROFILE)
 	mm := &Icc.UsrMutex
 	var i int

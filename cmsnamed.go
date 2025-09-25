@@ -542,7 +542,7 @@ func FreeNamedColorList(ar *arena.Arena, mpe *cmsStage) {
 }
 
 // DupNamedColorList duplicates the named color list.
-func DupNamedColorList(ar *arena.Arena, mpe *cmsStage) interface{} {
+func DupNamedColorList(ar *arena.Arena, mpe *cmsStage) any {
 	list, ok := mpe.Data.(*cmsNAMEDCOLORLIST)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsNAMEDCOLORLIST\n")

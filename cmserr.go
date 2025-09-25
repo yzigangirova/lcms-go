@@ -44,7 +44,7 @@ func DefaultLogErrorHandlerFunction(ContextID CmsContext, ErrorCode uint32, text
 }
 
 // cmsSignalError simulates error signaling
-func cmsSignalError(id interface{}, code int, message string, args ...any) {
+func cmsSignalError(id any, code int, message string, args ...any) {
 	msg := fmt.Sprintf(message, args...)
 	fmt.Fprintf(os.Stderr, "Error GOLCMS (%d) %s\n", code, msg)
 	/* not translated in Go yet
@@ -79,7 +79,7 @@ func allocateStruct[T any](ar *arena.Arena) *T {
 }
 
 // freeMemory frees manually allocated memory. (No-op in Go)
-func freeMemory(ptr interface{}, size uintptr) {
+func freeMemory(ptr any, size uintptr) {
 	// Memory will be garbage collected, but this function can be used for compatibility.
 }
 
@@ -100,12 +100,12 @@ func cmsMallocZeroDefaultFn(ContextID CmsContext, size uint32) []byte {
 }
 
 // Default free function
-func cmsFreeDefaultFn(ContextID CmsContext, ptr interface{}, size uint32) {
+func cmsFreeDefaultFn(ContextID CmsContext, ptr any, size uint32) {
 	freeMemory(ptr, uintptr(size))
 }
 
 // Default realloc function
-func cmsReallocDefaultFn(ContextID CmsContext, ptr interface{}, newSize uint32, oldSize uint32) []byte {
+func cmsReallocDefaultFn(ContextID CmsContext, ptr any, newSize uint32, oldSize uint32) []byte {
 	if newSize > MAX_MEMORY_FOR_ALLOC {
 		return nil
 	}
@@ -143,7 +143,7 @@ func cmsCallocDefaultFn(ContextID CmsContext, num, size uint32) []byte {
 	}
 	return cmsMallocZeroDefaultFn(ContextID, uint32(total))
 }
-func cmsDupDefaultFn(ContextID CmsContext, Org interface{}, size uint32) []byte {
+func cmsDupDefaultFn(ContextID CmsContext, Org any, size uint32) []byte {
 	if size > MAX_MEMORY_FOR_ALLOC {
 		return nil
 	}
@@ -214,9 +214,7 @@ func cmsRegisterMemHandlerPlugin(context CmsContext, Data PluginIntrfc) bool {
 
 	plugin, ok := Data.(*cmsPluginMemHandler)
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginMemHandler")
-
-		return false
+		panic("Plugin is not of the type cmsPluginMemHandler")
 	}
 	// Check for required callbacks
 	if plugin.MallocPtr == nil || plugin.FreePtr == nil || plugin.ReallocPtr == nil {
@@ -258,7 +256,7 @@ func cmsCalloc(contextID CmsContext, num, size uint32) []byte {
 }
 
 // Generic reallocate
-func cmsRealloc(contextID CmsContext, oldPtr interface{}, size uint32) []byte {
+func cmsRealloc(contextID CmsContext, oldPtr any, size uint32) []byte {
 	ptr, ok := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
 	if !ok || ptr == nil || ptr.ReallocPtr == nil {
 		return nil
@@ -267,7 +265,7 @@ func cmsRealloc(contextID CmsContext, oldPtr interface{}, size uint32) []byte {
 }
 
 // Generic free memory
-func cmsFree(contextID CmsContext, oldPtr interface{}) {
+func cmsFree(contextID CmsContext, oldPtr any) {
 	if oldPtr != nil {
 		ptr, ok := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
 		if !ok || ptr != nil && ptr.FreePtr != nil {
@@ -277,7 +275,7 @@ func cmsFree(contextID CmsContext, oldPtr interface{}) {
 }
 
 // Generic block duplication for structures
-func cmsDupMem(contextID CmsContext, org interface{}, size uint32) []byte {
+func cmsDupMem(contextID CmsContext, org any, size uint32) []byte {
 	ptr, ok := CmsContextGetClientChunk(contextID, MemPlugin).(*cmsMemPluginChunkType)
 	if !ok || ptr == nil || ptr.DupPtr == nil || org == nil {
 		return nil
@@ -388,7 +386,7 @@ func cmsSubAlloc(ar *arena.Arena, sub *cmsSubAllocator, size uint32) []byte {
 	return ptr
 }
 
-func cmsSubAllocDup(ar *arena.Arena, sub *cmsSubAllocator, ptr interface{}, size uint32) []byte {
+func cmsSubAllocDup(ar *arena.Arena, sub *cmsSubAllocator, ptr any, size uint32) []byte {
 	if ptr == nil {
 		return nil
 	}
@@ -486,8 +484,8 @@ func cmsRegisterMutexPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
 
 	plugin, ok := Data.(*cmsPluginMutex)
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, " Plugin is not of the type cmsPluginMutex\n")
-		return false
+		panic(" Plugin is not of the type cmsPluginMutex\n")
+		
 	}
 	// Ensure all required callback functions are provided.
 	if plugin.CreateMutexPtr == nil || plugin.DestroyMutexPtr == nil ||
@@ -508,7 +506,7 @@ func cmsRegisterMutexPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
 var cmsParallelizationPluginChunk = cmsParallelizationPluginChunkType{}
 
 // Register parallel processing plugin.
-func cmsRegisterParallelizationPlugin(ContextID CmsContext, Data interface{}) bool {
+func cmsRegisterParallelizationPlugin(ContextID CmsContext, Data any) bool {
 	// If Data is nil, reset to default.
 
 	Plugin, ok := Data.(*cmsPluginParalellization)

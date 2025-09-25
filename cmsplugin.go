@@ -207,24 +207,17 @@ func cmsReadXYZNumber(io *cmsIOHANDLER, XYZ *cmsCIEXYZ) bool {
 // Writing Functions
 
 func cmsWriteUInt8Number(io *cmsIOHANDLER, n uint8) bool {
-	if io == nil {
-		panic("nil pointer in cmsWriteUInt8Number")
-	}
+	cmsAssert(io != nil, "nil pointer in cmsWriteUInt8Number")
 	return WriteStruct[uint8](io, n, binary.BigEndian)
 }
 
 func cmsWriteUInt16Number(io *cmsIOHANDLER, n uint16) bool {
-	if io == nil {
-		panic("nil pointer in cmsWriteUInt16Number")
-	}
+	cmsAssert(io != nil, "nil pointer in cmsWriteUInt16Number")
 	return WriteStruct[uint16](io, n, binary.BigEndian)
 }
 
 func cmsWriteUInt16Array(io *cmsIOHANDLER, n uint32, array []uint16) bool {
-	if io == nil || array == nil {
-		panic("nil pointer in cmsWriteUInt16Array")
-	}
-
+	cmsAssert(io != nil, "nil pointer in cmsWriteUInt16Array")
 	for i := uint32(0); i < n; i++ {
 		if !WriteStruct[uint16](io, array[i], binary.BigEndian) {
 			return false
@@ -233,31 +226,23 @@ func cmsWriteUInt16Array(io *cmsIOHANDLER, n uint32, array []uint16) bool {
 	return true
 }
 func cmsWriteUInt32Number(io *cmsIOHANDLER, n uint32) bool {
-	if io == nil {
-		panic("nil pointer in cmsWriteUInt32Number")
-	}
+	cmsAssert(io != nil, "nil pointer in cmsWriteUInt32Number")
 
 	return WriteStruct[uint32](io, n, binary.BigEndian)
 }
 
 func cmsWriteFloat32Number(io *cmsIOHANDLER, n float32) bool {
-	if io == nil {
-		panic("nil pointer in cmsWriteFloat32Number")
-	}
+	cmsAssert(io != nil, "nil pointer in cmsWriteFloat32Number")
 
 	return WriteStruct[float32](io, n, binary.BigEndian)
 }
 func cmsWriteUInt64Number(io *cmsIOHANDLER, n uint64) bool {
-	if io == nil {
-		panic("nil pointer in cmsWriteUInt64Number")
-	}
+	cmsAssert(io != nil, "nil pointer in cmsWriteUInt64Number")
 	return WriteStruct[uint64](io, n, binary.BigEndian)
 }
 
 func cmsWrite15Fixed16Number(io *cmsIOHANDLER, n float64) bool {
-	if io == nil {
-		panic("nil pointer in cmsWrite15Fixed16Number")
-	}
+	cmsAssert(io != nil, "nil pointer in cmsWrite15Fixed16Number")
 
 	fixed := uint32(cmsDoubleTo15Fixed16(n))
 	return WriteStruct[uint32](io, fixed, binary.BigEndian)
@@ -265,9 +250,8 @@ func cmsWrite15Fixed16Number(io *cmsIOHANDLER, n float64) bool {
 }
 
 func cmsWriteXYZNumber(io *cmsIOHANDLER, xyz *cmsCIEXYZ) bool {
-	if io == nil || xyz == nil {
-		panic("nil pointer in cmsWriteXYZNumber")
-	}
+	cmsAssert(io != nil, "nil pointer in cmsWriteXYZNumber")
+	cmsAssert(xyz != nil, "nil pointer in cmsWriteXYZNumber")
 
 	encodedXYZ := cmsEncodedXYZNumber{
 		X: cmsS15Fixed16Number(cmsDoubleTo15Fixed16(xyz.X)),
@@ -417,12 +401,13 @@ func cmsPlugin(ar *arena.Arena, plugin PluginIntrfc) bool {
 }
 
 // Plugin dispatcher for a specific thread
+//
 //lint:ignore U1000 kept for parity with lcms; used in future ports
 func cmsPluginTHR(ar *arena.Arena, contextID CmsContext, plugin PluginIntrfc) bool {
 	currentPlugin, ok := plugin.(*cmsPluginBase)
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginBase\n")
-		return false
+		panic("Plugin is not of the type cmsPluginBase\n")
+		
 	}
 	for currentPlugin != nil {
 		if currentPlugin.Magic != cmsPluginMagicNumber {
@@ -536,7 +521,7 @@ func InitContextMutex() bool {
 	return true
 }
 
-type cmsContextChunk interface{}
+type cmsContextChunk any
 
 // Global storage for system context
 var globalContext = CmsContextStruct{
@@ -601,6 +586,7 @@ func cmsGetContext(ContextID CmsContext) CmsContext {
 // plug-in, as a single call to cmsPluginTHR() function may register
 // many different plug-ins simultaneously, then there is no way to
 // identify which plug-in to unregister.
+//
 //lint:ignore U1000 kept for parity with lcms; used in future ports
 func cmsUnregisterPluginsTHR(ar *arena.Arena, ContextID CmsContext) {
 	cmsRegisterMemHandlerPlugin(ContextID, nil)
@@ -621,7 +607,7 @@ func cmsUnregisterPluginsTHR(ar *arena.Arena, ContextID CmsContext) {
 // CmsContextGetClientChunk retrieves the memory area associated with each context client
 // Internal: get the memory area associanted with each context client
 // Returns the block assigned to the specific zone. Never return nil.
-func CmsContextGetClientChunk(ContextID CmsContext, mc cmsMemoryClient) interface{} {
+func CmsContextGetClientChunk(ContextID CmsContext, mc cmsMemoryClient) any {
 	if mc < 0 || mc >= MemoryClientMax {
 		cmsSignalError(ContextID, cmsERROR_INTERNAL, "Bad context client -- possible corruption")
 

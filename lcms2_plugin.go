@@ -166,13 +166,13 @@ type cmsPluginParametricCurves struct {
 
 // _cmsIOHandler represents the internal structure.
 type cms_io_handler struct {
-	Stream       interface{} // Associated stream, implemented differently based on media
-	ContextID    CmsContext  // Context ID
-	UsedSpace    uint32      // Used space in the stream
-	ReportedSize uint32      // Reported size of the stream
-	PhysicalFile string      // Physical file path
+	Stream       any        // Associated stream, implemented differently based on media
+	ContextID    CmsContext // Context ID
+	UsedSpace    uint32     // Used space in the stream
+	ReportedSize uint32     // Reported size of the stream
+	PhysicalFile string     // Physical file path
 	//	Read         func(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32
-	Read  func(iohandler *cms_io_handler, buffer interface{}, size, count uint32) uint32
+	Read  func(iohandler *cms_io_handler, buffer any, size, count uint32) uint32
 	Seek  func(iohandler *cms_io_handler, offset uint32) bool
 	Close func(iohandler *cms_io_handler) bool
 	Tell  func(iohandler *cms_io_handler) uint32
@@ -193,7 +193,7 @@ type cmsTagDescriptor struct {
 	SupportedTypes  [MAX_TYPES_IN_LCMS_PLUGIN]cmsTagTypeSignature // Array of supported types
 
 	// Function for determining the type for writing, based on profile version and data.
-	DecideType func(iccVersion float64, data interface{}) cmsTagTypeSignature
+	DecideType func(iccVersion float64, data any) cmsTagTypeSignature
 }
 
 // cmsPluginTag represents a plugin that implements a single tag.
@@ -243,8 +243,8 @@ type cmsPluginTransform struct {
 }
 
 // Shared callbacks for user data //YULIANA: i can not find implemenation for this functions, only declarations!  investigate further
-type cmsFreeUserDataFn func(ContextID CmsContext, Data interface{})
-type cmsDupUserDataFn func(ContextID CmsContext, Data interface{}) interface{}
+type cmsFreeUserDataFn func(ContextID CmsContext, Data any)
+type cmsDupUserDataFn func(ContextID CmsContext, Data any) any
 type cmsFormatter16 func(CMMcargo *cmsTRANSFORM, Values []uint16, Buffer []uint8, Stride uint32) []uint8
 type cmsFormatterFloat func(CMMcargo *cmsTRANSFORM, Values []float32, Buffer []uint8, Stride uint32) []uint8
 type cmsTransformFn func(CMMcargo *cmsTRANSFORM, InputBuffer,
@@ -309,7 +309,7 @@ type cmsPipelineEval16Fn func(
 	ar *arena.Arena,
 	In []uint16, // Input array
 	Out []uint16, // Output array
-	Data interface{}, // Arbitrary data
+	Data any, // Arbitrary data
 )
 
 // _cmsPipelineEvalFloatFn is a function type for evaluating the pipeline in floating-point precision.
@@ -317,7 +317,7 @@ type cmsPipelineEvalFloatFn func(
 	ar *arena.Arena,
 	In []float32, // Input array
 	Out []float32, // Output array
-	Data interface{}, // Arbitrary data
+	Data any, // Arbitrary data
 )
 
 // Optimize entry point
@@ -339,10 +339,10 @@ const MAX_TYPES_IN_LCMS_PLUGIN = 20
 type cmsMallocFnPtrType func(contextID CmsContext, size uint32) []byte
 
 // _cmsFreeFnPtrType defines a function that frees allocated memory.
-type cmsFreeFnPtrType func(contextID CmsContext, ptr interface{}, size uint32)
+type cmsFreeFnPtrType func(contextID CmsContext, ptr any, size uint32)
 
 // _cmsReallocFnPtrType defines a function that reallocates memory.
-type cmsReallocFnPtrType func(contextID CmsContext, ptr interface{}, oldSize uint32, newSize uint32) []byte
+type cmsReallocFnPtrType func(contextID CmsContext, ptr any, oldSize uint32, newSize uint32) []byte
 
 // _cmsMalloZerocFnPtrType defines a function that allocates zero-initialized memory.
 type cmsMalloZerocFnPtrType func(contextID CmsContext, size uint32) []byte
@@ -351,7 +351,7 @@ type cmsMalloZerocFnPtrType func(contextID CmsContext, size uint32) []byte
 type cmsCallocFnPtrType func(contextID CmsContext, num uint32, size uint32) []byte
 
 // _cmsDupFnPtrType defines a function that duplicates a memory block.
-type cmsDupFnPtrType func(contextID CmsContext, org interface{}, size uint32) []byte
+type cmsDupFnPtrType func(contextID CmsContext, org any, size uint32) []byte
 
 // cmsPluginMemHandler represents the memory handler plug-in structure.
 type cmsPluginMemHandler struct {

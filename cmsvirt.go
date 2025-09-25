@@ -230,7 +230,7 @@ func cmsCreateGrayProfileTHR(ar *arena.Arena, ContextID CmsContext, WhitePoint *
 	return hICC
 
 Error:
-		CmsCloseProfile(ar, hICC)
+	CmsCloseProfile(ar, hICC)
 	return nil
 }
 
@@ -299,7 +299,7 @@ func cmsCreateLinearizationDeviceLink(ar *arena.Arena, ColorSpace cmsColorSpaceS
 //     K: Does not change
 
 // InkLimitingSampler translates the given function
-func InkLimitingSampler(ar *arena.Arena, In []uint16, Out []uint16, cargo interface{}) int32 {
+func InkLimitingSampler(ar *arena.Arena, In []uint16, Out []uint16, cargo any) int32 {
 	inkLimit, ok := cargo.(float64)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_RANGE, "Expected cargo to be float64")
@@ -330,6 +330,7 @@ func InkLimitingSampler(ar *arena.Arena, In []uint16, Out []uint16, cargo interf
 
 	return 1
 }
+
 //lint:ignore U1000 kept for parity with lcms; used in future ports
 func cmsCreateInkLimitingDeviceLinkTHR(ar *arena.Arena, ContextID CmsContext, ColorSpace cmsColorSpaceSignature, Limit float64) CmsHPROFILE {
 	var hICC CmsHPROFILE
@@ -402,7 +403,7 @@ Error:
 	if LUT != nil {
 		cmsPipelineFree(ar, LUT)
 	}
-		CmsCloseProfile(ar, hICC)
+	CmsCloseProfile(ar, hICC)
 	return nil
 }
 
@@ -450,8 +451,8 @@ Error:
 	if LUT != nil {
 		cmsPipelineFree(ar, LUT)
 	}
-		CmsCloseProfile(ar, hProfile)
-	
+	CmsCloseProfile(ar, hProfile)
+
 	return nil
 }
 
@@ -500,8 +501,8 @@ Error:
 	if LUT != nil {
 		cmsPipelineFree(ar, LUT)
 	}
-		CmsCloseProfile(ar, hProfile)
-	
+	CmsCloseProfile(ar, hProfile)
+
 	return nil
 }
 
@@ -546,8 +547,8 @@ Error:
 	if LUT != nil {
 		cmsPipelineFree(ar, LUT)
 	}
-		CmsCloseProfile(ar, hProfile)
-	
+	CmsCloseProfile(ar, hProfile)
+
 	return nil
 }
 

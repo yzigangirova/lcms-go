@@ -1,7 +1,7 @@
 package golcms
 
 import (
-	"fmt"
+	//"fmt"
 	"math"
 	"sync"
 
@@ -36,7 +36,7 @@ func cmsStageAllocPlaceholder(
 	EvalPtr cmsStageEvalFn,
 	DupElemPtr cmsStageDupElemFn,
 	FreePtr cmsStageFreeElemFn,
-	Data interface{},
+	Data any,
 ) *cmsStage {
 	// Allocate memory for cmsStage and initialize to zero
 	ph := allocateStruct[cmsStage](ar)
@@ -217,7 +217,7 @@ func CurveSetElemTypeFree(ar *arena.Arena, mpe *cmsStage) {
 	}
 	cmsFree(mpe.ContextID, data)
 }
-func CurveSetDup(ar *arena.Arena, mpe *cmsStage) interface{} {
+func CurveSetDup(ar *arena.Arena, mpe *cmsStage) any {
 	//	fmt.Println("CurveSetDup")
 	// Access the data from the input stage
 	data, ok := mpe.Data.(*cmsStageToneCurvesData)
@@ -318,8 +318,7 @@ func EvaluateMatrix(ar *arena.Arena, in []float32, out []float32, mpe *cmsStage)
 
 	data, ok := mpe.Data.(*cmsStageMatrixData)
 	if !ok {
-		fmt.Println("[EvaluateMatrix] ERROR: Data is not *cmsStageMatrixData")
-		return
+		panic("[EvaluateMatrix] ERROR: Data is not *cmsStageMatrixData")
 	}
 
 	/*	fmt.Printf("[EvaluateMatrix] data ptr: %p\n", data)
@@ -354,7 +353,7 @@ func EvaluateMatrix(ar *arena.Arena, in []float32, out []float32, mpe *cmsStage)
 }
 
 // MatrixElemDup duplicates the matrix stage data.
-func MatrixElemDup(ar *arena.Arena, mpe *cmsStage) interface{} {
+func MatrixElemDup(ar *arena.Arena, mpe *cmsStage) any {
 	//	fmt.Println("MatrixElemDup")
 
 	if mpe == nil || mpe.Data == nil {
@@ -478,7 +477,7 @@ func cmsStageAllocXYZ2Lab(ar *arena.Arena, ContextID CmsContext) *cmsStage {
 // This routine does a sweep on whole input space, and calls its callback
 // function on knots. returns TRUE if all ok, FALSE otherwise.
 
-func cmsSliceSpace16(ar *arena.Arena, nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLER16, cargo interface{}) bool {
+func cmsSliceSpace16(ar *arena.Arena, nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLER16, cargo any) bool {
 	if nInputs >= cmsMAXCHANNELS {
 		return false
 	}
@@ -504,7 +503,7 @@ func cmsSliceSpace16(ar *arena.Arena, nInputs uint32, clutPoints []uint32, Sampl
 	}
 	return true
 }
-func cmsSliceSpaceFloat(ar *arena.Arena, nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLERFLOAT, cargo interface{}) int32 {
+func cmsSliceSpaceFloat(ar *arena.Arena, nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLERFLOAT, cargo any) int32 {
 	if nInputs >= cmsMAXCHANNELS {
 		return 0 // FALSE
 	}
@@ -758,7 +757,7 @@ func cmsStageOutputChannels(mpe *cmsStage) uint32 {
 func cmsStageType(mpe *cmsStage) cmsStageSignature {
 	return mpe.Type
 }
-func cmsStageData(mpe *cmsStage) interface{} {
+func cmsStageData(mpe *cmsStage) any {
 	return mpe.Data
 }
 func cmsGetStageContextID(mpe *cmsStage) CmsContext {
@@ -840,7 +839,7 @@ func BlessLUT(lut *cmsPipeline) bool {
 }
 
 // _LUTeval16 evaluates the LUT on a 16-bit basis
-func LUTeval16(ar *arena.Arena, In []uint16, Out []uint16, D interface{}) {
+func LUTeval16(ar *arena.Arena, In []uint16, Out []uint16, D any) {
 	lut, ok := D.(*cmsPipeline)
 	if !ok {
 		panic(" D  must be of type *cmsPipeline")
@@ -862,7 +861,7 @@ func LUTeval16(ar *arena.Arena, In []uint16, Out []uint16, D interface{}) {
 	FromFloatTo16(Storage[Phase][:], Out, lut.OutputChannels)
 }
 
-func LUTevalFloat(_ *arena.Arena, In []float32, Out []float32, D interface{}) {
+func LUTevalFloat(_ *arena.Arena, In []float32, Out []float32, D any) {
 	lut, ok := D.(*cmsPipeline)
 	if !ok {
 		panic(" D must be of type *cmsPipeline")
@@ -913,21 +912,17 @@ func cmsPipelineAlloc(ar *arena.Arena, contextID CmsContext, inputChannels, outp
 }
 
 func cmsGetPipelineContextID(lut *cmsPipeline) CmsContext {
-	if lut == nil {
-		panic("lut is nil")
-	}
+		cmsAssert(lut != nil,"lut is nil")
 	return lut.ContextID
 }
 func cmsPipelineInputChannels(lut *cmsPipeline) uint32 {
-	if lut == nil {
-		panic("lut is nil")
-	}
+		cmsAssert(lut != nil,"lut is nil")
+
 	return lut.InputChannels
 }
 func cmsPipelineOutputChannels(lut *cmsPipeline) uint32 {
-	if lut == nil {
-		panic("lut is nil")
-	}
+		cmsAssert(lut != nil,"lut is nil")
+
 	return lut.OutputChannels
 }
 func cmsPipelineFree(ar *arena.Arena, lut *cmsPipeline) {
@@ -948,15 +943,13 @@ func cmsPipelineFree(ar *arena.Arena, lut *cmsPipeline) {
 	cmsFree(lut.ContextID, lut)
 }
 func cmsPipelineEval16(ar *arena.Arena, In []uint16, Out []uint16, lut *cmsPipeline) {
-	if lut == nil {
-		panic("lut is nil")
-	}
+		cmsAssert(lut != nil,"lut is nil")
+
 	lut.Eval16Fn(ar, In, Out, lut.Data)
 }
 func cmsPipelineEvalFloat(ar *arena.Arena, In []float32, Out []float32, lut *cmsPipeline) {
-	if lut == nil {
-		panic("lut is nil")
-	}
+		cmsAssert(lut != nil,"lut is nil")
+
 	/*fmt.Printf("In[0] %.7f\n", In[0])
 	fmt.Printf("In[1] %.7f\n", In[1])
 	fmt.Printf("In[2] %.7f\n", In[2])*/
@@ -1120,7 +1113,7 @@ func cmsPipelineGetPtrToLastStage(lut *cmsPipeline) *cmsStage {
 // This function may be used to set the optional evaluator and a block of private data. If private data is being used, an optional
 // duplicator and free functions should also be specified in order to duplicate the LUT construct. Use nil to inhibit such functionality.
 func cmsPipelineSetOptimizationParameters(Lut *cmsPipeline,
-	Eval16 cmsPipelineEval16Fn, PrivateData interface{},
+	Eval16 cmsPipelineEval16Fn, PrivateData any,
 	FreePrivateDataFn cmsFreeUserDataFn, DupPrivateDataFn cmsDupUserDataFn) {
 	Lut.Eval16Fn = Eval16
 	Lut.DupDataFn = DupPrivateDataFn
@@ -1349,7 +1342,7 @@ func CubeSize(Dims []uint32, b uint32) uint32 {
 }
 
 // CLUTElemDup duplicates a CLUT element.
-func CLUTElemDup(ar *arena.Arena, mpe *cmsStage) interface{} {
+func CLUTElemDup(ar *arena.Arena, mpe *cmsStage) any {
 	data, ok := mpe.Data.(*cmsStageCLutData)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageClutData\n")
@@ -1538,7 +1531,7 @@ func cmsStageAllocCLutFloatGranular(
 	return NewMPE
 }
 
-func IdentitySampler(ar *arena.Arena, In []uint16, Out []uint16, cargo interface{}) int32 {
+func IdentitySampler(ar *arena.Arena, In []uint16, Out []uint16, cargo any) int32 {
 	var nChan int
 
 	switch v := cargo.(type) {
@@ -1610,7 +1603,7 @@ func cmsStageSampleCLut16bit(
 	ar *arena.Arena,
 	mpe *cmsStage,
 	Sampler cmsSAMPLER16,
-	cargo interface{},
+	cargo any,
 	dwFlags uint32,
 ) bool {
 	//fmt.Println("start cmsStageSampleCLut16bit")
@@ -1686,7 +1679,7 @@ func cmsStageSampleCLutFloat(
 	ar *arena.Arena,
 	mpe *cmsStage,
 	Sampler cmsSAMPLERFLOAT,
-	cargo interface{},
+	cargo any,
 	dwFlags uint32,
 ) bool {
 	if mpe == nil {

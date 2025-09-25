@@ -2855,9 +2855,7 @@ func DupFormatterFactoryList(ar *arena.Arena, ctx CmsContext, src CmsContext) {
 
 // Allocate and initialize the Formatters plugin chunk
 func cmsAllocFormattersPluginChunk(ar *arena.Arena, ctx CmsContext, src CmsContext) {
-	if ctx == nil {
-		panic("Context is nil")
-	}
+	cmsAssert(ctx != nil, "Context is nil")
 
 	if src != nil {
 		// Duplicate the list
@@ -2874,8 +2872,8 @@ func cmsRegisterFormattersPlugin(ar *arena.Arena, contextID CmsContext, Data Plu
 	ctx := CmsContextGetClientChunk(contextID, FormattersPlugin).(*cmsFormattersPluginChunkType)
 	plugin, ok := Data.(*cmsPluginFormatters)
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "Plugin is not of the type cmsPluginFormatters\n")
-		return false
+		panic("Plugin is not of the type cmsPluginFormatters\n")
+
 	}
 	if Data == nil {
 		// Reset to built-in defaults
@@ -2942,8 +2940,8 @@ func cmsFormatterForPCSOfProfile(hProfile CmsHPROFILE, nBytes uint32, isFloat bo
 	colorSpace := cmsGetPCS(hProfile)
 	colorSpaceBits := cmsLCMScolorSpace(colorSpace)
 	nOutputChans := cmsChannelsOf(colorSpace)
-// cmsChannelsOf always returns a non-zero unsigned count; LCMS falls back to 3 on error.
-// (The original C had `if (nOutputChans < 0) return 0;`, which can’t happen here.)
+	// cmsChannelsOf always returns a non-zero unsigned count; LCMS falls back to 3 on error.
+	// (The original C had `if (nOutputChans < 0) return 0;`, which can’t happen here.)
 
 	floatFlag := uint32(0)
 	if isFloat {
