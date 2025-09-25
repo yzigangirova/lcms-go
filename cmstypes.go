@@ -13,7 +13,7 @@ package golcms
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
+	//"fmt"
 	"math"
 
 	//"syscall"
