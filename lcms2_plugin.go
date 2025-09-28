@@ -1,8 +1,7 @@
 package golcms
 
 import (
-	//"unsafe"
-	"arena"
+	"github.com/yzigangirova/lcms-go/mem"
 )
 
 // Constants
@@ -123,8 +122,7 @@ type cmsPluginMultiProcessElement struct {
 }
 
 // cmsIntentFn defines the function type for custom intents.
-type cmsIntentFn func(
-	ar *arena.Arena,
+type cmsIntentFn func(mm mem.Manager,
 	ContextID CmsContext, // Context ID
 	nProfiles uint32, // Number of profiles
 	Intents []uint32, // Array of intents
@@ -250,7 +248,7 @@ type cmsFormatterFloat func(CMMcargo *cmsTRANSFORM, Values []float32, Buffer []u
 type cmsTransformFn func(CMMcargo *cmsTRANSFORM, InputBuffer,
 	OutputBuffer any, Size uint32, Stride uint32)
 
-type cmsTransform2Fn func(ar *arena.Arena, CMMcargo *cmsTRANSFORM, InputBuffer,
+type cmsTransform2Fn func(mm mem.Manager, CMMcargo *cmsTRANSFORM, InputBuffer,
 	OutputBuffer any, PixelsPerLine uint32, LineCount uint32, Stride *cmsStride)
 
 type cmsTransformFactory func(xform *cmsTransformFn, UserData *interface{},
@@ -295,8 +293,7 @@ type cmsStageCLutData struct {
 
 // _cmsOPToptimizeFn is a function type for optimization strategies.
 // Returns true if any optimization is done on the LUT, false otherwise.
-type cmsOPToptimizeFn func(
-	ar *arena.Arena,
+type cmsOPToptimizeFn func(mm mem.Manager,
 	Lut **cmsPipeline,
 	Intent uint32,
 	InputFormat *uint32,
@@ -305,16 +302,14 @@ type cmsOPToptimizeFn func(
 ) bool
 
 // _cmsPipelineEval16Fn is a function type for evaluating the pipeline in 16-bit precision.
-type cmsPipelineEval16Fn func(
-	ar *arena.Arena,
+type cmsPipelineEval16Fn func(mm mem.Manager,
 	In []uint16, // Input array
 	Out []uint16, // Output array
 	Data any, // Arbitrary data
 )
 
 // _cmsPipelineEvalFloatFn is a function type for evaluating the pipeline in floating-point precision.
-type cmsPipelineEvalFloatFn func(
-	ar *arena.Arena,
+type cmsPipelineEvalFloatFn func(mm mem.Manager,
 	In []float32, // Input array
 	Out []float32, // Output array
 	Data any, // Arbitrary data

@@ -2,7 +2,6 @@ package golcms
 
 //import "C"
 import (
-	"arena"
 	"bytes"
 	"encoding/binary"
 	"fmt"
@@ -10,6 +9,8 @@ import (
 	"os"
 	"unicode"
 	"unsafe"
+
+	"github.com/yzigangirova/lcms-go/mem"
 )
 
 // ---------------------------------------------------------------------------------------------------------
@@ -67,15 +68,6 @@ func allocateMemory(size uintptr) []byte {
 	// Allocate memory manually using a Go slice and return its pointer.
 	mem := make([]byte, size)
 	return mem
-}
-
-func allocateStruct[T any](ar *arena.Arena) *T {
-	if ar != nil {
-		return arena.New[T](ar)
-	} else {
-		return new(T) // Allocates and returns a pointer to type T
-	}
-
 }
 
 // freeMemory frees manually allocated memory. (No-op in Go)
@@ -306,12 +298,12 @@ func cmsDupMemSlice[T any](src []T) []T {
 // I prefer this method over realloc due to the big impact on xput realloc may have if
 // memory is being swapped to disk. This approach is safer (although that may not be true on all platforms)
 // Create a new suballocation chunk
-func cmsCreateSubAllocChunk(ar *arena.Arena, contextID CmsContext, initial uint32) *cmsSubAllocatorChunk {
+func cmsCreateSubAllocChunk(mm mem.Manager, contextID CmsContext, initial uint32) *cmsSubAllocatorChunk {
 	if initial == 0 {
 		initial = 20 * 1024 // Default to 20KB
 	}
 
-	chunk := allocateStruct[cmsSubAllocatorChunk](ar)
+	chunk := mem.New[cmsSubAllocatorChunk](mm)
 	if chunk == nil {
 		return nil
 	}
@@ -330,14 +322,14 @@ func cmsCreateSubAllocChunk(ar *arena.Arena, contextID CmsContext, initial uint3
 }
 
 // Create a new suballocator
-func cmsCreateSubAlloc(ar *arena.Arena, contextID CmsContext, initial uint32) *cmsSubAllocator {
-	sub := allocateStruct[cmsSubAllocator](ar)
+func cmsCreateSubAlloc(mm mem.Manager, contextID CmsContext, initial uint32) *cmsSubAllocator {
+	sub := mem.New[cmsSubAllocator](mm)
 	if sub == nil {
 		return nil
 	}
 
 	sub.ContextID = (CmsContext)(contextID)
-	sub.Head = cmsCreateSubAllocChunk(ar, contextID, initial)
+	sub.Head = cmsCreateSubAllocChunk(mm, contextID, initial)
 	if sub.Head == nil {
 		cmsFree(contextID, sub)
 		return nil
@@ -361,7 +353,7 @@ func cmsSubAllocDestroy(sub *cmsSubAllocator) {
 }
 
 // Allocate memory from the suballocator
-func cmsSubAlloc(ar *arena.Arena, sub *cmsSubAllocator, size uint32) []byte {
+func cmsSubAlloc(mm mem.Manager, sub *cmsSubAllocator, size uint32) []byte {
 	size = uint32(cmsALIGNMEM((uintptr(size))))
 
 	freeSpace := sub.Head.BlockSize - sub.Head.Used
@@ -371,7 +363,7 @@ func cmsSubAlloc(ar *arena.Arena, sub *cmsSubAllocator, size uint32) []byte {
 			newSize = size
 		}
 
-		newChunk := cmsCreateSubAllocChunk(ar, sub.ContextID, newSize)
+		newChunk := cmsCreateSubAllocChunk(mm, sub.ContextID, newSize)
 		if newChunk == nil {
 			return nil
 		}
@@ -386,12 +378,12 @@ func cmsSubAlloc(ar *arena.Arena, sub *cmsSubAllocator, size uint32) []byte {
 	return ptr
 }
 
-func cmsSubAllocDup(ar *arena.Arena, sub *cmsSubAllocator, ptr any, size uint32) []byte {
+func cmsSubAllocDup(mm mem.Manager, sub *cmsSubAllocator, ptr any, size uint32) []byte {
 	if ptr == nil {
 		return nil
 	}
 
-	newPtr := cmsSubAlloc(ar, sub, size)
+	newPtr := cmsSubAlloc(mm, sub, size)
 	if newPtr == nil {
 		return nil
 	}
@@ -485,7 +477,7 @@ func cmsRegisterMutexPlugin(ContextID CmsContext, Data PluginIntrfc) bool {
 	plugin, ok := Data.(*cmsPluginMutex)
 	if !ok {
 		panic(" Plugin is not of the type cmsPluginMutex\n")
-		
+
 	}
 	// Ensure all required callback functions are provided.
 	if plugin.CreateMutexPtr == nil || plugin.DestroyMutexPtr == nil ||

@@ -1,23 +1,21 @@
 package golcms
 
-import (
-	"arena"
-)
+import "github.com/yzigangirova/lcms-go/mem"
 
 // cmsMLUalloc allocates an empty multi-localized unicode object.
-func cmsMLUalloc(ar *arena.Arena, ContextID CmsContext, nItems uint32) *cmsMLU {
+func cmsMLUalloc(mm mem.Manager, ContextID CmsContext, nItems uint32) *cmsMLU {
 	if nItems <= 0 {
 		nItems = 2
 	}
 
-	mlu := allocateStruct[cmsMLU](ar)
+	mlu := mem.New[cmsMLU](mm)
 	if mlu == nil {
 		return nil
 	}
 
 	mlu.ContextID = ContextID
 
-	mlu.Entries = make([]cmsMLUentry, nItems)
+	mlu.Entries = mem.MakeSlice[cmsMLUentry](mm, int(nItems))
 	mlu.AllocatedEntries = nItems
 	mlu.UsedEntries = 0
 
@@ -188,12 +186,12 @@ func cmsMLUsetWide(mlu *cmsMLU, Language, Country string, WideString []uint16) b
 }
 
 // cmsMLUdup duplicates an MLU.
-func cmsMLUdup(ar *arena.Arena, mlu *cmsMLU) *cmsMLU {
+func cmsMLUdup(mm mem.Manager, mlu *cmsMLU) *cmsMLU {
 	if mlu == nil {
 		return nil
 	}
 
-	newMLU := cmsMLUalloc(ar, mlu.ContextID, mlu.UsedEntries)
+	newMLU := cmsMLUalloc(mm, mlu.ContextID, mlu.UsedEntries)
 	if newMLU == nil {
 		return nil
 	}
@@ -210,7 +208,7 @@ func cmsMLUdup(ar *arena.Arena, mlu *cmsMLU) *cmsMLU {
 	if mlu.PoolUsed == 0 {
 		newMLU.MemPool = nil
 	} else {
-		pool := make([]byte, mlu.PoolUsed)
+		pool := mem.MakeSlice[byte](mm, int(mlu.PoolUsed))
 		src, ok := mlu.MemPool.([]byte)
 		if !ok || len(src) < int(mlu.PoolUsed) {
 			cmsMLUfree(newMLU)
@@ -453,7 +451,7 @@ func GrowNamedColorList(v *cmsNAMEDCOLORLIST) bool {
 
 	// Extend the slice to the new size
 	if len(v.List) < int(newSize) {
-		newList := make([]cmsNAMEDCOLOR, newSize)
+		newList := mem.MakeSlice[cmsNAMEDCOLOR](mem.Manager{}, int(newSize))
 		copy(newList, v.List) // Preserve existing elements
 		v.List = newList
 	}
@@ -463,12 +461,12 @@ func GrowNamedColorList(v *cmsNAMEDCOLORLIST) bool {
 }
 
 // cmsAllocNamedColorList allocates a list for n elements.
-func cmsAllocNamedColorList(ar *arena.Arena, ContextID CmsContext, n, ColorantCount uint32, Prefix, Suffix string) *cmsNAMEDCOLORLIST {
+func cmsAllocNamedColorList(mm mem.Manager, ContextID CmsContext, n, ColorantCount uint32, Prefix, Suffix string) *cmsNAMEDCOLORLIST {
 	if ColorantCount > cmsMAXCHANNELS {
 		return nil
 	}
 
-	v := allocateStruct[cmsNAMEDCOLORLIST](ar)
+	v := mem.New[cmsNAMEDCOLORLIST](mm)
 	if v == nil {
 		return nil
 	}
@@ -505,12 +503,12 @@ func cmsFreeNamedColorList(v *cmsNAMEDCOLORLIST) {
 }
 
 // cmsDupNamedColorList duplicates a named color list.
-func cmsDupNamedColorList(ar *arena.Arena, v *cmsNAMEDCOLORLIST) *cmsNAMEDCOLORLIST {
+func cmsDupNamedColorList(mm mem.Manager, v *cmsNAMEDCOLORLIST) *cmsNAMEDCOLORLIST {
 	if v == nil {
 		return nil
 	}
 
-	newNC := cmsAllocNamedColorList(ar, v.ContextID, v.nColors, v.ColorantCount, string(v.Prefix[:]), string(v.Suffix[:]))
+	newNC := cmsAllocNamedColorList(mm, v.ContextID, v.nColors, v.ColorantCount, string(v.Prefix[:]), string(v.Suffix[:]))
 	if newNC == nil {
 		return nil
 	}
@@ -536,25 +534,25 @@ func cmsDupNamedColorList(ar *arena.Arena, v *cmsNAMEDCOLORLIST) *cmsNAMEDCOLORL
 }
 
 // FreeNamedColorList releases the resources for the named color list.
-func FreeNamedColorList(ar *arena.Arena, mpe *cmsStage) {
+func FreeNamedColorList(mm mem.Manager, mpe *cmsStage) {
 	list := mpe.Data.(*cmsNAMEDCOLORLIST)
 	cmsFreeNamedColorList(list)
 }
 
 // DupNamedColorList duplicates the named color list.
-func DupNamedColorList(ar *arena.Arena, mpe *cmsStage) any {
+func DupNamedColorList(mm mem.Manager, mpe *cmsStage) any {
 	list, ok := mpe.Data.(*cmsNAMEDCOLORLIST)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsNAMEDCOLORLIST\n")
 		return nil
 	}
-	return cmsDupNamedColorList(ar, list)
+	return cmsDupNamedColorList(mm, list)
 }
 
 // EvalNamedColorPCS evaluates the named color in PCS (Profile Connection Space).
 
 // EvalNamedColorPCS evaluates named color in PCS (Lab) space.
-func EvalNamedColorPCS(ar *arena.Arena, in []float32, out []float32, mpe *cmsStage) {
+func EvalNamedColorPCS(mm mem.Manager, in []float32, out []float32, mpe *cmsStage) {
 	NamedColorList, ok := mpe.Data.(*cmsNAMEDCOLORLIST)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsNAMEDCOLORLIST\n")
@@ -578,7 +576,7 @@ func EvalNamedColorPCS(ar *arena.Arena, in []float32, out []float32, mpe *cmsSta
 }
 
 // EvalNamedColor evaluates named color in device colorant space.
-func EvalNamedColor(ar *arena.Arena, in []float32, out []float32, mpe *cmsStage) {
+func EvalNamedColor(mm mem.Manager, in []float32, out []float32, mpe *cmsStage) {
 	namedColorList, ok := mpe.Data.(*cmsNAMEDCOLORLIST)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsNAMEDCOLORLIST\n")
@@ -603,7 +601,7 @@ func EvalNamedColor(ar *arena.Arena, in []float32, out []float32, mpe *cmsStage)
 
 // Named color lookup element
 // _cmsStageAllocNamedColor allocates a named color lookup element.
-func cmsStageAllocNamedColor(ar *arena.Arena, namedColorList *cmsNAMEDCOLORLIST, usePCS bool) *cmsStage {
+func cmsStageAllocNamedColor(mm mem.Manager, namedColorList *cmsNAMEDCOLORLIST, usePCS bool) *cmsStage {
 	// Determine the output channel count based on the `usePCS` condition.
 	outputChannels := uint32(1)
 	if usePCS {
@@ -621,7 +619,7 @@ func cmsStageAllocNamedColor(ar *arena.Arena, namedColorList *cmsNAMEDCOLORLIST,
 	}
 
 	// Allocate the placeholder stage.
-	return cmsStageAllocPlaceholder(ar,
+	return cmsStageAllocPlaceholder(mm,
 		namedColorList.ContextID,
 		CmsSigNamedColorElemType,
 		1,                                        // Input channels are always 1.
@@ -629,7 +627,7 @@ func cmsStageAllocNamedColor(ar *arena.Arena, namedColorList *cmsNAMEDCOLORLIST,
 		evalFunc,                                 // Evaluation function depends on `usePCS`.
 		DupNamedColorList,                        // Duplication function.
 		FreeNamedColorList,                       // Freeing function.
-		cmsDupNamedColorList(ar, namedColorList), // Duplicate the named color list.
+		cmsDupNamedColorList(mm, namedColorList), // Duplicate the named color list.
 	)
 }
 
@@ -734,18 +732,18 @@ func cmsNamedColorIndex(namedColorList *cmsNAMEDCOLORLIST, name *byte) int32 {
 }
 
 // cmsAllocProfileSequenceDescription allocates memory for a profile sequence description.
-func cmsAllocProfileSequenceDescription(ar *arena.Arena, ContextID CmsContext, n uint32) *cmsSEQ {
+func cmsAllocProfileSequenceDescription(mm mem.Manager, ContextID CmsContext, n uint32) *cmsSEQ {
 	if n == 0 || n > 255 {
 		return nil // Invalid input
 	}
 
-	seq := allocateStruct[cmsSEQ](ar)
+	seq := mem.New[cmsSEQ](mm)
 	if seq == nil {
 		return nil
 	}
 
 	seq.ContextID = ContextID
-	seq.seq = make([]cmsPSEQDESC, n)
+	seq.seq = mem.MakeSlice[cmsPSEQDESC](mm, int(n))
 	seq.n = n
 
 	if seq.seq == nil {
@@ -788,18 +786,18 @@ func cmsFreeProfileSequenceDescription(pseq *cmsSEQ) {
 }
 
 // cmsDupProfileSequenceDescription duplicates a profile sequence description.
-func cmsDupProfileSequenceDescription(ar *arena.Arena, pseq *cmsSEQ) *cmsSEQ {
+func cmsDupProfileSequenceDescription(mm mem.Manager, pseq *cmsSEQ) *cmsSEQ {
 	if pseq == nil {
 		return nil
 	}
 
-	newSeq := allocateStruct[cmsSEQ](ar)
+	newSeq := mem.New[cmsSEQ](mm)
 
 	if newSeq == nil {
 		return nil
 	}
 
-	newSeq.seq = make([]cmsPSEQDESC, pseq.n)
+	newSeq.seq = mem.MakeSlice[cmsPSEQDESC](mm, int(pseq.n))
 	if newSeq.seq == nil {
 		cmsFreeProfileSequenceDescription(newSeq)
 		return nil
@@ -820,9 +818,9 @@ func cmsDupProfileSequenceDescription(ar *arena.Arena, pseq *cmsSEQ) *cmsSEQ {
 		dstEntry.technology = srcEntry.technology
 
 		// Duplicate MLU fields
-		dstEntry.Manufacturer = cmsMLUdup(ar, srcEntry.Manufacturer)
-		dstEntry.Model = cmsMLUdup(ar, srcEntry.Model)
-		dstEntry.Description = cmsMLUdup(ar, srcEntry.Description)
+		dstEntry.Manufacturer = cmsMLUdup(mm, srcEntry.Manufacturer)
+		dstEntry.Model = cmsMLUdup(mm, srcEntry.Model)
+		dstEntry.Description = cmsMLUdup(mm, srcEntry.Description)
 	}
 
 	return newSeq
@@ -835,8 +833,8 @@ type cmsDICT struct {
 }
 
 // Allocate an empty dictionary
-func cmsDictAlloc(ar *arena.Arena, contextID CmsContext) CmsHANDLE {
-	dict := allocateStruct[cmsDICT](ar)
+func cmsDictAlloc(mm mem.Manager, contextID CmsContext) CmsHANDLE {
+	dict := mem.New[cmsDICT](mm)
 	return CmsHANDLE(dict)
 }
 
@@ -877,7 +875,7 @@ func DupWcs(contextID CmsContext, ptr []uint16) []uint16 {
 }
 
 // Add a new entry to the linked list
-func cmsDictAddEntry(ar *arena.Arena, hDict CmsHANDLE, name string, value string, displayName *cmsMLU, displayValue *cmsMLU) bool {
+func cmsDictAddEntry(mm mem.Manager, hDict CmsHANDLE, name string, value string, displayName *cmsMLU, displayValue *cmsMLU) bool {
 	dict, ok := hDict.(*cmsDICT)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsDICT\n")
@@ -887,13 +885,13 @@ func cmsDictAddEntry(ar *arena.Arena, hDict CmsHANDLE, name string, value string
 		return false
 	}
 
-	entry := allocateStruct[cmsDICTentry](ar)
+	entry := mem.New[cmsDICTentry](mm)
 	if entry == nil {
 		return false
 	}
 
-	entry.DisplayName = cmsMLUdup(ar, displayName)
-	entry.DisplayValue = cmsMLUdup(ar, displayValue)
+	entry.DisplayName = cmsMLUdup(mm, displayName)
+	entry.DisplayValue = cmsMLUdup(mm, displayValue)
 	entry.Name = name
 	entry.Value = value
 	entry.Next = dict.head
@@ -903,7 +901,7 @@ func cmsDictAddEntry(ar *arena.Arena, hDict CmsHANDLE, name string, value string
 }
 
 // Duplicate an existing dictionary
-func cmsDictDup(ar *arena.Arena, hDict CmsHANDLE) CmsHANDLE {
+func cmsDictDup(mm mem.Manager, hDict CmsHANDLE) CmsHANDLE {
 	oldDict, ok := hDict.(*cmsDICT)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsDICT\n")
@@ -913,10 +911,10 @@ func cmsDictDup(ar *arena.Arena, hDict CmsHANDLE) CmsHANDLE {
 		return nil
 	}
 
-	newDict := cmsDictAlloc(ar, oldDict.ContextID)
+	newDict := cmsDictAlloc(mm, oldDict.ContextID)
 	entry := oldDict.head
 	for entry != nil {
-		if !cmsDictAddEntry(ar, newDict, entry.Name, entry.Value, entry.DisplayName, entry.DisplayValue) {
+		if !cmsDictAddEntry(mm, newDict, entry.Name, entry.Value, entry.DisplayName, entry.DisplayValue) {
 			cmsDictFree(newDict)
 			return nil
 		}

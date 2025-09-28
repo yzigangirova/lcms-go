@@ -13,22 +13,25 @@ package golcms
 import (
 	"bytes"
 	"encoding/binary"
+
 	//"fmt"
 	"math"
 
 	//"syscall"
-	"arena"
+
 	"time"
 	"unsafe"
+
+	"github.com/yzigangirova/lcms-go/mem"
 )
 
 type wchar uint16
 type cmsTagTypeHandler struct {
 	Signature  cmsTagTypeSignature
-	ReadFn     func(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any
-	WriteFn    func(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool
-	DupFn      func(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any
-	FreeFn     func(ar *arena.Arena, self *cmsTagTypeHandler, ptr any)
+	ReadFn     func(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any
+	WriteFn    func(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool
+	DupFn      func(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any
+	FreeFn     func(mm mem.Manager, self *cmsTagTypeHandler, ptr any)
 	ContextID  CmsContext
 	ICCVersion uint32
 }
@@ -90,7 +93,7 @@ const (
 )
 
 // Register a new type handler. This routine is shared between normal types and MPE.
-func RegisterTypesPlugin(ar *arena.Arena, id CmsContext, Data PluginIntrfc, pos cmsMemoryClient) bool {
+func RegisterTypesPlugin(mm mem.Manager, id CmsContext, Data PluginIntrfc, pos cmsMemoryClient) bool {
 	ctx := CmsContextGetClientChunk(id, pos).(*cmsTagTypePluginChunkType)
 
 	// If Data is nil, unregister the plug-in.
@@ -102,11 +105,11 @@ func RegisterTypesPlugin(ar *arena.Arena, id CmsContext, Data PluginIntrfc, pos 
 	plugin, ok := Data.(*cmsPluginTagType)
 	if !ok {
 		panic("Plugin is not of the type cmsPluginTagType\n")
-		
+
 	}
 	// Allocate memory for the new linked list node.
 	//pt := (*cmsTagTypeLinkedList)(cmsPluginMalloc(id, uint32(unsafe.Sizeof(cmsTagTypeLinkedList{}))))
-	pt := allocateStruct[cmsTagTypeLinkedList](ar)
+	pt := mem.New[cmsTagTypeLinkedList](mm)
 
 	if pt == nil {
 		return false
@@ -123,9 +126,9 @@ func RegisterTypesPlugin(ar *arena.Arena, id CmsContext, Data PluginIntrfc, pos 
 }
 
 // To deal with position tables
-type PositionTableEntryFn func(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo any, n, SizeOfTag uint32) bool
+type PositionTableEntryFn func(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo any, n, SizeOfTag uint32) bool
 
-func ReadPositionTable(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, count, baseOffset uint32, cargo any, elementFn PositionTableEntryFn) bool {
+func ReadPositionTable(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, count, baseOffset uint32, cargo any, elementFn PositionTableEntryFn) bool {
 
 	var currentPosition = uint32(io.Tell((*cms_io_handler)(io)))
 	var elementOffsets, elementSizes []uint32
@@ -135,8 +138,8 @@ func ReadPositionTable(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 	}
 
 	// Allocate memory for offsets and sizes
-	elementOffsets = make([]uint32, count)
-	elementSizes = make([]uint32, count)
+	elementOffsets = mem.MakeSlice[uint32](mem.Manager{}, int(count))
+	elementSizes = mem.MakeSlice[uint32](mem.Manager{}, int(count))
 
 	// Read the offsets and sizes
 	for i := uint32(0); i < count; i++ {
@@ -152,21 +155,21 @@ func ReadPositionTable(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 			return false
 		}
 		// Call the reader callback
-		if !elementFn(ar, self, io, cargo, i, elementSizes[i]) {
+		if !elementFn(mm, self, io, cargo, i, elementSizes[i]) {
 			return false
 		}
 	}
 	return true
 }
 
-func WritePositionTable(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, sizeOfTag, count, baseOffset uint32, cargo any, elementFn PositionTableEntryFn) bool {
+func WritePositionTable(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, sizeOfTag, count, baseOffset uint32, cargo any, elementFn PositionTableEntryFn) bool {
 	// Allocate memory for offsets and sizes
 	var currentPos uint32
 	var directoryPos uint32
 
 	// Allocate memory for offsets and sizes
-	elementOffsets := make([]uint32, count)
-	elementSizes := make([]uint32, count)
+	elementOffsets := mem.MakeSlice[uint32](mm, int(count))
+	elementSizes := mem.MakeSlice[uint32](mm, int(count))
 
 	// Keep starting position of curve offsets
 	directoryPos = uint32(io.Tell((*cms_io_handler)(io)))
@@ -189,7 +192,7 @@ func WritePositionTable(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 		elementOffsets[i] = before - baseOffset
 
 		// Callback to write
-		if !elementFn(ar, self, io, cargo, i, sizeOfTag) {
+		if !elementFn(mm, self, io, cargo, i, sizeOfTag) {
 			return false
 		}
 
@@ -214,11 +217,11 @@ func WritePositionTable(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 }
 
 // Type_XYZ_Read reads XYZ color space data.
-func TypeXYZRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, SizeOfTag uint32) any {
+func TypeXYZRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, SizeOfTag uint32) any {
 	var xyz *cmsCIEXYZ
 
 	*nItems = 0
-	xyz = allocateStruct[cmsCIEXYZ](ar)
+	xyz = mem.New[cmsCIEXYZ](mm)
 	if xyz == nil {
 		return nil
 	}
@@ -233,12 +236,12 @@ func TypeXYZRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nIt
 }
 
 // Type_XYZ_Write writes XYZ color space data.
-func TypeXYZWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeXYZWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	return cmsWriteXYZNumber(io, ptr.(*cmsCIEXYZ))
 }
 
 // Type_XYZ_Dup duplicates XYZ color space data.
-func TypeXYZDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeXYZDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	pxyz, ok := ptr.(*cmsCIEXYZ)
 	xyz := *pxyz //copy values
 	if !ok {
@@ -249,7 +252,7 @@ func TypeXYZDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any
 }
 
 // Type_XYZ_Free frees XYZ color space data.
-func TypeXYZFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeXYZFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFree(self.ContextID, ptr)
 }
 
@@ -320,7 +323,7 @@ func DecideCurveType(ICCVersion float64, Data any) cmsTagTypeSignature {
 }
 
 // TypeParametricCurveRead reads a parametric curve from the IO handler.
-func TypeParametricCurveRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, SizeOfTag uint32) any {
+func TypeParametricCurveRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, SizeOfTag uint32) any {
 	paramsByType := []int{1, 3, 4, 5, 7}
 	var params [10]float64
 	var curveType uint16
@@ -345,13 +348,13 @@ func TypeParametricCurveRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIO
 		}
 	}
 
-	newGamma = cmsBuildParametricToneCurve(ar, self.ContextID, int(curveType+1), params[:])
+	newGamma = cmsBuildParametricToneCurve(mm, self.ContextID, int(curveType+1), params[:])
 	*nItems = 1
 	return newGamma
 }
 
 // TypeParametricCurveWrite writes a parametric curve to the IO handler.
-func TypeParametricCurveWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeParametricCurveWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	curve, ok := ptr.(*CmsToneCurve)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsToneCurve\n")
@@ -390,21 +393,21 @@ func TypeParametricCurveWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsI
 }
 
 // TypeParametricCurveDup duplicates a parametric curve.
-func TypeParametricCurveDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
-	return cmsDupToneCurve(ar, ptr.(*CmsToneCurve))
+func TypeParametricCurveDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
+	return cmsDupToneCurve(mm, ptr.(*CmsToneCurve))
 }
 
 // TypeParametricCurveFree frees a parametric curve.
-func TypeParametricCurveFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeParametricCurveFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	CmsFreeToneCurve(ptr.(*CmsToneCurve))
 }
 
 // Type_Text_Read reads a text type structure from the io handler.
-func TypeTextRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeTextRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var text []byte
 
 	// Create a container
-	mlu := cmsMLUalloc(ar, self.ContextID, 1)
+	mlu := cmsMLUalloc(mm, self.ContextID, 1)
 	if mlu == nil {
 		return nil
 	}
@@ -417,7 +420,7 @@ func TypeTextRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 	}
 
 	// Allocate memory for the text, with space for null terminator
-	text = make([]byte, sizeOfTag+1)
+	text = mem.MakeSlice[byte](mm, int(sizeOfTag+1))
 
 	// Read text from the IO handler
 	if io.Read((*cms_io_handler)(io), text, uint32(unsafe.Sizeof(uint8(0))), sizeOfTag) != sizeOfTag {
@@ -441,7 +444,7 @@ Error:
 }
 
 // Type_Text_Write writes a text type structure to the io handler.
-func TypeTextWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeTextWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	mlu, ok := ptr.(*cmsMLU)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsMLU\n")
@@ -458,7 +461,7 @@ func TypeTextWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, p
 	}
 
 	// Allocate memory for the text
-	text = make([]byte, size)
+	text = mem.MakeSlice[byte](mm, int(size))
 
 	// Retrieve the ASCII text
 	cmsMLUgetASCII(mlu, cmsNoLanguage, cmsNoCountry, text, size)
@@ -469,12 +472,12 @@ func TypeTextWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, p
 }
 
 // Type_Text_Dup duplicates a text type structure.
-func TypeTextDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
-	return cmsMLUdup(ar, ptr.(*cmsMLU))
+func TypeTextDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
+	return cmsMLUdup(mm, ptr.(*cmsMLU))
 }
 
 // Type_Text_Free frees a text type structure.
-func TypeTextFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeTextFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsMLUfree(ptr.(*cmsMLU))
 }
 
@@ -497,7 +500,7 @@ func DecideTextDescType(ICCVersion float64, Data any) cmsTagTypeSignature {
 	}
 	return CmsSigTextDescriptionType
 }
-func TypeTextDescriptionRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeTextDescriptionRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var (
 		text            []byte
 		mlu             *cmsMLU
@@ -528,13 +531,13 @@ func TypeTextDescriptionRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIO
 	}
 
 	//  Allocate the MLU
-	mlu = cmsMLUalloc(ar, self.ContextID, 1)
+	mlu = cmsMLUalloc(mm, self.ContextID, 1)
 	if mlu == nil {
 		return nil
 	}
 
 	//  Allocate memory for the text slice
-	text = make([]byte, asciiCount+1) //  +1 to null-terminate
+	text = mem.MakeSlice[byte](mm, int(asciiCount+1)) //  +1 to null-terminate
 	if len(text) == 0 {
 		goto Error
 	}
@@ -603,7 +606,7 @@ Error:
 
 // This tag can come IN UNALIGNED SIZE. In order to prevent issues, we force zeros on description to align it
 // Type_Text_Description_Write writes a text description tag
-func TypeTextDescriptionWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeTextDescriptionWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	mlu, ok := ptr.(*cmsMLU)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsMLU\n")
@@ -642,8 +645,8 @@ func TypeTextDescriptionWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsI
 		Wide = []uint16{0} // Equivalent to calloc(1, sizeof(uint16))
 	} else {
 		// Allocate slices instead of manually allocating memory
-		Text = make([]byte, lenASCII)   // Allocates a slice of lenASCII bytes
-		Wide = make([]uint16, lenASCII) // Allocates a slice of lenASCII uint16s
+		Text = mem.MakeSlice[byte](mm, int(lenASCII))   // Allocates a slice of lenASCII bytes
+		Wide = mem.MakeSlice[uint16](mm, int(lenASCII)) // Allocates a slice of lenASCII uint16s
 
 		// Get both representations
 		cmsMLUgetASCII(mlu, cmsNoLanguage, cmsNoCountry, Text, lenASCII)
@@ -710,22 +713,22 @@ func TypeTextDescriptionWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsI
 }
 
 // Type_Text_Description_Dup duplicates a cmsMLU object
-func TypeTextDescriptionDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, nItems uint32) any {
-	return cmsMLUdup(ar, ptr.(*cmsMLU))
+func TypeTextDescriptionDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, nItems uint32) any {
+	return cmsMLUdup(mm, ptr.(*cmsMLU))
 }
 
 // Type_Text_Description_Free frees a cmsMLU object
-func TypeTextDescriptionFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeTextDescriptionFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsMLUfree(ptr.(*cmsMLU))
 }
 
 // Both kinds of plug-ins share the same structure
-func cmsRegisterTagTypePlugin(ar *arena.Arena, id CmsContext, Data PluginIntrfc) bool {
-	return RegisterTypesPlugin(ar, id, Data, TagTypePlugin)
+func cmsRegisterTagTypePlugin(mm mem.Manager, id CmsContext, Data PluginIntrfc) bool {
+	return RegisterTypesPlugin(mm, id, Data, TagTypePlugin)
 }
 
-func cmsRegisterMultiProcessElementPlugin(ar *arena.Arena, id CmsContext, Data PluginIntrfc) bool {
-	return RegisterTypesPlugin(ar, id, Data, MPEPlugin)
+func cmsRegisterMultiProcessElementPlugin(mm mem.Manager, id CmsContext, Data PluginIntrfc) bool {
+	return RegisterTypesPlugin(mm, id, Data, MPEPlugin)
 }
 
 // Return handler for a given type or NULL if not found. Shared between normal types and MPE. It first tries the additons
@@ -966,7 +969,7 @@ func init() {
 }
 
 // cmsRegisterTagPlugin registers a tag plugin.
-func cmsRegisterTagPlugin(ar *arena.Arena, id CmsContext, Data PluginIntrfc) bool {
+func cmsRegisterTagPlugin(mm mem.Manager, id CmsContext, Data PluginIntrfc) bool {
 	TagPluginChunk := CmsContextGetClientChunk(id, TagPlugin).(*cmsTagPluginChunkType)
 
 	// If Data is nil, unregister the plugin.
@@ -977,11 +980,11 @@ func cmsRegisterTagPlugin(ar *arena.Arena, id CmsContext, Data PluginIntrfc) boo
 	plugin, ok := Data.(*cmsPluginTag)
 	if !ok {
 		panic("Plugin is not of the type cmsPluginTagType\n")
-		
+
 	}
 	// Allocate memory for the new linked list node.
 	//pt := (*cmsTagLinkedList)(cmsPluginMalloc(id, uint32(unsafe.Sizeof(cmsTagLinkedList{}))))
-	pt := allocateStruct[cmsTagLinkedList](ar)
+	pt := mem.New[cmsTagLinkedList](mm)
 
 	if pt == nil {
 		return false
@@ -1027,8 +1030,8 @@ func cmsGetTagDescriptor(ContextID CmsContext, sig cmsTagSignature) *cmsTagDescr
 //
 // The screeningType describes various screening parameters including screen
 // frequency, screening angle, and spot shape.
-func TypeScreeningRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
-	sc := allocateStruct[cmsScreening](ar)
+func TypeScreeningRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+	sc := mem.New[cmsScreening](mm)
 	if sc == nil {
 		return nil
 	}
@@ -1059,7 +1062,7 @@ Error:
 	return nil
 }
 
-func TypeScreeningWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeScreeningWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	sc, ok := ptr.(*cmsScreening)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsScreening\n")
@@ -1080,16 +1083,16 @@ func TypeScreeningWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 	return true
 }
 
-func TypeScreeningDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeScreeningDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	str := *(ptr.(*cmsScreening))
 	return &str
 }
 
-func TypeScreeningFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeScreeningFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFree(nil, ptr)
 }
-func TypeViewingConditionsRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
-	vc := allocateStruct[cmsICCViewingConditions](ar)
+func TypeViewingConditionsRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+	vc := mem.New[cmsICCViewingConditions](mm)
 	*nItems = 0
 	if vc == nil {
 		return nil
@@ -1103,7 +1106,7 @@ func TypeViewingConditionsRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cms
 	return vc
 }
 
-func TypeViewingConditionsWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeViewingConditionsWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	vc, ok := ptr.(*cmsICCViewingConditions)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsICCViewingConditions\n")
@@ -1114,21 +1117,21 @@ func TypeViewingConditionsWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cm
 		cmsWriteUInt32Number(io, vc.IlluminantType)
 }
 
-func TypeViewingConditionsDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeViewingConditionsDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	str := *(ptr.(*cmsICCViewingConditions))
 	return &str
 }
 
-func TypeViewingConditionsFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeViewingConditionsFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFree(nil, ptr)
 }
 
 // Type_Chromaticity_Read reads a Chromaticity type from the IO handler.
-func TypeChromaticityRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeChromaticityRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	*nItems = 0
 
 	// Allocate memory for CmsCIExyYTRIPLE
-	chrm := allocateStruct[CmsCIExyYTRIPLE](ar)
+	chrm := mem.New[CmsCIExyYTRIPLE](mm)
 	if chrm == nil {
 		return nil
 	}
@@ -1191,7 +1194,7 @@ func SaveOneChromaticity(x, y float64, io *cmsIOHANDLER) bool {
 }
 
 // Type_Chromaticity_Write writes a Chromaticity type to the IO handler.
-func TypeChromaticityWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeChromaticityWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	chrm, ok := ptr.(*CmsCIExyYTRIPLE)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *CmsCIExyYTRIPLE\n")
@@ -1212,13 +1215,13 @@ func TypeChromaticityWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHA
 }
 
 // Type_Chromaticity_Dup duplicates a Chromaticity structure.
-func TypeChromaticityDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeChromaticityDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	str := *(ptr.(*CmsCIExyYTRIPLE))
 	return &str
 }
 
 // Type_Chromaticity_Free frees the memory allocated for a Chromaticity structure.
-func TypeChromaticityFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeChromaticityFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFree(self.ContextID, ptr)
 }
 
@@ -1233,9 +1236,9 @@ func TypeChromaticityFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
 // the case (for example, ink-towers sometimes use the order KCMY), this tag may be
 // used to specify the laydown order of the colorants.
 
-func TypeColorantOrderTypeRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeColorantOrderTypeRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	// Allocate memory for ColorantOrder
-	var colorantOrder = make([]uint8, cmsMAXCHANNELS)
+	var colorantOrder = mem.MakeSlice[uint8](mm, cmsMAXCHANNELS)
 
 	*nItems = 0
 
@@ -1253,7 +1256,7 @@ func TypeColorantOrderTypeRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cms
 	return colorantOrder
 }
 
-func TypeColorantOrderTypeWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeColorantOrderTypeWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	colorantOrder, ok := ptr.([]uint8)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_RANGE, "TypeColorantOrderTypeWrite: expected []uint8")
@@ -1279,17 +1282,17 @@ func TypeColorantOrderTypeWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cm
 	return io.Write((*cms_io_handler)(io), sz, colorantOrder)
 }
 
-func TypeColorantOrderTypeDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeColorantOrderTypeDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	original, ok := ptr.([]uint8)
 	if !ok {
 		return nil
 	}
-	dup := make([]uint8, len(original))
+	dup := mem.MakeSlice[uint8](mm, len(original))
 	copy(dup, original)
 	return dup
 }
 
-func TypeColorantOrderTypeFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeColorantOrderTypeFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFree(self.ContextID, ptr)
 }
 
@@ -1299,14 +1302,14 @@ func TypeColorantOrderTypeFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any
 // This type represents an array of generic 4-byte/32-bit fixed point quantity.
 // The number of values is determined from the size of the tag.
 
-func TypeS15Fixed16Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeS15Fixed16Read(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	*nItems = 0
 
 	// Calculate number of elements
 	n := sizeOfTag / uint32(unsafe.Sizeof(uint32(0)))
 
 	// Allocate memory for the array
-	arrayDouble := make([]float64, n)
+	arrayDouble := mem.MakeSlice[float64](mm, int(n))
 
 	// Read
 	for i := uint32(0); i < n; i++ {
@@ -1319,7 +1322,7 @@ func TypeS15Fixed16Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 	return &arrayDouble[0]
 }
 
-func TypeS15Fixed16Write(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeS15Fixed16Write(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	switch v := ptr.(type) {
 
 	case []float64:
@@ -1354,10 +1357,10 @@ func TypeS15Fixed16Write(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHAND
 	}
 }
 
-func TypeS15Fixed16Dup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeS15Fixed16Dup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	switch v := ptr.(type) {
 	case []float64:
-		dup := make([]float64, len(v))
+		dup := mem.MakeSlice[float64](mm, len(v))
 		copy(dup, v)
 		return dup
 
@@ -1377,7 +1380,7 @@ func TypeS15Fixed16Dup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint
 	}
 }
 
-func TypeS15Fixed16Free(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeS15Fixed16Free(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFree(self.ContextID, ptr)
 }
 
@@ -1387,10 +1390,10 @@ func TypeS15Fixed16Free(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
 // This type represents an array of generic 4-byte/32-bit quantity.
 // The number of values is determined from the size of the tag.
 
-func TypeU16Fixed16Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeU16Fixed16Read(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	n := sizeOfTag / uint32(unsafe.Sizeof(uint32(0)))
 	// Allocate memory for the array
-	arrayDouble := make([]float64, n)
+	arrayDouble := mem.MakeSlice[float64](mm, int(n))
 
 	for i := uint32(0); i < n; i++ {
 		var v uint32
@@ -1406,7 +1409,7 @@ func TypeU16Fixed16Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 	return &arrayDouble[0]
 }
 
-func TypeU16Fixed16Write(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeU16Fixed16Write(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	values, ok := ptr.([]float64)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_RANGE, "TypeU16Fixed16Write: expected []float64")
@@ -1424,17 +1427,17 @@ func TypeU16Fixed16Write(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHAND
 	return true
 }
 
-func TypeU16Fixed16Dup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeU16Fixed16Dup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	original, ok := ptr.([]float64)
 	if !ok {
 		return nil
 	}
-	dup := make([]float64, n)
+	dup := mem.MakeSlice[float64](mm, int(n))
 	copy(dup, original)
 	return dup
 }
 
-func TypeU16Fixed16Free(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeU16Fixed16Free(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFree(self.ContextID, ptr)
 }
 
@@ -1447,7 +1450,7 @@ func TypeU16Fixed16Free(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
 // Typically this type is used for registered tags that can be displayed on many
 // development systems as a sequence of four characters.
 // TypeSignatureRead reads a CmsSignature from the io handler.
-func TypeSignatureRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeSignatureRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	//sigPtr := (*CmsSignature)(cmsMalloc(self.ContextID, uint32(unsafe.Sizeof(CmsSignature(0)))))
 	var sigPtr uint32
 	if !cmsReadUInt32Number(io, &sigPtr) {
@@ -1460,7 +1463,7 @@ func TypeSignatureRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 }
 
 // TypeSignatureWrite writes a CmsSignature to the io handler.
-func TypeSignatureWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeSignatureWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	sigPtr, ok := ptr.(*cmsSignature)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *CmsSignature\n")
@@ -1470,17 +1473,17 @@ func TypeSignatureWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 }
 
 // TypeSignatureDup duplicates a CmsSignature.
-func TypeSignatureDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeSignatureDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	original, ok := ptr.([]uint32)
 	if !ok {
 		return nil
 	}
-	dup := make([]uint32, n)
+	dup := mem.MakeSlice[uint32](mm, int(n))
 	copy(dup, original)
 	return dup
 }
 
-func TypeSignatureFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeSignatureFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFree(self.ContextID, ptr)
 }
 
@@ -1488,7 +1491,7 @@ func TypeSignatureFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
 // Type CmsSigCurveType
 // ********************************************************************************
 
-func TypeCurveRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeCurveRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var count uint32
 	*nItems = 0
 
@@ -1499,7 +1502,7 @@ func TypeCurveRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, n
 	switch count {
 	case 0: // Linear
 		singleGamma := 1.0
-		newGamma := cmsBuildParametricToneCurve(ar, self.ContextID, 1, []float64{singleGamma})
+		newGamma := cmsBuildParametricToneCurve(mm, self.ContextID, 1, []float64{singleGamma})
 		if newGamma == nil {
 			return nil
 		}
@@ -1513,14 +1516,14 @@ func TypeCurveRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, n
 		}
 		singleGamma := cms8Fixed8ToDouble(singleGammaFixed)
 		*nItems = 1
-		return cmsBuildParametricToneCurve(ar, self.ContextID, 1, []float64{singleGamma})
+		return cmsBuildParametricToneCurve(mm, self.ContextID, 1, []float64{singleGamma})
 
 	default: // Curve
 		if count > 0x7FFF {
 			return nil // Prevent malicious behavior
 		}
 
-		newGamma := cmsBuildTabulatedToneCurve16(ar, self.ContextID, count, nil)
+		newGamma := cmsBuildTabulatedToneCurve16(mm, self.ContextID, count, nil)
 		if newGamma == nil {
 			return nil
 		}
@@ -1536,7 +1539,7 @@ func TypeCurveRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, n
 		return newGamma
 	}
 }
-func TypeCurveWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeCurveWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	curve, ok := ptr.(*CmsToneCurve) // Convert the pointer to a CmsToneCurve struct
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsToneCurve\n")
@@ -1561,11 +1564,11 @@ func TypeCurveWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 	return cmsWriteUInt16Array(io, curve.nEntries, curve.Table16)
 }
 
-func TypeCurveDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
-	return cmsDupToneCurve(ar, ptr.(*CmsToneCurve))
+func TypeCurveDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
+	return cmsDupToneCurve(mm, ptr.(*CmsToneCurve))
 }
 
-func TypeCurveFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeCurveFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	gamma := ptr.(*CmsToneCurve)
 	CmsFreeToneCurve(gamma)
 }
@@ -1583,10 +1586,10 @@ func TypeCurveFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
 // time to UTC when setting these values. Programs that display these values may show
 // the dateTimeNumber as UTC, show the equivalent local time (at current locale), or
 // display both UTC and local versions of the dateTimeNumber.
-func TypeDateTimeRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeDateTimeRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var timestamp cmsDateTimeNumber
 	//newDateTime := (*time.Time)(cmsMalloc(self.ContextID, uint32(unsafe.Sizeof(time.Time{}))))
-	newDateTime := allocateStruct[time.Time](ar)
+	newDateTime := mem.New[time.Time](mm)
 	*nItems = 0
 	if newDateTime == nil {
 		return nil
@@ -1602,7 +1605,7 @@ func TypeDateTimeRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER
 	return newDateTime
 }
 
-func TypeDateTimeWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeDateTimeWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	dateTime, ok := ptr.(*time.Time)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *dateTime\n")
@@ -1614,12 +1617,12 @@ func TypeDateTimeWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 	return WriteStruct[cmsDateTimeNumber](io, timestamp, binary.BigEndian)
 }
 
-func TypeDateTimeDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeDateTimeDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	xyz := *(ptr.(*time.Time))
 	return &xyz
 }
 
-func TypeDateTimeFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeDateTimeFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFree(self.ContextID, ptr)
 }
 
@@ -1632,7 +1635,7 @@ The measurementType information refers only to the internal profile data and is
 meant to provide profile makers an alternative to the default measurement
 specifications.
 */
-func TypeMeasurementRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeMeasurementRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	mc := cmsICCMeasurementConditions{}
 
 	// Read the data from the IO handler
@@ -1648,7 +1651,7 @@ func TypeMeasurementRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHAND
 	return mc
 }
 
-func TypeMeasurementWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeMeasurementWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	mc, ok := ptr.(*cmsICCMeasurementConditions)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsICCMeasurementConditions\n")
@@ -1662,13 +1665,13 @@ func TypeMeasurementWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHAN
 		cmsWriteUInt32Number(io, mc.IlluminantType)
 }
 
-func TypeMeasurementDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeMeasurementDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	orig := ptr.(*cmsICCMeasurementConditions) // Type assertion
 	copy := *orig                              // Struct copy by value
 	return &copy                               // Return pointer to the new copy
 }
 
-func TypeMeasurementFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeMeasurementFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFree(self.ContextID, ptr)
 }
 
@@ -1679,7 +1682,7 @@ func TypeMeasurementFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
 //	Do NOT trust SizeOfTag as there is an issue on the definition of profileSequenceDescTag. See the TechNote from
 //	Max Derhak and Rohit Patil about this: basically the size of the string table should be guessed and cannot be
 //	taken from the size of tag if this tag is embedded as part of bigger structures (profileSequenceDescTag, for instance)
-func TypeMLURead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeMLURead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var count, recLen, numOfWchar, sizeOfHeader, len, offset, largestPosition uint32
 	var block []uint16
 
@@ -1694,7 +1697,7 @@ func TypeMLURead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nIt
 		return nil
 	}
 
-	mlu := (*cmsMLU)(cmsMLUalloc(ar, self.ContextID, count))
+	mlu := (*cmsMLU)(cmsMLUalloc(mm, self.ContextID, count))
 	if mlu == nil {
 		return nil
 	}
@@ -1732,7 +1735,7 @@ func TypeMLURead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nIt
 		goto Error
 	}
 
-	block = make([]uint16, sizeOfTag)
+	block = mem.MakeSlice[uint16](mm, int(sizeOfTag))
 	numOfWchar = sizeOfTag / uint32(unsafe.Sizeof(uint16(0)))
 
 	//this is a replacement for cmsReadWCharArray in C-code needs additional check
@@ -1752,7 +1755,7 @@ Error:
 	return nil
 }
 
-func TypeMLUWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeMLUWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	mlu, ok := ptr.(*cmsMLU)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsMLU\n")
@@ -1789,11 +1792,11 @@ func TypeMLUWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, pt
 	return cmsWriteUInt16Array(io, mlu.PoolUsed/uint32(unsafe.Sizeof(uint16(0))), memPoolSlice)
 }
 
-func TypeMLUDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
-	return cmsMLUdup(ar, ptr.(*cmsMLU))
+func TypeMLUDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
+	return cmsMLUdup(mm, ptr.(*cmsMLU))
 }
 
-func TypeMLUFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeMLUFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsMLUfree(ptr.(*cmsMLU))
 }
 
@@ -1801,7 +1804,7 @@ func TypeMLUFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
 // 8 bit lut may be scaled easily to v4 PCS, but we need also to properly adjust
 // PCS on BToAxx tags and AtoB if abstract. We need to fix input direction.
 
-func TypeLUT8Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeLUT8Read(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var inputChannels, outputChannels, clutPoints uint8
 	var nTabSize uint32
 	var matrix [9]float64
@@ -1828,7 +1831,7 @@ func TypeLUT8Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 	}
 
 	// Allocate a new pipeline
-	newLUT = cmsPipelineAlloc(ar, self.ContextID, uint32(inputChannels), uint32(outputChannels))
+	newLUT = cmsPipelineAlloc(mm, self.ContextID, uint32(inputChannels), uint32(outputChannels))
 	if newLUT == nil {
 		goto Error
 	}
@@ -1836,7 +1839,7 @@ func TypeLUT8Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 	// Read the matrix
 	for i := 0; i < 9; i++ {
 		if !cmsRead15Fixed16Number(io, &matrix[i]) {
-			cmsPipelineFree(ar, newLUT)
+			cmsPipelineFree(mm, newLUT)
 			goto Error
 		}
 	}
@@ -1844,14 +1847,14 @@ func TypeLUT8Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 	// Insert the matrix if it isn't identity
 	mat = SliceToMat(matrix[:])
 	if inputChannels == 3 && !cmsMAT3isIdentity(&mat) {
-		if !cmsPipelineInsertStage(newLUT, CmsAT_BEGIN, cmsStageAllocMatrix(ar, self.ContextID, 3, 3, matrix[:], nil)) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_BEGIN, cmsStageAllocMatrix(mm, self.ContextID, 3, 3, matrix[:], nil)) {
 
 			goto Error
 		}
 	}
 
 	// Read input tables
-	if !Read8bitTables(ar, self.ContextID, io, newLUT, uint32(inputChannels)) {
+	if !Read8bitTables(mm, self.ContextID, io, newLUT, uint32(inputChannels)) {
 		goto Error
 	}
 
@@ -1865,11 +1868,11 @@ func TypeLUT8Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 		var Temp []uint8     // Equivalent to `cmsUInt8Number *Temp`
 
 		// Allocate slice instead of raw memory allocation
-		T = make([]uint16, nTabSize)
+		T = mem.MakeSlice[uint16](mm, int(nTabSize))
 		PtrW = T // PtrW now references the same slice
 
 		// Allocate temporary slice for 8-bit values
-		Temp = make([]uint8, nTabSize)
+		Temp = mem.MakeSlice[uint8](mm, int(nTabSize))
 
 		// Read `nTabSize` bytes into Temp
 		if io.Read((*cms_io_handler)(io), Temp, nTabSize, 1) != 1 { // `io.Read()` should match the correct signature
@@ -1887,7 +1890,7 @@ func TypeLUT8Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 		Temp = nil
 
 		// Insert stage into LUT
-		if !cmsPipelineInsertStage(newLUT, CmsAT_END, cmsStageAllocCLut16bit(ar, self.ContextID, uint32(clutPoints), uint32(inputChannels), uint32(outputChannels), T)) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, cmsStageAllocCLut16bit(mm, self.ContextID, uint32(clutPoints), uint32(inputChannels), uint32(outputChannels), T)) {
 			T = nil
 			goto Error
 		}
@@ -1896,7 +1899,7 @@ func TypeLUT8Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 	}
 
 	// Read output tables
-	if !Read8bitTables(ar, self.ContextID, io, newLUT, uint32(outputChannels)) {
+	if !Read8bitTables(mm, self.ContextID, io, newLUT, uint32(outputChannels)) {
 		goto Error
 	}
 
@@ -1905,12 +1908,12 @@ func TypeLUT8Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 
 Error:
 	if newLUT != nil {
-		cmsPipelineFree(ar, newLUT)
+		cmsPipelineFree(mm, newLUT)
 	}
 	return nil
 
 }
-func TypeLUT8Write(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeLUT8Write(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	newLUT, ok := ptr.(*cmsPipeline)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsPipeline\n")
@@ -2021,12 +2024,12 @@ func TypeLUT8Write(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, p
 	return true
 }
 
-func TypeLUT8Dup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, nItems uint32) any {
-	return cmsPipelineDup(ar, ptr.(*cmsPipeline))
+func TypeLUT8Dup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, nItems uint32) any {
+	return cmsPipelineDup(mm, ptr.(*cmsPipeline))
 }
 
-func TypeLUT8Free(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
-	cmsPipelineFree(ar, ptr.(*cmsPipeline))
+func TypeLUT8Free(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
+	cmsPipelineFree(mm, ptr.(*cmsPipeline))
 }
 
 /*
@@ -2046,19 +2049,19 @@ Byte Position   Field Length (bytes)  Content Encoded as...
 12..15             4          Encoded e00 parameter   s15Fixed16Number
 */
 
-func Read8bitTables(ar *arena.Arena, ContextID CmsContext, io *cmsIOHANDLER, lut *cmsPipeline, nChannels uint32) bool {
+func Read8bitTables(mm mem.Manager, ContextID CmsContext, io *cmsIOHANDLER, lut *cmsPipeline, nChannels uint32) bool {
 	if nChannels > cmsMAXCHANNELS || nChannels <= 0 {
 		return false
 	}
 
 	var tables [cmsMAXCHANNELS]*CmsToneCurve
-	temp := make([]uint8, 256)
+	temp := mem.MakeSlice[uint8](mm, 256)
 
 	//defer cmsFree(ContextID, unsafe.Pointer(temp))
 
 	// Allocate tone curves
 	for i := uint32(0); i < nChannels; i++ {
-		tables[i] = cmsBuildTabulatedToneCurve16(ar, ContextID, 256, nil)
+		tables[i] = cmsBuildTabulatedToneCurve16(mm, ContextID, 256, nil)
 		if tables[i] == nil {
 			goto Error
 		}
@@ -2076,7 +2079,7 @@ func Read8bitTables(ar *arena.Arena, ContextID CmsContext, io *cmsIOHANDLER, lut
 	}
 
 	// Insert tone curves into the pipeline
-	if !cmsPipelineInsertStage(lut, CmsAT_END, cmsStageAllocToneCurves(ar, ContextID, nChannels, tables[:])) {
+	if !cmsPipelineInsertStage(lut, CmsAT_END, cmsStageAllocToneCurves(mm, ContextID, nChannels, tables[:])) {
 		goto Error
 	}
 
@@ -2146,7 +2149,7 @@ func uipow(n, a, b uint32) uint32 {
 // ********************************************************************************
 // Type CmsSigLut16Type
 // ********************************************************************************
-func Read16bitTables(ar *arena.Arena, ContextID CmsContext, io *cmsIOHANDLER, lut *cmsPipeline, nChannels, nEntries uint32) bool {
+func Read16bitTables(mm mem.Manager, ContextID CmsContext, io *cmsIOHANDLER, lut *cmsPipeline, nChannels, nEntries uint32) bool {
 	if nEntries <= 0 {
 		return true
 	}
@@ -2156,7 +2159,7 @@ func Read16bitTables(ar *arena.Arena, ContextID CmsContext, io *cmsIOHANDLER, lu
 	var tables [cmsMAXCHANNELS]*CmsToneCurve
 
 	for i := uint32(0); i < nChannels; i++ {
-		tables[i] = cmsBuildTabulatedToneCurve16(ar, ContextID, nEntries, nil)
+		tables[i] = cmsBuildTabulatedToneCurve16(mm, ContextID, nEntries, nil)
 		if tables[i] == nil {
 			goto Error
 		}
@@ -2166,7 +2169,7 @@ func Read16bitTables(ar *arena.Arena, ContextID CmsContext, io *cmsIOHANDLER, lu
 		}
 	}
 
-	if !cmsPipelineInsertStage(lut, CmsAT_END, cmsStageAllocToneCurves(ar, ContextID, nChannels, tables[:])) {
+	if !cmsPipelineInsertStage(lut, CmsAT_END, cmsStageAllocToneCurves(mm, ContextID, nChannels, tables[:])) {
 		goto Error
 	}
 
@@ -2197,7 +2200,7 @@ func Write16bitTables(ContextID CmsContext, io *cmsIOHANDLER, tables *cmsStageTo
 	return true
 }
 
-func TypeLUT16Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeLUT16Read(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var inputChannels, outputChannels, clutPoints uint8
 	var inputEntries, outputEntries uint16
 	var matrix [9]float64
@@ -2211,14 +2214,14 @@ func TypeLUT16Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, n
 		return nil
 	}
 
-	newLUT := cmsPipelineAlloc(ar, self.ContextID, uint32(inputChannels), uint32(outputChannels))
+	newLUT := cmsPipelineAlloc(mm, self.ContextID, uint32(inputChannels), uint32(outputChannels))
 	if newLUT == nil {
 		return nil
 	}
 
 	for i := 0; i < 9; i++ {
 		if !cmsRead15Fixed16Number(io, &matrix[i]) {
-			cmsPipelineFree(ar, newLUT)
+			cmsPipelineFree(mm, newLUT)
 			return nil
 		}
 	}
@@ -2234,42 +2237,42 @@ func TypeLUT16Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, n
 
 	// Only operates on 3 channels
 	if inputChannels == 3 && !cmsMAT3isIdentity(&mat3) {
-		if !cmsPipelineInsertStage(newLUT, CmsAT_END, cmsStageAllocMatrix(ar, self.ContextID, 3, 3, matrix[:], nil)) {
-			cmsPipelineFree(ar, newLUT)
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, cmsStageAllocMatrix(mm, self.ContextID, 3, 3, matrix[:], nil)) {
+			cmsPipelineFree(mm, newLUT)
 			return nil
 		}
 	}
 
 	if !cmsReadUInt16Number(io, &inputEntries) || !cmsReadUInt16Number(io, &outputEntries) {
-		cmsPipelineFree(ar, newLUT)
+		cmsPipelineFree(mm, newLUT)
 		return nil
 	}
 
 	if inputEntries > 0x7FFF || outputEntries > 0x7FFF || clutPoints == 1 {
-		cmsPipelineFree(ar, newLUT)
+		cmsPipelineFree(mm, newLUT)
 		return nil
 	}
 
-	if !Read16bitTables(ar, self.ContextID, io, newLUT, uint32(inputChannels), uint32(inputEntries)) {
-		cmsPipelineFree(ar, newLUT)
+	if !Read16bitTables(mm, self.ContextID, io, newLUT, uint32(inputChannels), uint32(inputEntries)) {
+		cmsPipelineFree(mm, newLUT)
 		return nil
 	}
 
 	nTabSize := uipow(uint32(outputChannels), uint32(clutPoints), uint32(inputChannels))
 	if nTabSize == math.MaxUint32 || nTabSize > 0 {
-		t := make([]uint16, nTabSize)
+		t := mem.MakeSlice[uint16](mm, int(nTabSize))
 		if !cmsReadUInt16Array(io, nTabSize, t) {
-			cmsPipelineFree(ar, newLUT)
+			cmsPipelineFree(mm, newLUT)
 			return nil
 		}
-		if !cmsPipelineInsertStage(newLUT, CmsAT_END, cmsStageAllocCLut16bit(ar, self.ContextID, uint32(clutPoints), uint32(inputChannels), uint32(outputChannels), t)) {
-			cmsPipelineFree(ar, newLUT)
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, cmsStageAllocCLut16bit(mm, self.ContextID, uint32(clutPoints), uint32(inputChannels), uint32(outputChannels), t)) {
+			cmsPipelineFree(mm, newLUT)
 			return nil
 		}
 	}
 
-	if !Read16bitTables(ar, self.ContextID, io, newLUT, uint32(outputChannels), uint32(outputEntries)) {
-		cmsPipelineFree(ar, newLUT)
+	if !Read16bitTables(mm, self.ContextID, io, newLUT, uint32(outputChannels), uint32(outputEntries)) {
+		cmsPipelineFree(mm, newLUT)
 		return nil
 	}
 
@@ -2278,7 +2281,7 @@ func TypeLUT16Read(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, n
 	return newLUT
 }
 
-func TypeLUT16Write(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeLUT16Write(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	newLUT, ok := ptr.(*cmsPipeline)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsPipeline\n")
@@ -2413,12 +2416,12 @@ func TypeLUT16Write(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 	return true
 }
 
-func TypeLUT16Dup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
-	return cmsPipelineDup(ar, ptr.(*cmsPipeline))
+func TypeLUT16Dup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
+	return cmsPipelineDup(mm, ptr.(*cmsPipeline))
 }
 
-func TypeLUT16Free(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
-	cmsPipelineFree(ar, ptr.(*cmsPipeline))
+func TypeLUT16Free(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
+	cmsPipelineFree(mm, ptr.(*cmsPipeline))
 }
 
 // ********************************************************************************
@@ -2432,7 +2435,7 @@ a lut tag. The second colorant listed is the colorant of the second device chann
 of a lut tag, and so on.
 */
 
-func TypeColorantTableRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeColorantTableRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var count uint32
 	var name [34]byte
 	var pcs [3]uint16
@@ -2446,7 +2449,7 @@ func TypeColorantTableRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHA
 		return nil
 	}
 
-	list := cmsAllocNamedColorList(ar, self.ContextID, count, 0, "", "")
+	list := cmsAllocNamedColorList(mm, self.ContextID, count, 0, "", "")
 	if list == nil {
 		return nil
 	}
@@ -2475,7 +2478,7 @@ Error:
 	return nil
 }
 
-func TypeColorantTableWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeColorantTableWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	namedColorList, ok := ptr.(*cmsNAMEDCOLORLIST)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *NAMEDCOLORLIST\n")
@@ -2509,12 +2512,12 @@ func TypeColorantTableWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOH
 	return true
 }
 
-func TypeColorantTableDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeColorantTableDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	nc := ptr.(*cmsNAMEDCOLORLIST)
-	return cmsDupNamedColorList(ar, nc)
+	return cmsDupNamedColorList(mm, nc)
 }
 
-func TypeColorantTableFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeColorantTableFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFreeNamedColorList(ptr.(*cmsNAMEDCOLORLIST))
 }
 
@@ -2567,7 +2570,7 @@ func TypeColorantTableFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
 // is always provided. Color names are fixed-length, 32-byte fields including null
 // termination. In order to maintain maximum portability, it is strongly recommended
 // that special characters of the 7-bit ASCII set not be used.
-func TypeNamedColorRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeNamedColorRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var vendorFlag, count, nDeviceCoords uint32
 	var prefix, suffix [32]byte
 
@@ -2588,7 +2591,7 @@ func TypeNamedColorRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 	suffix[31] = 0 // Null-terminate
 	prefixStr := string(prefix[:bytes.IndexByte(prefix[:], 0)])
 	suffixStr := string(suffix[:bytes.IndexByte(suffix[:], 0)])
-	namedColorList := cmsAllocNamedColorList(ar, self.ContextID, count, nDeviceCoords, prefixStr, suffixStr)
+	namedColorList := cmsAllocNamedColorList(mm, self.ContextID, count, nDeviceCoords, prefixStr, suffixStr)
 	if namedColorList == nil {
 		cmsSignalError(self.ContextID, cmsERROR_RANGE, "Too many named colors")
 		return nil
@@ -2627,7 +2630,7 @@ Error:
 	return nil
 }
 
-func TypeNamedColorWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeNamedColorWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	namedColorList := ptr.(*cmsNAMEDCOLORLIST)
 	nColors := cmsNamedColorCount(namedColorList)
 
@@ -2668,12 +2671,12 @@ func TypeNamedColorWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHAND
 	return true
 }
 
-func TypeNamedColorDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeNamedColorDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	nc := ptr.(*cmsNAMEDCOLORLIST)
-	return cmsDupNamedColorList(ar, nc)
+	return cmsDupNamedColorList(mm, nc)
 }
 
-func TypeNamedColorFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeNamedColorFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFreeNamedColorList(ptr.(*cmsNAMEDCOLORLIST))
 }
 
@@ -2687,28 +2690,28 @@ func TypeNamedColorFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
 // were combined and includes a structure for the final profile. This provides a
 // description of the profile sequence from source to destination,
 // typically used with the DeviceLink profile.
-func ReadEmbeddedText(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, mlu **cmsMLU, sizeOfTag uint32) bool {
+func ReadEmbeddedText(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, mlu **cmsMLU, sizeOfTag uint32) bool {
 	baseType := cmsReadTypeBase(io)
 	switch baseType {
 	case CmsSigTextType:
 		if *mlu != nil {
 			cmsMLUfree(*mlu)
 		}
-		*mlu = TypeTextRead(ar, self, io, new(uint32), sizeOfTag).(*cmsMLU)
+		*mlu = TypeTextRead(mm, self, io, new(uint32), sizeOfTag).(*cmsMLU)
 		return *mlu != nil
 
 	case CmsSigTextDescriptionType:
 		if *mlu != nil {
 			cmsMLUfree(*mlu)
 		}
-		*mlu = TypeTextDescriptionRead(ar, self, io, new(uint32), sizeOfTag).(*cmsMLU)
+		*mlu = TypeTextDescriptionRead(mm, self, io, new(uint32), sizeOfTag).(*cmsMLU)
 		return *mlu != nil
 
 	case CmsSigMultiLocalizedUnicodeType:
 		if *mlu != nil {
 			cmsMLUfree(*mlu)
 		}
-		*mlu = TypeMLURead(ar, self, io, new(uint32), sizeOfTag).(*cmsMLU)
+		*mlu = TypeMLURead(mm, self, io, new(uint32), sizeOfTag).(*cmsMLU)
 		return *mlu != nil
 
 	default:
@@ -2716,7 +2719,7 @@ func ReadEmbeddedText(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER
 	}
 }
 
-func TypeProfileSequenceDescRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeProfileSequenceDescRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var count uint32
 
 	*nItems = 0
@@ -2730,7 +2733,7 @@ func TypeProfileSequenceDescRead(ar *arena.Arena, self *cmsTagTypeHandler, io *c
 	}
 	sizeOfTag -= uint32(unsafe.Sizeof(count))
 
-	outSeq := cmsAllocProfileSequenceDescription(ar, self.ContextID, count)
+	outSeq := cmsAllocProfileSequenceDescription(mm, self.ContextID, count)
 	if outSeq == nil {
 		return nil
 	}
@@ -2765,8 +2768,8 @@ func TypeProfileSequenceDescRead(ar *arena.Arena, self *cmsTagTypeHandler, io *c
 		}
 		sizeOfTag -= uint32(unsafe.Sizeof(sec.technology))
 
-		if !ReadEmbeddedText(ar, self, io, &sec.Manufacturer, sizeOfTag) ||
-			!ReadEmbeddedText(ar, self, io, &sec.Model, sizeOfTag) {
+		if !ReadEmbeddedText(mm, self, io, &sec.Manufacturer, sizeOfTag) ||
+			!ReadEmbeddedText(mm, self, io, &sec.Model, sizeOfTag) {
 			goto Error
 		}
 	}
@@ -2779,21 +2782,21 @@ Error:
 	return nil
 }
 
-func SaveDescription(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, text *cmsMLU) bool {
+func SaveDescription(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, text *cmsMLU) bool {
 	if self.ICCVersion < 0x4000000 {
 		if !cmsWriteTypeBase(io, CmsSigTextDescriptionType) {
 			return false
 		}
-		return TypeTextDescriptionWrite(ar, self, io, text, 1)
+		return TypeTextDescriptionWrite(mm, self, io, text, 1)
 	} else {
 		if !cmsWriteTypeBase(io, CmsSigMultiLocalizedUnicodeType) {
 			return false
 		}
-		return TypeMLUWrite(ar, self, io, text, 1)
+		return TypeMLUWrite(mm, self, io, text, 1)
 	}
 }
 
-func TypeProfileSequenceDescWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeProfileSequenceDescWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	seq, ok := ptr.(*cmsSEQ)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsSEQ\n")
@@ -2812,8 +2815,8 @@ func TypeProfileSequenceDescWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *
 			!cmsWriteUInt32Number(io, uint32(sec.deviceModel)) ||
 			!cmsWriteUInt64Number(io, uint64(sec.attributes)) ||
 			!cmsWriteUInt32Number(io, uint32(sec.technology)) ||
-			!SaveDescription(ar, self, io, sec.Manufacturer) ||
-			!SaveDescription(ar, self, io, sec.Model) {
+			!SaveDescription(mm, self, io, sec.Manufacturer) ||
+			!SaveDescription(mm, self, io, sec.Model) {
 			return false
 		}
 	}
@@ -2821,11 +2824,11 @@ func TypeProfileSequenceDescWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *
 	return true
 }
 
-func TypeProfileSequenceDescDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
-	return cmsDupProfileSequenceDescription(ar, ptr.(*cmsSEQ))
+func TypeProfileSequenceDescDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
+	return cmsDupProfileSequenceDescription(mm, ptr.(*cmsSEQ))
 }
 
-func TypeProfileSequenceDescFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeProfileSequenceDescFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFreeProfileSequenceDescription(ptr.(*cmsSEQ))
 }
 
@@ -2838,7 +2841,7 @@ original profiles that were combined to create the Device Link Profile.
 This type is an array of structures, each of which contains information for
 identification of a profile used in a sequence
 */
-func ReadSeqID(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo any, n, sizeOfTag uint32) bool {
+func ReadSeqID(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo any, n, sizeOfTag uint32) bool {
 	outSeq, ok := cargo.(*cmsSEQ)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsSEQ\n")
@@ -2850,14 +2853,14 @@ func ReadSeqID(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo
 	if io.Read((*cms_io_handler)(io), seq.ProfileID[:], 16, 1) != 1 {
 		return false
 	}
-	if !ReadEmbeddedText(ar, self, io, &seq.Description, sizeOfTag) {
+	if !ReadEmbeddedText(mm, self, io, &seq.Description, sizeOfTag) {
 		return false
 	}
 
 	return true
 }
 
-func TypeProfileSequenceIdRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeProfileSequenceIdRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var count, baseOffset uint32
 
 	*nItems = 0
@@ -2871,13 +2874,13 @@ func TypeProfileSequenceIdRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cms
 	}
 
 	// Allocate an empty structure
-	outSeq := cmsAllocProfileSequenceDescription(ar, self.ContextID, count)
+	outSeq := cmsAllocProfileSequenceDescription(mm, self.ContextID, count)
 	if outSeq == nil {
 		return nil
 	}
 
 	// Read the position table
-	if !ReadPositionTable(ar, self, io, count, baseOffset, outSeq, ReadSeqID) {
+	if !ReadPositionTable(mm, self, io, count, baseOffset, outSeq, ReadSeqID) {
 		cmsFreeProfileSequenceDescription(outSeq)
 		return nil
 	}
@@ -2887,7 +2890,7 @@ func TypeProfileSequenceIdRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cms
 	return outSeq
 }
 
-func WriteSeqID(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo any, n, sizeOfTag uint32) bool {
+func WriteSeqID(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo any, n, sizeOfTag uint32) bool {
 	seq, ok := cargo.(*cmsSEQ)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsSEQ\n")
@@ -2903,14 +2906,14 @@ func WriteSeqID(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, carg
 	}
 
 	// Store the MLU
-	if !SaveDescription(ar, self, io, currentSeq.Description) {
+	if !SaveDescription(mm, self, io, currentSeq.Description) {
 		return false
 	}
 
 	return true
 }
 
-func TypeProfileSequenceIdWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeProfileSequenceIdWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	seq, ok := ptr.(*cmsSEQ)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsSEQ\n")
@@ -2925,24 +2928,24 @@ func TypeProfileSequenceIdWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cm
 	}
 
 	// Write the position table and content
-	if !WritePositionTable(ar, self, io, 0, seq.n, baseOffset, seq, WriteSeqID) {
+	if !WritePositionTable(mm, self, io, 0, seq.n, baseOffset, seq, WriteSeqID) {
 		return false
 	}
 
 	return true
 }
 
-func TypeProfileSequenceIdDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, nItems uint32) any {
+func TypeProfileSequenceIdDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, nItems uint32) any {
 	seq, ok := ptr.(*cmsSEQ)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsSEQ\n")
 		return false
 	}
 
-	return cmsDupProfileSequenceDescription(ar, seq)
+	return cmsDupProfileSequenceDescription(mm, seq)
 }
 
-func TypeProfileSequenceIdFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeProfileSequenceIdFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFreeProfileSequenceDescription(ptr.(*cmsSEQ))
 }
 
@@ -2954,8 +2957,8 @@ This type contains curves representing the under color removal and black
 generation and a text string which is a general description of the method used
 for the ucr/bg.
 */
-func TypeUcrBgRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
-	n := allocateStruct[cmsUcrBg](ar)
+func TypeUcrBgRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+	n := mem.New[cmsUcrBg](mm)
 	var asciiString []byte
 	var (
 		countUcr, countBg uint32
@@ -2973,7 +2976,7 @@ func TypeUcrBgRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, n
 	}
 	signedSizeOfTag -= int32(unsafe.Sizeof(uint32(0)))
 
-	n.Ucr = cmsBuildTabulatedToneCurve16(ar, self.ContextID, countUcr, nil)
+	n.Ucr = cmsBuildTabulatedToneCurve16(mm, self.ContextID, countUcr, nil)
 	if n.Ucr == nil || signedSizeOfTag < int32(countUcr*uint32(unsafe.Sizeof(uint16(0)))) || !cmsReadUInt16Array(io, countUcr, n.Ucr.Table16) {
 		goto Error
 	}
@@ -2985,7 +2988,7 @@ func TypeUcrBgRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, n
 	}
 	signedSizeOfTag -= int32(unsafe.Sizeof(uint32(0)))
 
-	n.Bg = cmsBuildTabulatedToneCurve16(ar, self.ContextID, countBg, nil)
+	n.Bg = cmsBuildTabulatedToneCurve16(mm, self.ContextID, countBg, nil)
 	if n.Bg == nil || signedSizeOfTag < int32(countBg*uint32(unsafe.Sizeof(uint16(0)))) || !cmsReadUInt16Array(io, countBg, n.Bg.Table16) {
 		goto Error
 	}
@@ -2996,12 +2999,12 @@ func TypeUcrBgRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, n
 	}
 
 	// Now comes the text
-	n.Desc = cmsMLUalloc(ar, self.ContextID, 1)
+	n.Desc = cmsMLUalloc(mm, self.ContextID, 1)
 	if n.Desc == nil {
 		goto Error
 	}
 
-	asciiString = make([]byte, signedSizeOfTag+1)
+	asciiString = mem.MakeSlice[byte](mm, int(signedSizeOfTag+1))
 	if io.Read((*cms_io_handler)(io), asciiString, 1, uint32(signedSizeOfTag)) != uint32(signedSizeOfTag) {
 		cmsFree(self.ContextID, asciiString)
 		goto Error
@@ -3028,7 +3031,7 @@ Error:
 	return nil
 }
 
-func TypeUcrBgWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeUcrBgWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	value, ok := ptr.(*cmsUcrBg)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsUrcBg\n")
@@ -3049,7 +3052,7 @@ func TypeUcrBgWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 
 	// Now comes the text
 	textSize = cmsMLUgetASCII(value.Desc, cmsNoLanguage, cmsNoCountry, nil, 0)
-	text := make([]byte, textSize)
+	text := mem.MakeSlice[byte](mm, int(textSize))
 	if cmsMLUgetASCII(value.Desc, cmsNoLanguage, cmsNoCountry, text, textSize) != textSize {
 		return false
 	}
@@ -3060,20 +3063,20 @@ func TypeUcrBgWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 	return true
 }
 
-func TypeUcrBgDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeUcrBgDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	src := ptr.(*cmsUcrBg)
-	newUcrBg := allocateStruct[cmsUcrBg](ar)
+	newUcrBg := mem.New[cmsUcrBg](mm)
 	if newUcrBg == nil {
 		return nil
 	}
 
-	newUcrBg.Bg = cmsDupToneCurve(ar, src.Bg)
-	newUcrBg.Ucr = cmsDupToneCurve(ar, src.Ucr)
-	newUcrBg.Desc = cmsMLUdup(ar, src.Desc)
+	newUcrBg.Bg = cmsDupToneCurve(mm, src.Bg)
+	newUcrBg.Ucr = cmsDupToneCurve(mm, src.Ucr)
+	newUcrBg.Desc = cmsMLUdup(mm, src.Desc)
 	return newUcrBg
 }
 
-func TypeUcrBgFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeUcrBgFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	src := ptr.(*cmsUcrBg)
 	if src.Ucr != nil {
 		CmsFreeToneCurve(src.Ucr)
@@ -3104,7 +3107,7 @@ country varies for each element:
                 #3: Rendering intent 3 CRD name
 */
 
-func ReadCountAndString(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, mlu *cmsMLU, sizeOfTag *uint32, section string) bool {
+func ReadCountAndString(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, mlu *cmsMLU, sizeOfTag *uint32, section string) bool {
 	var count uint32
 
 	// Check if there is enough space for count
@@ -3123,7 +3126,7 @@ func ReadCountAndString(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 	}
 
 	// Allocate memory for the string
-	text := make([]byte, count+1)
+	text := mem.MakeSlice[byte](mm, int(count+1))
 
 	// Read string
 	if io.Read((*cms_io_handler)(io), text, 1, count) != count {
@@ -3144,9 +3147,9 @@ func ReadCountAndString(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 	return true
 }
 
-func WriteCountAndString(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, mlu *cmsMLU, section string) bool {
+func WriteCountAndString(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, mlu *cmsMLU, section string) bool {
 	textSize := cmsMLUgetASCII(mlu, "PS", section, nil, 0)
-	text := make([]byte, textSize)
+	text := mem.MakeSlice[byte](mm, int(textSize))
 
 	// Write size of string
 	if !cmsWriteUInt32Number(io, textSize) {
@@ -3168,8 +3171,8 @@ func WriteCountAndString(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHAND
 	return true
 }
 
-func TypeCrdInfoRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
-	mlu := cmsMLUalloc(ar, self.ContextID, 5)
+func TypeCrdInfoRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+	mlu := cmsMLUalloc(mm, self.ContextID, 5)
 
 	*nItems = 0
 	if mlu == nil {
@@ -3177,11 +3180,11 @@ func TypeCrdInfoRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 	}
 
 	// Read strings for each section
-	if !ReadCountAndString(ar, self, io, mlu, &sizeOfTag, "nm") ||
-		!ReadCountAndString(ar, self, io, mlu, &sizeOfTag, "#0") ||
-		!ReadCountAndString(ar, self, io, mlu, &sizeOfTag, "#1") ||
-		!ReadCountAndString(ar, self, io, mlu, &sizeOfTag, "#2") ||
-		!ReadCountAndString(ar, self, io, mlu, &sizeOfTag, "#3") {
+	if !ReadCountAndString(mm, self, io, mlu, &sizeOfTag, "nm") ||
+		!ReadCountAndString(mm, self, io, mlu, &sizeOfTag, "#0") ||
+		!ReadCountAndString(mm, self, io, mlu, &sizeOfTag, "#1") ||
+		!ReadCountAndString(mm, self, io, mlu, &sizeOfTag, "#2") ||
+		!ReadCountAndString(mm, self, io, mlu, &sizeOfTag, "#3") {
 		cmsMLUfree(mlu)
 		return nil
 	}
@@ -3190,30 +3193,30 @@ func TypeCrdInfoRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 	return mlu
 }
 
-func TypeCrdInfoWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeCrdInfoWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	mlu, ok := ptr.(*cmsMLU)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsMLU\n")
 		return false
 	}
 	// Write strings for each section
-	if !WriteCountAndString(ar, self, io, mlu, "nm") ||
-		!WriteCountAndString(ar, self, io, mlu, "#0") ||
-		!WriteCountAndString(ar, self, io, mlu, "#1") ||
-		!WriteCountAndString(ar, self, io, mlu, "#2") ||
-		!WriteCountAndString(ar, self, io, mlu, "#3") {
+	if !WriteCountAndString(mm, self, io, mlu, "nm") ||
+		!WriteCountAndString(mm, self, io, mlu, "#0") ||
+		!WriteCountAndString(mm, self, io, mlu, "#1") ||
+		!WriteCountAndString(mm, self, io, mlu, "#2") ||
+		!WriteCountAndString(mm, self, io, mlu, "#3") {
 		return false
 	}
 
 	return true
 }
 
-func TypeCrdInfoDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, nItems uint32) any {
+func TypeCrdInfoDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, nItems uint32) any {
 	mlu := ptr.(*cmsMLU)
-	return cmsMLUdup(ar, mlu)
+	return cmsMLUdup(mm, mlu)
 }
 
-func TypeCrdInfoFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeCrdInfoFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	mlu := ptr.(*cmsMLU)
 	cmsMLUfree(mlu)
 }
@@ -3228,7 +3231,7 @@ func TypeCrdInfoFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
 // ********************************************************************************
 // Type CmsSigDataType
 // ********************************************************************************
-func TypeDataRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeDataRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	// Minimum size must include the flag (4 bytes)
 	if sizeOfTag < 4 {
 		return nil
@@ -3247,7 +3250,7 @@ func TypeDataRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 	}
 
 	// Allocate and read the data slice
-	data := make([]byte, lenOfData)
+	data := mem.MakeSlice[byte](mm, int(lenOfData))
 	if io.Read((*cms_io_handler)(io), data, 1, lenOfData) != lenOfData {
 		return nil
 	}
@@ -3262,7 +3265,7 @@ func TypeDataRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 	*nItems = 1
 	return binData
 }
-func TypeDataWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeDataWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	binData, ok := ptr.(*cmsICCData)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsICCData\n")
@@ -3286,11 +3289,11 @@ func TypeDataWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, p
 	return true
 }
 
-func TypeDataDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeDataDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	orig := ptr.(*cmsICCData)
 
 	// Deep copy the binary data
-	dataCopy := make([]uint8, len(orig.Data))
+	dataCopy := mem.MakeSlice[uint8](mm, len(orig.Data))
 	copy(dataCopy, orig.Data)
 
 	return &cmsICCData{
@@ -3300,7 +3303,7 @@ func TypeDataDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) an
 	}
 }
 
-func TypeDataFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeDataFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFree(self.ContextID, ptr)
 }
 
@@ -3324,7 +3327,7 @@ A - CLUT - B
 A - CLUT - M - Matrix - B
 
 */
-func TypeLUTA2BRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeLUTA2BRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var (
 		baseOffset = io.Tell((*cms_io_handler)(io)) - uint32(unsafe.Sizeof(CmsTagBase{}))
 		inputChan  uint8
@@ -3350,38 +3353,38 @@ func TypeLUTA2BRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 	}
 
 	// Allocate an empty LUT
-	newLUT := cmsPipelineAlloc(ar, self.ContextID, uint32(inputChan), uint32(outputChan))
+	newLUT := cmsPipelineAlloc(mm, self.ContextID, uint32(inputChan), uint32(outputChan))
 	if newLUT == nil {
 		return nil
 	}
 
 	// Process each offset and add corresponding stages to the pipeline
 	if offsetA != 0 {
-		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetA, uint32(inputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(mm, self, io, baseOffset+offsetA, uint32(inputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetC != 0 {
-		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadCLUT(ar, self, io, baseOffset+offsetC, uint32(inputChan), uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadCLUT(mm, self, io, baseOffset+offsetC, uint32(inputChan), uint32(outputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetM != 0 {
-		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetM, uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(mm, self, io, baseOffset+offsetM, uint32(outputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetMat != 0 {
-		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadMatrix(ar, self, io, baseOffset+offsetMat)) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadMatrix(mm, self, io, baseOffset+offsetMat)) {
 			goto Error
 		}
 	}
 
 	if offsetB != 0 {
-		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetB, uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(mm, self, io, baseOffset+offsetB, uint32(outputChan))) {
 			goto Error
 		}
 	}
@@ -3390,11 +3393,11 @@ func TypeLUTA2BRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 	return newLUT
 
 Error:
-	cmsPipelineFree(ar, newLUT)
+	cmsPipelineFree(mm, newLUT)
 	return nil
 }
 
-func TypeLUTA2BWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeLUTA2BWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	lut, ok := ptr.(*cmsPipeline)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsPipeline\n")
@@ -3455,7 +3458,7 @@ func TypeLUTA2BWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 	// Write the stages
 	if a != nil {
 		offsetA = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar, self, io, CmsSigParametricCurveType, a) {
+		if !WriteSetOfCurves(mm, self, io, CmsSigParametricCurveType, a) {
 			return false
 		}
 	}
@@ -3466,28 +3469,28 @@ func TypeLUTA2BWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 		if lut.SaveAs8Bits {
 			precision = 1
 		}
-		if !WriteCLUT(ar, self, io, precision, clut) {
+		if !WriteCLUT(mm, self, io, precision, clut) {
 			return false
 		}
 	}
 
 	if m != nil {
 		offsetM = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar, self, io, CmsSigParametricCurveType, m) {
+		if !WriteSetOfCurves(mm, self, io, CmsSigParametricCurveType, m) {
 			return false
 		}
 	}
 
 	if matrix != nil {
 		offsetMat = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteMatrix(ar, self, io, matrix) {
+		if !WriteMatrix(mm, self, io, matrix) {
 			return false
 		}
 	}
 
 	if b != nil {
 		offsetB = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar, self, io, CmsSigParametricCurveType, b) {
+		if !WriteSetOfCurves(mm, self, io, CmsSigParametricCurveType, b) {
 			return false
 		}
 	}
@@ -3509,15 +3512,15 @@ func TypeLUTA2BWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 	return true
 }
 
-func TypeLUTA2BDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
-	return cmsPipelineDup(ar, ptr.(*cmsPipeline))
+func TypeLUTA2BDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
+	return cmsPipelineDup(mm, ptr.(*cmsPipeline))
 }
 
-func TypeLUTA2BFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
-	cmsPipelineFree(ar, ptr.(*cmsPipeline))
+func TypeLUTA2BFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
+	cmsPipelineFree(mm, ptr.(*cmsPipeline))
 }
 
-func WriteMatrix(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, mpe *cmsStage) bool {
+func WriteMatrix(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, mpe *cmsStage) bool {
 	//fmt.Println("START WriteMatrix")
 
 	matrixData, ok := mpe.Data.(*cmsStageMatrixData)
@@ -3553,7 +3556,7 @@ func WriteMatrix(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, mpe
 
 	return true
 }
-func WriteSetOfCurves(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, curveType cmsTagTypeSignature, mpe *cmsStage) bool {
+func WriteSetOfCurves(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, curveType cmsTagTypeSignature, mpe *cmsStage) bool {
 	curves := cmsStageGetPtrToCurveSet(mpe)
 	outputChannels := cmsStageOutputChannels(mpe)
 
@@ -3574,11 +3577,11 @@ func WriteSetOfCurves(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER
 		// Write the curve data
 		switch currentType {
 		case CmsSigCurveType:
-			if !TypeCurveWrite(ar, self, io, curves[i], 1) {
+			if !TypeCurveWrite(mm, self, io, curves[i], 1) {
 				return false
 			}
 		case CmsSigParametricCurveType:
-			if !TypeParametricCurveWrite(ar, self, io, curves[i], 1) {
+			if !TypeParametricCurveWrite(mm, self, io, curves[i], 1) {
 				return false
 			}
 		default:
@@ -3593,7 +3596,7 @@ func WriteSetOfCurves(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER
 
 	return true
 }
-func WriteCLUT(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, precision uint8, mpe *cmsStage) bool {
+func WriteCLUT(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, precision uint8, mpe *cmsStage) bool {
 	clutData, ok := mpe.Data.(*cmsStageCLutData)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsStageCLutData\n")
@@ -3639,7 +3642,7 @@ func WriteCLUT(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, preci
 
 	return cmsWriteAlignment(io)
 }
-func ReadMatrix(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, offset uint32) *cmsStage {
+func ReadMatrix(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, offset uint32) *cmsStage {
 	var dMat [9]float64
 	var dOff [3]float64
 
@@ -3663,9 +3666,9 @@ func ReadMatrix(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, offs
 	}
 
 	// Allocate the matrix
-	return cmsStageAllocMatrix(ar, self.ContextID, 3, 3, dMat[:], dOff[:])
+	return cmsStageAllocMatrix(mm, self.ContextID, 3, 3, dMat[:], dOff[:])
 }
-func ReadCLUT(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, offset, inputChannels, outputChannels uint32) *cmsStage {
+func ReadCLUT(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, offset, inputChannels, outputChannels uint32) *cmsStage {
 	var gridPoints8 [cmsMAXCHANNELS]uint8
 	var gridPoints [cmsMAXCHANNELS]uint32
 	var precision uint8
@@ -3696,7 +3699,7 @@ func ReadCLUT(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, offset
 	}
 
 	// Allocate the CLUT
-	clut := cmsStageAllocCLut16bitGranular(ar, self.ContextID, gridPoints[:inputChannels], inputChannels, outputChannels, nil)
+	clut := cmsStageAllocCLut16bitGranular(mm, self.ContextID, gridPoints[:inputChannels], inputChannels, outputChannels, nil)
 	if clut == nil {
 		return nil
 	}
@@ -3713,7 +3716,7 @@ func ReadCLUT(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, offset
 		for i := uint32(0); i < data.NEntries; i++ {
 			value, err := ReadStruct[uint8](io, binary.BigEndian, 1)
 			if err != nil {
-				cmsStageFree(ar, clut)
+				cmsStageFree(mm, clut)
 				cmsSignalError(nil, cmsERROR_UNDEFINED, "Failed to read uint8: %v", err)
 				return nil
 			}
@@ -3721,32 +3724,32 @@ func ReadCLUT(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, offset
 		}
 	case 2:
 		if !cmsReadUInt16Array(io, data.NEntries, data.Tab.([]uint16)) {
-			cmsStageFree(ar, clut)
+			cmsStageFree(mm, clut)
 			return nil
 		}
 	default:
-		cmsStageFree(ar, clut)
+		cmsStageFree(mm, clut)
 		cmsSignalError(self.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unknown precision")
 		return nil
 	}
 
 	return clut
 }
-func ReadEmbeddedCurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER) *CmsToneCurve {
+func ReadEmbeddedCurve(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER) *CmsToneCurve {
 	baseType := cmsReadTypeBase(io)
 
 	switch baseType {
 	case CmsSigCurveType:
-		return TypeCurveRead(ar, self, io, nil, 0).(*CmsToneCurve)
+		return TypeCurveRead(mm, self, io, nil, 0).(*CmsToneCurve)
 	case CmsSigParametricCurveType:
-		return TypeParametricCurveRead(ar, self, io, nil, 0).(*CmsToneCurve)
+		return TypeParametricCurveRead(mm, self, io, nil, 0).(*CmsToneCurve)
 	default:
 		//	str := cmsTagSignature2String(sig)
 		cmsSignalError(self.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unknown curve type ")
 		return nil
 	}
 }
-func ReadSetOfCurves(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, offset, nCurves uint32) *cmsStage {
+func ReadSetOfCurves(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, offset, nCurves uint32) *cmsStage {
 	if nCurves > cmsMAXCHANNELS {
 		return nil
 	}
@@ -3758,7 +3761,7 @@ func ReadSetOfCurves(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 
 	var curves [cmsMAXCHANNELS]*CmsToneCurve
 	for i := uint32(0); i < nCurves; i++ {
-		curves[i] = ReadEmbeddedCurve(ar, self, io)
+		curves[i] = ReadEmbeddedCurve(mm, self, io)
 		if curves[i] == nil || !cmsReadAlignment(io) {
 			for j := uint32(0); j < i; j++ {
 				CmsFreeToneCurve(curves[j])
@@ -3768,7 +3771,7 @@ func ReadSetOfCurves(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 	}
 
 	// Allocate the tone curves stage
-	stage := cmsStageAllocToneCurves(ar, self.ContextID, nCurves, curves[:])
+	stage := cmsStageAllocToneCurves(mm, self.ContextID, nCurves, curves[:])
 
 	// Free the individual curves
 	for i := uint32(0); i < nCurves; i++ {
@@ -3785,7 +3788,7 @@ B - CLUT - A
 B - Matrix - M - CLUT - A
 */
 
-func TypeLUTB2ARead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeLUTB2ARead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var (
 		inputChan, outputChan                                     uint8
 		offsetB, offsetMat, offsetM, offsetC, offsetA, baseOffset uint32
@@ -3814,37 +3817,37 @@ func TypeLUTB2ARead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 	}
 
 	// Allocate an empty LUT
-	newLUT = cmsPipelineAlloc(ar, self.ContextID, uint32(inputChan), uint32(outputChan))
+	newLUT = cmsPipelineAlloc(mm, self.ContextID, uint32(inputChan), uint32(outputChan))
 	if newLUT == nil {
 		return nil
 	}
 
 	if offsetB != 0 {
-		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetB, uint32(inputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(mm, self, io, baseOffset+offsetB, uint32(inputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetMat != 0 {
-		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadMatrix(ar, self, io, baseOffset+offsetMat)) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadMatrix(mm, self, io, baseOffset+offsetMat)) {
 			goto Error
 		}
 	}
 
 	if offsetM != 0 {
-		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetM, uint32(inputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(mm, self, io, baseOffset+offsetM, uint32(inputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetC != 0 {
-		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadCLUT(ar, self, io, baseOffset+offsetC, uint32(inputChan), uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadCLUT(mm, self, io, baseOffset+offsetC, uint32(inputChan), uint32(outputChan))) {
 			goto Error
 		}
 	}
 
 	if offsetA != 0 {
-		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(ar, self, io, baseOffset+offsetA, uint32(outputChan))) {
+		if !cmsPipelineInsertStage(newLUT, CmsAT_END, ReadSetOfCurves(mm, self, io, baseOffset+offsetA, uint32(outputChan))) {
 			goto Error
 		}
 	}
@@ -3853,11 +3856,11 @@ func TypeLUTB2ARead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, 
 	return newLUT
 
 Error:
-	cmsPipelineFree(ar, newLUT)
+	cmsPipelineFree(mm, newLUT)
 	return nil
 }
 
-func TypeLUTB2AWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeLUTB2AWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	lut, ok := ptr.(*cmsPipeline)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsPipeline\n")
@@ -3908,7 +3911,7 @@ func TypeLUTB2AWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 
 	if a != nil {
 		offsetA = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar, self, io, CmsSigParametricCurveType, a) {
+		if !WriteSetOfCurves(mm, self, io, CmsSigParametricCurveType, a) {
 			return false
 		}
 	}
@@ -3919,28 +3922,28 @@ func TypeLUTB2AWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 		if lut.SaveAs8Bits {
 			precision = 1
 		}
-		if !WriteCLUT(ar, self, io, precision, clut) {
+		if !WriteCLUT(mm, self, io, precision, clut) {
 			return false
 		}
 	}
 
 	if m != nil {
 		offsetM = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar, self, io, CmsSigParametricCurveType, m) {
+		if !WriteSetOfCurves(mm, self, io, CmsSigParametricCurveType, m) {
 			return false
 		}
 	}
 
 	if matrix != nil {
 		offsetMat = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteMatrix(ar, self, io, matrix) {
+		if !WriteMatrix(mm, self, io, matrix) {
 			return false
 		}
 	}
 
 	if b != nil {
 		offsetB = uint32(io.Tell((*cms_io_handler)(io))) - baseOffset
-		if !WriteSetOfCurves(ar, self, io, CmsSigParametricCurveType, b) {
+		if !WriteSetOfCurves(mm, self, io, CmsSigParametricCurveType, b) {
 			return false
 		}
 	}
@@ -3962,18 +3965,18 @@ func TypeLUTB2AWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 	return true
 }
 
-func TypeLUTB2ADup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, nItems uint32) any {
-	return cmsPipelineDup(ar, ptr.(*cmsPipeline))
+func TypeLUTB2ADup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, nItems uint32) any {
+	return cmsPipelineDup(mm, ptr.(*cmsPipeline))
 }
 
-func TypeLUTB2AFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
-	cmsPipelineFree(ar, ptr.(*cmsPipeline))
+func TypeLUTB2AFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
+	cmsPipelineFree(mm, ptr.(*cmsPipeline))
 }
 
 // This is the list of built-in MPE types
 
 // ReadMPEElem reads a single multi-processing element (MPE).
-func ReadMPEElem(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo any, n, sizeOfTag uint32) bool {
+func ReadMPEElem(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo any, n, sizeOfTag uint32) bool {
 	var elementSig cmsStageSignature
 	var typeHandler *cmsTagTypeHandler
 	var nItems uint32
@@ -4006,7 +4009,7 @@ func ReadMPEElem(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, car
 	// If there's no read method, ignore the element
 	if typeHandler.ReadFn != nil {
 		// Read the MPE and insert it into the pipeline
-		stage := typeHandler.ReadFn(ar, self, io, &nItems, sizeOfTag).(*cmsStage)
+		stage := typeHandler.ReadFn(mm, self, io, &nItems, sizeOfTag).(*cmsStage)
 		if stage == nil || !cmsPipelineInsertStage(newLUT, CmsAT_END, stage) {
 			return false
 		}
@@ -4017,7 +4020,7 @@ func ReadMPEElem(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, car
 
 // This is the main dispatcher for MPE
 
-func TypeMPERead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeMPERead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var (
 		inputChans, outputChans  uint16
 		elementCount, baseOffset uint32
@@ -4038,7 +4041,7 @@ func TypeMPERead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nIt
 	}
 
 	// Allocate an empty LUT
-	newLUT = cmsPipelineAlloc(ar, self.ContextID, uint32(inputChans), uint32(outputChans))
+	newLUT = cmsPipelineAlloc(mm, self.ContextID, uint32(inputChans), uint32(outputChans))
 	if newLUT == nil {
 		return nil
 	}
@@ -4049,7 +4052,7 @@ func TypeMPERead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nIt
 	}
 
 	// Read position table and elements
-	if !ReadPositionTable(ar, self, io, elementCount, baseOffset, newLUT, ReadMPEElem) {
+	if !ReadPositionTable(mm, self, io, elementCount, baseOffset, newLUT, ReadMPEElem) {
 		goto Error
 	}
 
@@ -4062,7 +4065,7 @@ func TypeMPERead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nIt
 	return newLUT
 
 Error:
-	cmsPipelineFree(ar, newLUT)
+	cmsPipelineFree(mm, newLUT)
 
 	*nItems = 0
 	return nil
@@ -4070,7 +4073,7 @@ Error:
 
 // This one is a little bit more complex, so we don't use position tables this time.
 
-func TypeMPEWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeMPEWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	var (
 		i, baseOffset, directoryPos, currentPos uint32
 		elementOffsets, elementSizes            []uint32
@@ -4097,8 +4100,8 @@ func TypeMPEWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, pt
 	elem = lut.Elements
 
 	// Allocate space for offsets and sizes
-	elementOffsets = make([]uint32, elementCount)
-	elementSizes = make([]uint32, elementCount)
+	elementOffsets = mem.MakeSlice[uint32](mm, int(elementCount))
+	elementSizes = mem.MakeSlice[uint32](mm, int(elementCount))
 
 	// Write header
 	if !cmsWriteUInt16Number(io, uint16(inputChan)) || !cmsWriteUInt16Number(io, uint16(outputChan)) || !cmsWriteUInt32Number(io, elementCount) {
@@ -4138,7 +4141,7 @@ func TypeMPEWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, pt
 		}
 
 		before = uint32(io.Tell((*cms_io_handler)(io)))
-		if !typeHandler.WriteFn(ar, self, io, elem, 1) {
+		if !typeHandler.WriteFn(mm, self, io, elem, 1) {
 			goto Error
 		}
 
@@ -4170,12 +4173,12 @@ Error:
 	return false
 }
 
-func TypeMPEDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, nItems uint32) any {
-	return cmsPipelineDup(ar, ptr.(*cmsPipeline))
+func TypeMPEDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, nItems uint32) any {
+	return cmsPipelineDup(mm, ptr.(*cmsPipeline))
 }
 
-func TypeMPEFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
-	cmsPipelineFree(ar, ptr.(*cmsPipeline))
+func TypeMPEFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
+	cmsPipelineFree(mm, ptr.(*cmsPipeline))
 }
 
 // ********************************************************************************
@@ -4196,8 +4199,8 @@ type cmsDICarray struct {
 
 // Allocate an empty array element
 func AllocElem(contextID CmsContext, e *cmsDICelem, count uint32) bool {
-	e.Offsets = make([]uint32, count)
-	e.Sizes = make([]uint32, count)
+	e.Offsets = mem.MakeSlice[uint32](mem.Manager{}, int(count))
+	e.Sizes = mem.MakeSlice[uint32](mem.Manager{}, int(count))
 
 	e.ContextID = contextID
 	return e.Offsets != nil && e.Sizes != nil
@@ -4318,7 +4321,7 @@ func WriteOffsetArray(io *cmsIOHANDLER, a *cmsDICarray, count uint32, length uin
 }
 
 // Read an MLUC element
-func ReadOneMLUC(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, e *cmsDICelem, i uint32, mlu **cmsMLU) bool {
+func ReadOneMLUC(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, e *cmsDICelem, i uint32, mlu **cmsMLU) bool {
 	if e.Offsets[i] == 0 || e.Sizes[i] == 0 {
 		*mlu = nil
 		return true
@@ -4328,12 +4331,12 @@ func ReadOneMLUC(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, e *
 		return false
 	}
 	var nItems uint32
-	*mlu = TypeMLURead(ar, self, io, &nItems, e.Sizes[i]).(*cmsMLU)
+	*mlu = TypeMLURead(mm, self, io, &nItems, e.Sizes[i]).(*cmsMLU)
 	return *mlu != nil
 }
 
 // Write an MLUC element
-func WriteOneMLUC(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, e *cmsDICelem, i uint32, mlu *cmsMLU, baseOffset uint32) bool {
+func WriteOneMLUC(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, e *cmsDICelem, i uint32, mlu *cmsMLU, baseOffset uint32) bool {
 	if mlu == nil {
 		e.Sizes[i] = 0
 		e.Offsets[i] = 0
@@ -4343,7 +4346,7 @@ func WriteOneMLUC(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, e 
 	before := uint32(io.Tell((*cms_io_handler)(io)))
 	e.Offsets[i] = before - baseOffset
 
-	if !TypeMLUWrite(ar, self, io, mlu, 1) {
+	if !TypeMLUWrite(mm, self, io, mlu, 1) {
 		return false
 	}
 
@@ -4351,7 +4354,7 @@ func WriteOneMLUC(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, e 
 	return true
 }
 
-func TypeDictionaryRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeDictionaryRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var (
 		hDict           CmsHANDLE
 		count, length   uint32
@@ -4386,7 +4389,7 @@ func TypeDictionaryRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 	}
 
 	// Create an empty dictionary
-	hDict = cmsDictAlloc(ar, self.ContextID)
+	hDict = cmsDictAlloc(mm, self.ContextID)
 	// Allocate column arrays
 	if !AllocArray(self.ContextID, &a, count, length) {
 		goto Error
@@ -4405,10 +4408,10 @@ func TypeDictionaryRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 			goto Error
 		}
 
-		if length > 16 && !ReadOneMLUC(ar, self, io, &a.DisplayName, i, &displayNameMLU) {
+		if length > 16 && !ReadOneMLUC(mm, self, io, &a.DisplayName, i, &displayNameMLU) {
 			goto Error
 		}
-		if length > 24 && !ReadOneMLUC(ar, self, io, &a.DisplayValue, i, &displayValueMLU) {
+		if length > 24 && !ReadOneMLUC(mm, self, io, &a.DisplayValue, i, &displayValueMLU) {
 			goto Error
 		}
 
@@ -4416,7 +4419,7 @@ func TypeDictionaryRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 			cmsSignalError(self.ContextID, cmsERROR_CORRUPTION_DETECTED, "Bad dictionary Name/Value")
 			rc = false
 		} else {
-			rc = cmsDictAddEntry(ar, hDict, nameWCS, valueWCS, displayNameMLU, displayValueMLU)
+			rc = cmsDictAddEntry(mm, hDict, nameWCS, valueWCS, displayNameMLU, displayValueMLU)
 		}
 
 		if displayNameMLU != nil {
@@ -4441,7 +4444,7 @@ Error:
 	return nil
 }
 
-func TypeDictionaryWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeDictionaryWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	var (
 		hDict             CmsHANDLE
 		count, length     uint32
@@ -4497,10 +4500,10 @@ func TypeDictionaryWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHAND
 			goto Error
 		}
 
-		if p.DisplayName != nil && !WriteOneMLUC(ar, self, io, &a.DisplayName, i, p.DisplayName, baseOffset) {
+		if p.DisplayName != nil && !WriteOneMLUC(mm, self, io, &a.DisplayName, i, p.DisplayName, baseOffset) {
 			goto Error
 		}
-		if p.DisplayValue != nil && !WriteOneMLUC(ar, self, io, &a.DisplayValue, i, p.DisplayValue, baseOffset) {
+		if p.DisplayValue != nil && !WriteOneMLUC(mm, self, io, &a.DisplayValue, i, p.DisplayValue, baseOffset) {
 			goto Error
 		}
 
@@ -4521,16 +4524,16 @@ Error:
 	return false
 }
 
-func TypeDictionaryDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, nItems uint32) any {
-	return cmsDictDup(ar, CmsHANDLE(ptr))
+func TypeDictionaryDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, nItems uint32) any {
+	return cmsDictDup(mm, CmsHANDLE(ptr))
 }
 
-func TypeDictionaryFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeDictionaryFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsDictFree(CmsHANDLE(ptr))
 }
 
 // Read a video signal tag
-func TypeVideoSignalRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeVideoSignalRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	if sizeOfTag != 8 {
 		return nil
 	}
@@ -4541,7 +4544,7 @@ func TypeVideoSignalRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHAND
 	}
 
 	// Allocate memory for cmsVideoSignalType
-	cicp := allocateStruct[cmsVideoSignalType](ar)
+	cicp := mem.New[cmsVideoSignalType](mm)
 	if cicp == nil {
 		return nil
 	}
@@ -4565,7 +4568,7 @@ Error:
 }
 
 // Write a video signal tag
-func TypeVideoSignalWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeVideoSignalWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	cicp, ok := ptr.(*cmsVideoSignalType)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsVideoSignal\n")
@@ -4589,14 +4592,14 @@ func TypeVideoSignalWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHAN
 }
 
 // Duplicate a video signal tag
-func TypeVideoSignalDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeVideoSignalDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	orig := ptr.(*cmsVideoSignalType) // Type assertion
 	copy := *orig                     // Struct copy by value
 	return &copy                      // Return pointer to the new copy
 }
 
 // Free a video signal tag
-func TypeVideoSignalFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeVideoSignalFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	cmsFree(self.ContextID, ptr)
 }
 
@@ -4612,7 +4615,7 @@ type cmsVCGTGAMMA struct {
 	Max   float64
 }
 
-func TypeVcgtRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeVcgtRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var tagType uint32
 	if !cmsReadUInt32Number(io, &tagType) {
 		return nil
@@ -4633,7 +4636,7 @@ func TypeVcgtRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 		}
 
 		for i := 0; i < 3; i++ {
-			curves[i] = cmsBuildTabulatedToneCurve16(ar, self.ContextID, uint32(nElems), nil)
+			curves[i] = cmsBuildTabulatedToneCurve16(mm, self.ContextID, uint32(nElems), nil)
 			switch nBytes {
 			case 1:
 				var v uint8
@@ -4664,7 +4667,7 @@ func TypeVcgtRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nI
 				math.Pow(max-min, 1.0/gamma),
 				0, 0, 0, min, 0,
 			}
-			curves[i] = cmsBuildParametricToneCurve(ar, self.ContextID, 5, params)
+			curves[i] = cmsBuildParametricToneCurve(mm, self.ContextID, 5, params)
 		}
 	default:
 		cmsSignalError(self.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unsupported tag type for VCGT")
@@ -4678,7 +4681,7 @@ Error:
 	cmsFreeToneCurveTriple(curves)
 	return nil
 }
-func TypeVcgtWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeVcgtWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	curves, ok := ptr.([]*CmsToneCurve)
 	if !ok {
 		panic("Ptr is not of type []*CmsToneCurve")
@@ -4731,16 +4734,16 @@ func TypeVcgtWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, p
 	return true
 }
 
-func TypeVcgtDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func TypeVcgtDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	oldCurves := ptr.([]*CmsToneCurve)
 	NewCurves := make([]*CmsToneCurve, 3)
-	NewCurves[0] = cmsDupToneCurve(ar, oldCurves[0])
-	NewCurves[1] = cmsDupToneCurve(ar, oldCurves[1])
-	NewCurves[2] = cmsDupToneCurve(ar, oldCurves[2])
+	NewCurves[0] = cmsDupToneCurve(mm, oldCurves[0])
+	NewCurves[1] = cmsDupToneCurve(mm, oldCurves[1])
+	NewCurves[2] = cmsDupToneCurve(mm, oldCurves[2])
 	return &NewCurves[0]
 }
 
-func TypeVcgtFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
+func TypeVcgtFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 	curvesSlice, ok := ptr.([]*CmsToneCurve)
 	if !ok || len(curvesSlice) != 3 {
 		return
@@ -4757,14 +4760,14 @@ func TypeVcgtFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
 // Type CmsSigMultiProcessElementType
 // ********************************************************************************
 
-func GenericMPEDup(ar *arena.Arena, self *cmsTagTypeHandler, ptr any, n uint32) any {
+func GenericMPEDup(mm mem.Manager, self *cmsTagTypeHandler, ptr any, n uint32) any {
 	//fmt.Println("GenericMPEDup")
-	return cmsStageDup(ar, ptr.(*cmsStage))
+	return cmsStageDup(mm, ptr.(*cmsStage))
 
 }
 
-func GenericMPEFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
-	cmsStageFree(ar, ptr.(*cmsStage))
+func GenericMPEFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
+	cmsStageFree(mm, ptr.(*cmsStage))
 }
 
 // Each curve is stored in one or more curve segments, with break-points specified between curve segments.
@@ -4773,7 +4776,7 @@ func GenericMPEFree(ar *arena.Arena, self *cmsTagTypeHandler, ptr any) {
 // specified either in terms of a formula, or by a sampled curve.
 
 // ReadSegmentedCurve reads an embedded segmented curve
-func ReadSegmentedCurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER) *CmsToneCurve {
+func ReadSegmentedCurve(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER) *CmsToneCurve {
 	var elementSig cmsCurveSegSignature
 	var nSegments uint16
 	var prevBreak float32 = float32(math.Inf(-1)) // -Infinity
@@ -4797,7 +4800,7 @@ func ReadSegmentedCurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 		return nil
 	}
 
-	segments := make([]cmsCurveSegment, nSegments)
+	segments := mem.MakeSlice[cmsCurveSegment](mm, int(nSegments))
 
 	// Read breakpoints
 	for i := uint32(0); i < uint32(nSegments-1); i++ {
@@ -4847,7 +4850,7 @@ func ReadSegmentedCurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 
 			count++
 			segments[i].NGridPoints = count
-			segments[i].SampledPoints = make([]float32, count)
+			segments[i].SampledPoints = mem.MakeSlice[float32](mm, int(count))
 
 			// Initialize the first point
 			segments[i].SampledPoints[0] = 0
@@ -4864,7 +4867,7 @@ func ReadSegmentedCurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 		}
 	}
 
-	curve := cmsBuildSegmentedToneCurve(ar, self.ContextID, uint32(nSegments), segments)
+	curve := cmsBuildSegmentedToneCurve(mm, self.ContextID, uint32(nSegments), segments)
 
 	// Fix implicit points
 	for i := uint32(0); i < uint32(nSegments); i++ {
@@ -4877,14 +4880,14 @@ func ReadSegmentedCurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 }
 
 // ReadMPECurve reads a single curve for MPE
-func ReadMPECurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo any, n, sizeOfTag uint32) bool {
+func ReadMPECurve(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo any, n, sizeOfTag uint32) bool {
 	gammaTables := cargo.([]*CmsToneCurve)
-	gammaTables[n] = ReadSegmentedCurve(ar, self, io)
+	gammaTables[n] = ReadSegmentedCurve(mm, self, io)
 	return gammaTables[n] != nil
 }
 
 // Type_MPEcurve_Read reads MPE curve type
-func TypeMPEcurveRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeMPEcurveRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var inputChans, outputChans uint16
 	baseOffset := io.Tell((*cms_io_handler)(io)) - uint32(unsafe.Sizeof(CmsTagBase{}))
 
@@ -4896,12 +4899,12 @@ func TypeMPEcurveRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER
 		return nil
 	}
 
-	gammaTables := make([]*CmsToneCurve, inputChans)
+	gammaTables := mem.MakeSlice[*CmsToneCurve](mm, int(inputChans))
 
 	var mpe *cmsStage
 	// Read position table and allocate the MPE curve stage
-	if ReadPositionTable(ar, self, io, uint32(inputChans), baseOffset, gammaTables, ReadMPECurve) {
-		mpe = cmsStageAllocToneCurves(ar, self.ContextID, uint32(inputChans), gammaTables)
+	if ReadPositionTable(mm, self, io, uint32(inputChans), baseOffset, gammaTables, ReadMPECurve) {
+		mpe = cmsStageAllocToneCurves(mm, self.ContextID, uint32(inputChans), gammaTables)
 
 	}
 
@@ -4974,7 +4977,7 @@ func WriteSegmentedCurve(io *cmsIOHANDLER, curve *CmsToneCurve) bool {
 }
 
 // WriteMPECurve writes a curve for MPE
-func WriteMPECurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo any, n, sizeOfTag uint32) bool {
+func WriteMPECurve(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, cargo any, n, sizeOfTag uint32) bool {
 	curves, ok := cargo.(*cmsStageToneCurvesData)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "not of the type *cmsStageToneCurvesData\n")
@@ -4985,7 +4988,7 @@ func WriteMPECurve(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, c
 }
 
 // Type_MPEcurve_Write writes the MPE curve type
-func TypeMPEcurveWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeMPEcurveWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	mpe, ok1 := ptr.(*cmsStage)
 	curves, ok2 := mpe.Data.(*cmsStageToneCurvesData)
 	if !ok1 || !ok2 {
@@ -5004,9 +5007,9 @@ func TypeMPEcurveWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 	}
 
 	// Write position table
-	return WritePositionTable(ar, self, io, 0, uint32(mpe.InputChannels), baseOffset, curves, WriteMPECurve)
+	return WritePositionTable(mm, self, io, 0, uint32(mpe.InputChannels), baseOffset, curves, WriteMPECurve)
 }
-func TypeMPEmatrixRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeMPEmatrixRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var inputChans, outputChans uint16
 	if !cmsReadUInt16Number(io, &inputChans) || !cmsReadUInt16Number(io, &outputChans) {
 		return nil
@@ -5017,8 +5020,8 @@ func TypeMPEmatrixRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 	}
 
 	nElems := uint32(inputChans) * uint32(outputChans)
-	matrix := make([]float64, nElems)
-	offsets := make([]float64, outputChans)
+	matrix := mem.MakeSlice[float64](mm, int(nElems))
+	offsets := mem.MakeSlice[float64](mm, int(outputChans))
 	for i := uint32(0); i < nElems; i++ {
 		var v float32
 		if !cmsReadFloat32Number(io, &v) {
@@ -5035,12 +5038,12 @@ func TypeMPEmatrixRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLE
 		offsets[i] = float64(v)
 	}
 
-	mpe := cmsStageAllocMatrix(ar, self.ContextID, uint32(outputChans), uint32(inputChans), matrix, offsets)
+	mpe := cmsStageAllocMatrix(mm, self.ContextID, uint32(outputChans), uint32(inputChans), matrix, offsets)
 	*nItems = 1
 	return mpe
 }
 
-func TypeMPEmatrixWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeMPEmatrixWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	mpe, ok1 := ptr.(*cmsStage)
 	matrix, ok2 := mpe.Data.(*cmsStageMatrixData)
 	if !ok1 || !ok2 {
@@ -5074,7 +5077,7 @@ func TypeMPEmatrixWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDL
 	return true
 }
 
-func TypeMPEclutRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
+func TypeMPEclutRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, nItems *uint32, sizeOfTag uint32) any {
 	var inputChans, outputChans uint16
 	var dimensions8 [16]byte
 	var nMaxGrids uint32
@@ -5100,7 +5103,7 @@ func TypeMPEclutRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 		gridPoints[i] = uint32(dimensions8[i])
 	}
 
-	mpe := cmsStageAllocCLutFloatGranular(ar, self.ContextID, gridPoints[:], uint32(inputChans), uint32(outputChans), nil)
+	mpe := cmsStageAllocCLutFloatGranular(mm, self.ContextID, gridPoints[:], uint32(inputChans), uint32(outputChans), nil)
 	if mpe == nil {
 		return nil
 	}
@@ -5108,7 +5111,7 @@ func TypeMPEclutRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 	clut := mpe.Data.(*cmsStageCLutData)
 	for i := uint32(0); i < clut.NEntries; i++ {
 		if !cmsReadFloat32Number(io, &clut.Tab.([]float32)[i]) {
-			cmsStageFree(ar, mpe)
+			cmsStageFree(mm, mpe)
 			return nil
 		}
 	}
@@ -5117,7 +5120,7 @@ func TypeMPEclutRead(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER,
 	return mpe
 }
 
-func TypeMPEclutWrite(ar *arena.Arena, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
+func TypeMPEclutWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, ptr any, nItems uint32) bool {
 	mpe := ptr.(*cmsStage)
 	clut := mpe.Data.(*cmsStageCLutData)
 

@@ -5,7 +5,8 @@ import (
 	"os"
 	"reflect"
 
-	gol "amber.fish/golcms"
+	gol "github.com/yzigangirova/lcms-go"
+	"github.com/yzigangirova/lcms-go/mem"
 )
 
 // -----------------------
@@ -18,10 +19,10 @@ const (
 )
 
 func main() {
-	//must(exampleRGB8toRGB8())
-	//must(exampleRGB8toCMYK8())
+	must(exampleRGB8toRGB8())
+	must(exampleRGB8toCMYK8())
 	must(exampleLab16toRGB8())
-	//must(exampleXYZ16toRGB8Stride())
+	must(exampleXYZ16toRGB8Stride())
 	fmt.Println("\nAll examples finished.")
 }
 
@@ -74,23 +75,23 @@ func exampleRGB8toRGB8() error {
 	var err error
 
 	if SrcRGBProfilePath != "" {
-		src = gol.CmsOpenProfileFromFile(nil, SrcRGBProfilePath, "r")
+		src = gol.CmsOpenProfileFromFile(mem.Manager{}, SrcRGBProfilePath, "r")
 
 	} else {
-		src = gol.CmsCreate_sRGBProfile(nil) // TODO: adjust name; e.g., cmsCreate_sRGBProfile
+		src = gol.CmsCreate_sRGBProfile(mem.Manager{}) // TODO: adjust name; e.g., cmsCreate_sRGBProfile
 	}
 
 	if DstRGBProfilePath != "" {
-		dst = gol.CmsOpenProfileFromFile(nil, DstRGBProfilePath, "r") // optional explicit dst
+		dst = gol.CmsOpenProfileFromFile(mem.Manager{}, DstRGBProfilePath, "r") // optional explicit dst
 		if dst == nil {
 			return fmt.Errorf("open dst profile: %w", err)
 		}
 	} else {
-		dst = gol.CmsCreate_sRGBProfile(nil)
+		dst = gol.CmsCreate_sRGBProfile(mem.Manager{})
 	}
 
 	// Build transform RGB_8 -> RGB_8
-	xform := gol.CmsCreateTransform(nil,
+	xform := gol.CmsCreateTransform(mem.Manager{},
 		src, gol.TYPE_RGB_8,
 		dst, gol.TYPE_RGB_8,
 		gol.INTENT_PERCEPTUAL, gol.CmsFLAGS_BLACKPOINTCOMPENSATION)
@@ -116,7 +117,7 @@ func exampleRGB8toRGB8() error {
 	// Transform
 	outBytes := make([]uint8, len(inBytes))
 	nPix := uint32(len(inBytes) / 3)
-	gol.CmsDoTransform(nil, xform, inBytes, outBytes, nPix)
+	gol.CmsDoTransform(mem.Manager{}, xform, inBytes, outBytes, nPix)
 
 	// Optionally expand back to 16-bit-ish integers
 	outInt16 := make([]uint16, len(outBytes))
@@ -140,11 +141,11 @@ func exampleRGB8toCMYK8() error {
 	// Open/create source RGB
 	var src gol.CmsHPROFILE
 	if SrcRGBProfilePath != "" {
-		p := gol.CmsOpenProfileFromFile(nil, SrcRGBProfilePath, "r")
+		p := gol.CmsOpenProfileFromFile(mem.Manager{}, SrcRGBProfilePath, "r")
 
 		src = p
 	} else {
-		src = gol.CmsCreate_sRGBProfile(nil)
+		src = gol.CmsCreate_sRGBProfile(mem.Manager{})
 	}
 
 	// Destination CMYK profile from file (or memory)
@@ -152,9 +153,9 @@ func exampleRGB8toCMYK8() error {
 		fmt.Println("  (skipping: set DstCMYKProfilePath to a real printer ICC)")
 		return nil
 	}
-	dst := gol.CmsOpenProfileFromFile(nil, DstCMYKProfilePath, "r") // or OpenProfileFromMem
+	dst := gol.CmsOpenProfileFromFile(mem.Manager{}, DstCMYKProfilePath, "r") // or OpenProfileFromMem
 
-	xform := gol.CmsCreateTransform(nil,
+	xform := gol.CmsCreateTransform(mem.Manager{},
 		src, gol.TYPE_RGB_8,
 		dst, gol.TYPE_CMYK_8,
 		gol.INTENT_PERCEPTUAL, gol.CmsFLAGS_BLACKPOINTCOMPENSATION,
@@ -166,7 +167,7 @@ func exampleRGB8toCMYK8() error {
 	rgbIn := []uint8{255, 0, 0, 0, 255, 0, 12, 34, 56}
 	out := make([]uint8, (len(rgbIn)/3)*4)
 	n := len(rgbIn) / 3
-	gol.CmsDoTransform(nil, xform, rgbIn, out, uint32(n))
+	gol.CmsDoTransform(mem.Manager{}, xform, rgbIn, out, uint32(n))
 	fmt.Printf("RGB in : %v\n", rgbIn)
 	fmt.Printf("CMYK out: %v\n", out)
 	return nil
@@ -183,13 +184,13 @@ func exampleLab16toRGB8() error {
 		Y_small: 0.35850,
 		Y_large: 1.0,
 	}
-	src := gol.CmsCreateLab2Profile(nil, &wp)
-	dst := gol.CmsCreate_sRGBProfile(nil)
+	src := gol.CmsCreateLab2Profile(mem.Manager{}, &wp)
+	dst := gol.CmsCreate_sRGBProfile(mem.Manager{})
 	if src == nil || dst == nil {
 		return fmt.Errorf("failed to create Lab or sRGB profiles")
 	}
 
-	xform := gol.CmsCreateTransform(nil,
+	xform := gol.CmsCreateTransform(mem.Manager{},
 		src, gol.TYPE_Lab_16,
 		dst, gol.TYPE_RGB_8,
 		gol.INTENT_PERCEPTUAL, gol.CmsFLAGS_BLACKPOINTCOMPENSATION)
@@ -200,7 +201,7 @@ func exampleLab16toRGB8() error {
 	// One pixel: L=100, a=0, b=0 in 16-bit ICC encoding (approx)
 	labIn := []uint16{65535, 32768, 32768}
 	rgbOut := make([]uint8, 3)
-	gol.CmsDoTransform(nil, xform, labIn, rgbOut, 1)
+	gol.CmsDoTransform(mem.Manager{}, xform, labIn, rgbOut, 1)
 	fmt.Printf("Lab16 in : %v\n", labIn)
 	fmt.Printf("RGB8  out: %v\n", rgbOut)
 	return nil
@@ -212,8 +213,8 @@ func exampleLab16toRGB8() error {
 func exampleXYZ16toRGB8Stride() error {
 	fmt.Println("\n[Example] XYZ16 -> RGB8 (line stride)")
 
-	src := gol.CmsCreateXYZProfile(nil)
-	dst := gol.CmsCreate_sRGBProfile(nil)
+	src := gol.CmsCreateXYZProfile(mem.Manager{})
+	dst := gol.CmsCreate_sRGBProfile(mem.Manager{})
 	if src == nil || dst == nil {
 		return fmt.Errorf("failed to create XYZ or sRGB profiles")
 	}
@@ -221,7 +222,7 @@ func exampleXYZ16toRGB8Stride() error {
 	// Some workflows prefer disabling optimization from XYZ
 	flags := gol.CmsFLAGS_BLACKPOINTCOMPENSATION | gol.CmsFLAGS_NOOPTIMIZE // TODO: adjust
 
-	xform := gol.CmsCreateTransform(nil,
+	xform := gol.CmsCreateTransform(mem.Manager{},
 		src, gol.TYPE_XYZ_16,
 		dst, gol.TYPE_RGB_8,
 		gol.INTENT_PERCEPTUAL, uint32(flags),
@@ -237,7 +238,7 @@ func exampleXYZ16toRGB8Stride() error {
 	// Use the stride function when processing rows or planar data.
 	// Signature varies; this matches a common pattern: DoTransformLineStride(xf, in, out, channelsIn, nPixels, inStrideBytes, outStrideBytes, inSkip, outSkip)
 	//1 - packed, 2 - nPix, 3*2 - in stride: 3 channels * 2 bytes, 3 - out stride: 3 bytes
-	gol.CmsDoTransformLineStride(nil, xform, xyzIn, rgbOut, 1, 2, 3*2, 3, 0, 0)
+	gol.CmsDoTransformLineStride(mem.Manager{}, xform, xyzIn, rgbOut, 1, 2, 3*2, 3, 0, 0)
 
 	fmt.Printf("XYZ16 in : %v\n", xyzIn)
 	fmt.Printf("RGB8  out: %v\n", rgbOut)

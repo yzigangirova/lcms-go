@@ -26,8 +26,8 @@ The port is still early; testing and issue reports are very welcome.
 
 Requires Go 1.22+.
 
-```bash
 go get github.com/yzigangirova/lcms-go
+
 
 
 License & attribution

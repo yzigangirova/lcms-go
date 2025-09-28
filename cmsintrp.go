@@ -1,16 +1,17 @@
 package golcms
 
 import (
-	"arena"
 	"math"
 	"unsafe"
+
+	"github.com/yzigangirova/lcms-go/mem"
 )
 
 // This is the default factory
 var cmsInterpPluginChunk = cmsInterpPluginChunkType{Interpolators: nil}
 
 // cmsAllocInterpPluginChunk allocates and duplicates the interpolation plug-in memory chunk.
-func cmsAllocInterpPluginChunk(ar *arena.Arena, ctx, src *CmsContextStruct) {
+func cmsAllocInterpPluginChunk(mm mem.Manager, ctx, src *CmsContextStruct) {
 	var from cmsContextChunk
 
 	if src != nil {
@@ -21,7 +22,7 @@ func cmsAllocInterpPluginChunk(ar *arena.Arena, ctx, src *CmsContextStruct) {
 		from = &staticInterpPluginChunk
 	}
 
-	ctx.chunks[InterpPlugin] = cmsSubAllocDup(ar, ctx.MemPool, from, uint32(unsafe.Sizeof(cmsInterpPluginChunkType{})))
+	ctx.chunks[InterpPlugin] = cmsSubAllocDup(mm, ctx.MemPool, from, uint32(unsafe.Sizeof(cmsInterpPluginChunkType{})))
 }
 
 // cmsRegisterInterpPlugin is the main entry for interpolation plug-in registration.
@@ -67,8 +68,7 @@ func cmsSetInterpolationRoutine(ContextID CmsContext, p *cmsInterpParams) bool {
 }
 
 // cmsComputeInterpParamsEx precalculates parameters to speed up interpolation.
-func cmsComputeInterpParamsEx(
-	ar *arena.Arena,
+func cmsComputeInterpParamsEx(mm mem.Manager,
 	ContextID CmsContext,
 	nSamples []uint32,
 	InputChan uint32,
@@ -87,7 +87,7 @@ func cmsComputeInterpParamsEx(
 	}
 
 	// Create an empty object
-	p := allocateStruct[cmsInterpParams](ar)
+	p := mem.New[cmsInterpParams](mm)
 	if p == nil {
 		return nil
 	}
@@ -122,8 +122,7 @@ func cmsComputeInterpParamsEx(
 }
 
 // cmsComputeInterpParams is a wrapper assuming all directions have the same number of nodes.
-func cmsComputeInterpParams(
-	ar *arena.Arena,
+func cmsComputeInterpParams(mm mem.Manager,
 	ContextID CmsContext,
 	nSamples uint32,
 	InputChan uint32,
@@ -140,7 +139,7 @@ func cmsComputeInterpParams(
 	}
 
 	// Call the extended function
-	return cmsComputeInterpParamsEx(ar, ContextID, Samples[:], InputChan, OutputChan, Table, dwFlags)
+	return cmsComputeInterpParamsEx(mm, ContextID, Samples[:], InputChan, OutputChan, Table, dwFlags)
 }
 
 // cmsFreeInterpParams frees all associated memory.

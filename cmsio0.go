@@ -9,9 +9,11 @@ import (
 	"unsafe"
 
 	//"io"
-	"arena"
+
 	"bytes"
 	"sync"
+
+	"github.com/yzigangirova/lcms-go/mem"
 )
 
 // Generic I/O, tag dictionary management, profile struct
@@ -36,7 +38,7 @@ type FILENULL struct {
 // NULLRead simulates reading from a null IOHandler.
 func NULLRead(iohandler *cms_io_handler, buffer any, size, count uint32) uint32 {
 	resData, ok := iohandler.Stream.(*FILENULL)
-	if !ok  {
+	if !ok {
 		panic("Stream is not a *FILENULL")
 	}
 	length := size * count
@@ -47,7 +49,7 @@ func NULLRead(iohandler *cms_io_handler, buffer any, size, count uint32) uint32 
 // NULLSeek simulates seeking in a null IOHandler.
 func NULLSeek(iohandler *cms_io_handler, offset uint32) bool {
 	resData, ok := iohandler.Stream.(*FILENULL)
-	if !ok  {
+	if !ok {
 		panic("Stream is not a *FILENULL")
 	}
 	resData.Pointer = offset
@@ -57,7 +59,7 @@ func NULLSeek(iohandler *cms_io_handler, offset uint32) bool {
 // NULLTell retrieves the current pointer position in the null IOHandler.
 func NULLTell(iohandler *cms_io_handler) uint32 {
 	resData, ok := iohandler.Stream.(*FILENULL)
-	if !ok  {
+	if !ok {
 		panic("Stream is not a *FILENULL")
 	}
 	return resData.Pointer
@@ -67,7 +69,7 @@ func NULLTell(iohandler *cms_io_handler) uint32 {
 // func NULLWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 func NULLWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 	resData, ok := iohandler.Stream.(*FILENULL)
-	if !ok  {
+	if !ok {
 		panic("Stream is not a *FILENULL")
 	}
 	resData.Pointer += size
@@ -81,7 +83,7 @@ func NULLWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 // NULLClose closes the null IOHandler and releases associated memory.
 func NULLClose(iohandler *cms_io_handler) bool {
 	resData, ok := iohandler.Stream.(*FILENULL)
-	if !ok  {
+	if !ok {
 		panic("Stream is not a *FILENULL")
 	}
 	cmsFree(iohandler.ContextID, resData)
@@ -90,16 +92,16 @@ func NULLClose(iohandler *cms_io_handler) bool {
 }
 
 // cmsOpenIOhandlerFromNULL creates a null IOHandler for tracking space usage.
-func cmsOpenIOhandlerFromNULL(ar *arena.Arena, ContextID CmsContext) *cmsIOHANDLER {
+func cmsOpenIOhandlerFromNULL(mm mem.Manager, ContextID CmsContext) *cmsIOHANDLER {
 
 	// Allocate memory for the IOHandler
-	iohandler := allocateStruct[cmsIOHANDLER](ar)
+	iohandler := mem.New[cmsIOHANDLER](mm)
 	if iohandler == nil {
 		return nil
 	}
 
 	// Allocate memory for the FILENULL structure
-	fm := allocateStruct[FILENULL](ar)
+	fm := mem.New[FILENULL](mm)
 	if fm == nil {
 		cmsFree(ContextID, iohandler)
 		return nil
@@ -125,7 +127,7 @@ func cmsOpenIOhandlerFromNULL(ar *arena.Arena, ContextID CmsContext) *cmsIOHANDL
 }
 
 //lint:ignore U1000 kept for parity with lcms; used in future ports
-func cmsOpenIOhandlerFromStream(ar *arena.Arena, ContextID CmsContext, stream *os.File) *cmsIOHANDLER {
+func cmsOpenIOhandlerFromStream(mm mem.Manager, ContextID CmsContext, stream *os.File) *cmsIOHANDLER {
 	if stream == nil {
 		cmsSignalError(ContextID, cmsERROR_FILE, "Stream cannot be nil")
 		return nil
@@ -145,7 +147,7 @@ func cmsOpenIOhandlerFromStream(ar *arena.Arena, ContextID CmsContext, stream *o
 	}
 
 	// Allocate memory for cmsIOHANDLER
-	iohandler := allocateStruct[cmsIOHANDLER](ar)
+	iohandler := mem.New[cmsIOHANDLER](mm)
 	if iohandler == nil {
 		return nil
 	}
@@ -337,9 +339,9 @@ func cmsGetProfileVersion(hProfile CmsHPROFILE) float64 {
 	versionPart := icc.Version >> 16
 	return float64(BaseToBase(versionPart, 16, 10)) / 100.0
 }
-func cmsOpenProfileFromFileTHR(ar *arena.Arena, ContextID CmsContext, lpFileName string, sAccess string) CmsHPROFILE {
+func cmsOpenProfileFromFileTHR(mm mem.Manager, ContextID CmsContext, lpFileName string, sAccess string) CmsHPROFILE {
 	var NewIcc *cmsICCPROFILE
-	hEmpty := cmsCreateProfilePlaceholder(ar, ContextID)
+	hEmpty := cmsCreateProfilePlaceholder(mm, ContextID)
 
 	if hEmpty == nil {
 		return nil
@@ -347,7 +349,7 @@ func cmsOpenProfileFromFileTHR(ar *arena.Arena, ContextID CmsContext, lpFileName
 
 	NewIcc = hEmpty.(*cmsICCPROFILE)
 
-	NewIcc.IOhandler = cmsOpenIOhandlerFromFile(ar, ContextID, lpFileName, sAccess)
+	NewIcc.IOhandler = cmsOpenIOhandlerFromFile(mm, ContextID, lpFileName, sAccess)
 	if NewIcc.IOhandler == nil {
 		goto Error
 	}
@@ -366,17 +368,17 @@ func cmsOpenProfileFromFileTHR(ar *arena.Arena, ContextID CmsContext, lpFileName
 	return hEmpty
 
 Error:
-	CmsCloseProfile(ar, hEmpty)
+	CmsCloseProfile(mm, hEmpty)
 	return nil
 }
 
-func CmsOpenProfileFromFile(ar *arena.Arena, ICCProfile string, sAccess string) CmsHPROFILE {
-	return cmsOpenProfileFromFileTHR(ar, nil, ICCProfile, sAccess)
+func CmsOpenProfileFromFile(mm mem.Manager, ICCProfile string, sAccess string) CmsHPROFILE {
+	return cmsOpenProfileFromFileTHR(mm, nil, ICCProfile, sAccess)
 }
 
-func cmsOpenProfileFromMemTHR(ar *arena.Arena, ContextID CmsContext, MemPtr any, dwSize uint32) CmsHPROFILE {
+func cmsOpenProfileFromMemTHR(mm mem.Manager, ContextID CmsContext, MemPtr any, dwSize uint32) CmsHPROFILE {
 	var NewIcc *cmsICCPROFILE
-	hEmpty := cmsCreateProfilePlaceholder(ar, ContextID)
+	hEmpty := cmsCreateProfilePlaceholder(mm, ContextID)
 
 	if hEmpty == nil {
 		return nil
@@ -385,7 +387,7 @@ func cmsOpenProfileFromMemTHR(ar *arena.Arena, ContextID CmsContext, MemPtr any,
 	NewIcc = hEmpty.(*cmsICCPROFILE)
 
 	// Open the IO handler from memory
-	NewIcc.IOhandler = cmsOpenIOhandlerFromMem(ar, ContextID, MemPtr, dwSize, "r")
+	NewIcc.IOhandler = cmsOpenIOhandlerFromMem(mm, ContextID, MemPtr, dwSize, "r")
 	if NewIcc.IOhandler == nil {
 		goto Error
 	}
@@ -398,37 +400,37 @@ func cmsOpenProfileFromMemTHR(ar *arena.Arena, ContextID CmsContext, MemPtr any,
 	return hEmpty
 
 Error:
-	CmsCloseProfile(ar, hEmpty)
+	CmsCloseProfile(mm, hEmpty)
 	return nil
 }
 
-func CmsOpenProfileFromMem(ar *arena.Arena, MemPtr any, dwSize uint32) CmsHPROFILE {
-	return cmsOpenProfileFromMemTHR(ar, nil, MemPtr, dwSize)
+func CmsOpenProfileFromMem(mm mem.Manager, MemPtr any, dwSize uint32) CmsHPROFILE {
+	return cmsOpenProfileFromMemTHR(mm, nil, MemPtr, dwSize)
 }
 
-func cmsSaveProfileToIOhandler(ar *arena.Arena, hProfile CmsHPROFILE, io *cmsIOHANDLER) uint32 {
+func cmsSaveProfileToIOhandler(mm mem.Manager, hProfile CmsHPROFILE, io *cmsIOHANDLER) uint32 {
 	Icc := hProfile.(*cmsICCPROFILE)
 	var Keep cmsICCPROFILE
 	var PrevIO *cmsIOHANDLER
 	var UsedSpace uint32
 	ContextID := Icc.ContextID
-	mm := &Icc.UsrMutex
-	if !cmsLockMutex(ContextID, (*cmsMutex)(mm)) {
+	mtx := &Icc.UsrMutex
+	if !cmsLockMutex(ContextID, (*cmsMutex)(mtx)) {
 		return 0
 	}
 	Keep = *Icc
 	ContextID = cmsGetProfileContextID(hProfile)
-	Icc.IOhandler = cmsOpenIOhandlerFromNULL(ar, ContextID)
+	Icc.IOhandler = cmsOpenIOhandlerFromNULL(mm, ContextID)
 	PrevIO = Icc.IOhandler
 	if PrevIO == nil {
-		cmsUnlockMutex(ContextID, (*cmsMutex)(mm))
+		cmsUnlockMutex(ContextID, (*cmsMutex)(mtx))
 		return 0
 	}
 
 	if !cmsWriteHeader(Icc, 0) {
 		goto Error
 	}
-	if !SaveTags(ar, Icc, &Keep) {
+	if !SaveTags(mm, Icc, &Keep) {
 		goto Error
 	}
 
@@ -442,7 +444,7 @@ func cmsSaveProfileToIOhandler(ar *arena.Arena, hProfile CmsHPROFILE, io *cmsIOH
 		if !cmsWriteHeader(Icc, UsedSpace) {
 			goto Error
 		}
-		if !SaveTags(ar, Icc, &Keep) {
+		if !SaveTags(mm, Icc, &Keep) {
 			goto Error
 		}
 	}
@@ -450,24 +452,24 @@ func cmsSaveProfileToIOhandler(ar *arena.Arena, hProfile CmsHPROFILE, io *cmsIOH
 	if !cmsCloseIOhandler(PrevIO) {
 		UsedSpace = 0
 	}
-	cmsUnlockMutex(ContextID, (*cmsMutex)(mm))
+	cmsUnlockMutex(ContextID, (*cmsMutex)(mtx))
 	return UsedSpace
 
 Error:
 	cmsCloseIOhandler(PrevIO)
 	*Icc = Keep
-	cmsUnlockMutex(ContextID, (*cmsMutex)(mm))
+	cmsUnlockMutex(ContextID, (*cmsMutex)(mtx))
 	return 0
 }
 
-func cmsSaveProfileToFile(ar *arena.Arena, hProfile CmsHPROFILE, FileName string) bool {
+func cmsSaveProfileToFile(mm mem.Manager, hProfile CmsHPROFILE, FileName string) bool {
 	ContextID := cmsGetProfileContextID(hProfile)
-	io := cmsOpenIOhandlerFromFile(ar, ContextID, FileName, "w")
+	io := cmsOpenIOhandlerFromFile(mm, ContextID, FileName, "w")
 	if io == nil {
 		return false
 	}
 
-	rc := cmsSaveProfileToIOhandler(ar, hProfile, io) != 0
+	rc := cmsSaveProfileToIOhandler(mm, hProfile, io) != 0
 	rc = rc && cmsCloseIOhandler(io)
 
 	if !rc {
@@ -480,72 +482,72 @@ func cmsSaveProfileToFile(ar *arena.Arena, hProfile CmsHPROFILE, FileName string
 	return rc
 }
 
-func cmsSaveProfileToStream(ar *arena.Arena, hProfile CmsHPROFILE, stream *os.File) bool {
+func cmsSaveProfileToStream(mm mem.Manager, hProfile CmsHPROFILE, stream *os.File) bool {
 	ContextID := cmsGetProfileContextID(hProfile)
-	io := cmsOpenIOhandlerFromStream(ar, ContextID, stream)
+	io := cmsOpenIOhandlerFromStream(mm, ContextID, stream)
 	if io == nil {
 		return false
 	}
 
-	rc := cmsSaveProfileToIOhandler(ar, hProfile, io) != 0
+	rc := cmsSaveProfileToIOhandler(mm, hProfile, io) != 0
 	rc = rc && cmsCloseIOhandler(io)
 	return rc
 }
 
-func cmsSaveProfileToMem(ar *arena.Arena, hProfile CmsHPROFILE, MemPtr unsafe.Pointer, BytesNeeded *uint32) bool {
+func cmsSaveProfileToMem(mm mem.Manager, hProfile CmsHPROFILE, MemPtr unsafe.Pointer, BytesNeeded *uint32) bool {
 	ContextID := cmsGetProfileContextID(hProfile)
 
 	if MemPtr == nil {
-		*BytesNeeded = cmsSaveProfileToIOhandler(ar, hProfile, nil)
+		*BytesNeeded = cmsSaveProfileToIOhandler(mm, hProfile, nil)
 		return *BytesNeeded != 0
 	}
 
-	io := cmsOpenIOhandlerFromMem(ar, ContextID, MemPtr, *BytesNeeded, "w")
+	io := cmsOpenIOhandlerFromMem(mm, ContextID, MemPtr, *BytesNeeded, "w")
 	if io == nil {
 		return false
 	}
 
-	rc := cmsSaveProfileToIOhandler(ar, hProfile, io) != 0
+	rc := cmsSaveProfileToIOhandler(mm, hProfile, io) != 0
 	rc = rc && cmsCloseIOhandler(io)
 	return rc
 }
 
-func freeOneTag(ar *arena.Arena, Icc *cmsICCPROFILE, i uint32) {
+func freeOneTag(mm mem.Manager, Icc *cmsICCPROFILE, i uint32) {
 	if Icc.TagPtrs[i] != nil {
 		TypeHandler := Icc.TagTypeHandlers[i]
 		if TypeHandler != nil {
 			LocalTypeHandler := *TypeHandler
 			LocalTypeHandler.ContextID = Icc.ContextID
 			LocalTypeHandler.ICCVersion = Icc.Version
-			LocalTypeHandler.FreeFn(ar, &LocalTypeHandler, Icc.TagPtrs[i])
+			LocalTypeHandler.FreeFn(mm, &LocalTypeHandler, Icc.TagPtrs[i])
 		} else {
 			//cmsFree(Icc.ContextID, Icc.TagPtrs[i])
 		}
 	}
 }
 
-func CmsCloseProfile(ar *arena.Arena, hProfile CmsHPROFILE) bool {
+func CmsCloseProfile(mm mem.Manager, hProfile CmsHPROFILE) bool {
 	Icc := hProfile.(*cmsICCPROFILE)
 	var rc bool = true
 	if Icc == nil {
 		return false
 	}
-	mm := &Icc.UsrMutex
+	mtx := &Icc.UsrMutex
 
 	if Icc.IsWrite {
 		Icc.IsWrite = false
-		rc = rc && cmsSaveProfileToFile(ar, hProfile, Icc.IOhandler.PhysicalFile)
+		rc = rc && cmsSaveProfileToFile(mm, hProfile, Icc.IOhandler.PhysicalFile)
 	}
 
 	for i := uint32(0); i < Icc.TagCount; i++ {
-		freeOneTag(ar, Icc, i)
+		freeOneTag(mm, Icc, i)
 	}
 
 	if Icc.IOhandler != nil {
 		rc = rc && cmsCloseIOhandler(Icc.IOhandler)
 	}
 
-	cmsDestroyMutex(Icc.ContextID, (*cmsMutex)(mm))
+	cmsDestroyMutex(Icc.ContextID, (*cmsMutex)(mtx))
 	cmsFree(Icc.ContextID, Icc)
 	return rc
 }
@@ -567,7 +569,7 @@ func IsTypeSupported(TagDescriptor *cmsTagDescriptor, Type cmsTagTypeSignature) 
 	return false
 }
 
-func cmsReadTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature) any {
+func cmsReadTag(mm mem.Manager, hProfile CmsHPROFILE, sig cmsTagSignature) any {
 	Icc := hProfile.(*cmsICCPROFILE)
 	var io *cmsIOHANDLER
 	var TypeHandler *cmsTagTypeHandler
@@ -577,9 +579,9 @@ func cmsReadTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature) any 
 	var Offset, TagSize, ElemCount uint32
 	var n int
 	//fmt.Println("start cmsReadTag")
-	mm := &Icc.UsrMutex
+	mtx := &Icc.UsrMutex
 	// Lock the mutex
-	if !cmsLockMutex(Icc.ContextID, (*cmsMutex)(mm)) {
+	if !cmsLockMutex(Icc.ContextID, (*cmsMutex)(mtx)) {
 		return nil
 	}
 
@@ -587,7 +589,7 @@ func cmsReadTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature) any 
 	n = cmsSearchTag(Icc, sig, true)
 	if n < 0 {
 		// Tag not found
-		cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
+		cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mtx))
 		return nil
 	}
 
@@ -616,7 +618,7 @@ func cmsReadTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature) any 
 			goto Error // Reading raw tags as cooked is not supported
 		}
 
-		cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
+		cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mtx))
 		return Icc.TagPtrs[n]
 	}
 
@@ -672,7 +674,7 @@ func cmsReadTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature) any 
 	LocalTypeHandler.ContextID = Icc.ContextID
 	LocalTypeHandler.ICCVersion = Icc.Version
 	// Read the tag
-	Icc.TagPtrs[n] = LocalTypeHandler.ReadFn(ar, &LocalTypeHandler, io, &ElemCount, TagSize)
+	Icc.TagPtrs[n] = LocalTypeHandler.ReadFn(mm, &LocalTypeHandler, io, &ElemCount, TagSize)
 	// The tag type is supported, but something wrong happened and we cannot read the tag.
 	// let know the user about this (although it is just a warning)
 	if Icc.TagPtrs[n] == nil {
@@ -692,20 +694,20 @@ func cmsReadTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature) any 
 	}
 
 	// Unlock and return
-	cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
+	cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mtx))
 	//	fmt.Println("end cmsReadTag")
 	return Icc.TagPtrs[n]
 
 Error:
-	freeOneTag(ar, Icc, uint32(n))
+	freeOneTag(mm, Icc, uint32(n))
 	Icc.TagPtrs[n] = nil
-	cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
+	cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mtx))
 	return nil
 }
 
 // Creates an empty structure holding all required parameters
-func cmsCreateProfilePlaceholder(ar *arena.Arena, ContextID CmsContext) CmsHPROFILE {
-	Icc := allocateStruct[cmsICCPROFILE](ar)
+func cmsCreateProfilePlaceholder(mm mem.Manager, ContextID CmsContext) CmsHPROFILE {
+	Icc := mem.New[cmsICCPROFILE](mm)
 	var cm *cmsMutex
 	if Icc == nil {
 		return nil
@@ -755,7 +757,7 @@ func cmsGetTagTrueType(hProfile CmsHPROFILE, sig cmsTagSignature) cmsTagTypeSign
 }
 
 // cmsWriteTag translates the given function
-func cmsWriteTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, data any) bool {
+func cmsWriteTag(mm mem.Manager, hProfile CmsHPROFILE, sig cmsTagSignature, data any) bool {
 	//	fmt.Println("WriteTag")
 	Icc := hProfile.(*cmsICCPROFILE)
 	var TypeHandler *cmsTagTypeHandler
@@ -765,8 +767,8 @@ func cmsWriteTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, dat
 	var i int
 	var Version float64
 	var TypeString int
-	mm := &Icc.UsrMutex
-	if !cmsLockMutex(Icc.ContextID, (*cmsMutex)(mm)) {
+	mtx := &Icc.UsrMutex
+	if !cmsLockMutex(Icc.ContextID, (*cmsMutex)(mtx)) {
 		return false
 	}
 
@@ -775,16 +777,16 @@ func cmsWriteTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, dat
 		i = cmsSearchTag(Icc, sig, false)
 		if i >= 0 {
 			// Mark the tag as deleted
-			cmsDeleteTagByPos(ar, Icc, i)
+			cmsDeleteTagByPos(mm, Icc, i)
 			Icc.TagNames[i] = 0
-			cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
+			cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mtx))
 			return true
 		}
 		goto Error
 	}
 
 	// Add a new tag or get the position of an existing one
-	if !cmsNewTag(ar, Icc, sig, &i) {
+	if !cmsNewTag(mm, Icc, sig, &i) {
 		goto Error
 	}
 
@@ -832,7 +834,7 @@ func cmsWriteTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, dat
 	LocalTypeHandler = *TypeHandler
 	LocalTypeHandler.ContextID = Icc.ContextID
 	LocalTypeHandler.ICCVersion = Icc.Version
-	Icc.TagPtrs[i] = LocalTypeHandler.DupFn(ar, &LocalTypeHandler, data, TagDescriptor.ElemCount)
+	Icc.TagPtrs[i] = LocalTypeHandler.DupFn(mm, &LocalTypeHandler, data, TagDescriptor.ElemCount)
 
 	if Icc.TagPtrs[i] == nil {
 		str := cmsTagSignature2String(sig)
@@ -840,11 +842,11 @@ func cmsWriteTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, dat
 		goto Error
 	}
 
-	cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
+	cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mtx))
 	return true
 
 Error:
-	cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
+	cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mtx))
 	return false
 }
 
@@ -921,7 +923,7 @@ func cmsSearchTag(Icc *cmsICCPROFILE, sig cmsTagSignature, followLinks bool) int
 }
 
 // Deletes a tag entry
-func cmsDeleteTagByPos(ar *arena.Arena, Icc *cmsICCPROFILE, i int) {
+func cmsDeleteTagByPos(mm mem.Manager, Icc *cmsICCPROFILE, i int) {
 	cmsAssert(Icc != nil, "")
 	cmsAssert(i >= 0, "")
 
@@ -935,7 +937,7 @@ func cmsDeleteTagByPos(ar *arena.Arena, Icc *cmsICCPROFILE, i int) {
 				LocalTypeHandler := *TypeHandler
 				LocalTypeHandler.ContextID = Icc.ContextID
 				LocalTypeHandler.ICCVersion = Icc.Version
-				LocalTypeHandler.FreeFn(ar, &LocalTypeHandler, Icc.TagPtrs[i])
+				LocalTypeHandler.FreeFn(mm, &LocalTypeHandler, Icc.TagPtrs[i])
 				Icc.TagPtrs[i] = nil
 			}
 		}
@@ -943,12 +945,12 @@ func cmsDeleteTagByPos(ar *arena.Arena, Icc *cmsICCPROFILE, i int) {
 }
 
 // Creates a new tag entry
-func cmsNewTag(ar *arena.Arena, Icc *cmsICCPROFILE, sig cmsTagSignature, NewPos *int) bool {
+func cmsNewTag(mm mem.Manager, Icc *cmsICCPROFILE, sig cmsTagSignature, NewPos *int) bool {
 	// Search for the tag
 	i := cmsSearchTag(Icc, sig, false)
 	if i >= 0 {
 		// Already exists? delete it
-		cmsDeleteTagByPos(ar, Icc, i)
+		cmsDeleteTagByPos(mm, Icc, i)
 		*NewPos = i
 	} else {
 		// No, make a new one
@@ -1180,13 +1182,13 @@ func WriteStruct[T any](io *cmsIOHANDLER, value T, endian binary.ByteOrder) bool
 	var buf bytes.Buffer
 	if err := binary.Write(&buf, endian, value); err != nil {
 		panic("binary.Write failed")
-		
+
 	}
 
 	size := buf.Len()
 	if !io.Write((*cms_io_handler)(io), uint32(size), buf.Bytes()) {
 		panic("FileWrite failed: wrote wrong number of element(s), expected 1")
-		
+
 	}
 
 	return true
@@ -1256,7 +1258,7 @@ func cmsWriteHeader(Icc *cmsICCPROFILE, UsedSpace uint32) bool {
 }
 
 // SaveTags dumps tag contents. If the profile is being modified, untouched tags are copied from FileOrig.
-func SaveTags(ar *arena.Arena, Icc *cmsICCPROFILE, FileOrig *cmsICCPROFILE) bool {
+func SaveTags(mm mem.Manager, Icc *cmsICCPROFILE, FileOrig *cmsICCPROFILE) bool {
 	io := Icc.IOhandler
 	Version := cmsGetProfileVersion(CmsHPROFILE(Icc))
 
@@ -1337,7 +1339,7 @@ func SaveTags(ar *arena.Arena, Icc *cmsICCPROFILE, FileOrig *cmsICCPROFILE) bool
 			localTypeHandler := *typeHandler
 			localTypeHandler.ContextID = Icc.ContextID
 			localTypeHandler.ICCVersion = Icc.Version
-			if !localTypeHandler.WriteFn(ar, &localTypeHandler, io, data, tagDescriptor.ElemCount) {
+			if !localTypeHandler.WriteFn(mm, &localTypeHandler, io, data, tagDescriptor.ElemCount) {
 				cmsSignalError(Icc.ContextID, cmsERROR_WRITE, "Couldn't write type")
 				return false
 			}
@@ -1380,7 +1382,7 @@ type FILEMEM struct {
 // func MemoryRead(iohandler *cms_io_handler, buffer []byte, size, count uint32) uint32 {
 func MemoryRead(iohandler *cms_io_handler, buffer any, size, count uint32) uint32 {
 	resData, ok := iohandler.Stream.(*FILEMEM)
-	if !ok  {
+	if !ok {
 		panic("Stream is not a *FILENULL")
 	}
 	length := size * count
@@ -1412,7 +1414,7 @@ func MemoryRead(iohandler *cms_io_handler, buffer any, size, count uint32) uint3
 // MemorySeek sets the current position in the memory block.
 func MemorySeek(iohandler *cms_io_handler, offset uint32) bool {
 	resData, ok := iohandler.Stream.(*FILEMEM)
-	if !ok  {
+	if !ok {
 		panic("Stream is not a *FILENULL")
 	}
 
@@ -1428,7 +1430,7 @@ func MemorySeek(iohandler *cms_io_handler, offset uint32) bool {
 // MemoryTell returns the current position in the memory block.
 func MemoryTell(iohandler *cms_io_handler) uint32 {
 	resData, ok := iohandler.Stream.(*FILEMEM)
-	if !ok  {
+	if !ok {
 		panic("Stream is not a *FILENULL")
 	}
 	return resData.Pointer
@@ -1437,7 +1439,7 @@ func MemoryTell(iohandler *cms_io_handler) uint32 {
 // MemoryWrite writes data to the memory block and updates the used space.
 func MemoryWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 	resData, ok := iohandler.Stream.(*FILEMEM)
-	if !ok  {
+	if !ok {
 		panic("Stream is not a *FILENULL")
 	}
 
@@ -1466,7 +1468,7 @@ func MemoryWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 // MemoryClose closes the memory-based stream and frees resources if necessary.
 func MemoryClose(iohandler *cms_io_handler) bool {
 	resData, ok := iohandler.Stream.(*FILEMEM)
-	if !ok  {
+	if !ok {
 		panic("Stream is not a *FILENULL")
 	}
 
@@ -1481,13 +1483,13 @@ func MemoryClose(iohandler *cms_io_handler) bool {
 
 	return true
 }
-func cmsOpenIOhandlerFromMem(ar *arena.Arena, ContextID CmsContext, Buffer any, size uint32, AccessMode string) *cmsIOHANDLER {
+func cmsOpenIOhandlerFromMem(mm mem.Manager, ContextID CmsContext, Buffer any, size uint32, AccessMode string) *cmsIOHANDLER {
 	if AccessMode == "" {
 		cmsSignalError(nil, cmsERROR_READ, "Access mode cannot be empty")
 		return nil
 	}
 
-	iohandler := allocateStruct[cmsIOHANDLER](ar)
+	iohandler := mem.New[cmsIOHANDLER](mm)
 	if iohandler == nil {
 		return nil
 	}
@@ -1496,7 +1498,7 @@ func cmsOpenIOhandlerFromMem(ar *arena.Arena, ContextID CmsContext, Buffer any, 
 
 	switch AccessMode[0] {
 	case 'r': // Read mode
-		fm = allocateStruct[FILEMEM](ar)
+		fm = mem.New[FILEMEM](mm)
 		if fm == nil {
 			goto Error
 		}
@@ -1530,7 +1532,7 @@ func cmsOpenIOhandlerFromMem(ar *arena.Arena, ContextID CmsContext, Buffer any, 
 		iohandler.ReportedSize = size
 
 	case 'w': // Write mode
-		fm = allocateStruct[FILEMEM](ar)
+		fm = mem.New[FILEMEM](mm)
 		if fm == nil {
 			goto Error
 		}
@@ -1588,13 +1590,13 @@ Error:
 	return nil
 }
 
-func cmsOpenIOhandlerFromFile(ar *arena.Arena, ContextID CmsContext, FileName string, AccessMode string) *cmsIOHANDLER {
+func cmsOpenIOhandlerFromFile(mm mem.Manager, ContextID CmsContext, FileName string, AccessMode string) *cmsIOHANDLER {
 	if FileName == "" || AccessMode == "" {
 		cmsSignalError(ContextID, cmsERROR_FILE, "Invalid file name or access mode")
 		return nil
 	}
 
-	iohandler := allocateStruct[cmsIOHANDLER](ar)
+	iohandler := mem.New[cmsIOHANDLER](mm)
 	if iohandler == nil {
 		return nil
 	}
@@ -1670,7 +1672,7 @@ func cmsOpenIOhandlerFromFile(ar *arena.Arena, ContextID CmsContext, FileName st
 func FileRead(iohandler *cms_io_handler, buffer any, size, count uint32) uint32 {
 	//	fmt.Println("fileread")
 	file, ok := iohandler.Stream.(*os.File)
-	if !ok  {
+	if !ok {
 		panic("Stream is not a *FILENULL")
 	}
 	totalBytes := int(size * count)
@@ -1723,10 +1725,10 @@ func FileSeek(iohandler *cms_io_handler, offset uint32) bool {
 // FileTell returns the current position of the file pointer within the file. Returns 0 on error, which is also a valid position.
 func FileTell(iohandler *cms_io_handler) uint32 {
 	file, ok := iohandler.Stream.(*os.File)
-	if !ok  {
+	if !ok {
 		// If Stream is not a *FILENULL, do nothing
 		panic("Unsupported stream type in FileTell")
-		
+
 	}
 
 	pos, err := file.Seek(0, 1) // Equivalent to SEEK_CUR
@@ -1762,7 +1764,7 @@ func FileWrite(iohandler *cms_io_handler, size uint32, buffer []byte) bool {
 	}
 
 	file, ok := iohandler.Stream.(*os.File)
-	if !ok  {
+	if !ok {
 		// If Stream is not a *FILENULL, do nothing
 		panic("Unsupported stream type in FileRead")
 	}
@@ -1779,9 +1781,9 @@ func FileWrite(iohandler *cms_io_handler, size uint32, buffer []byte) bool {
 // FileClose closes the file stream. Returns true on success, false otherwise.
 func FileClose(iohandler *cms_io_handler) bool {
 	file, ok := iohandler.Stream.(*os.File)
-	if !ok  {
+	if !ok {
 		panic("Stream is not a *FILENULL, do nothing")
-		
+
 	}
 
 	if err := file.Close(); err != nil {
@@ -1792,17 +1794,17 @@ func FileClose(iohandler *cms_io_handler) bool {
 	cmsFree(iohandler.ContextID, iohandler)
 	return true
 }
-func cmsWriteRawTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, data any, size uint32) bool {
+func cmsWriteRawTag(mm mem.Manager, hProfile CmsHPROFILE, sig cmsTagSignature, data any, size uint32) bool {
 	Icc := hProfile.(*cmsICCPROFILE)
-	mm := &Icc.UsrMutex
+	mtx := &Icc.UsrMutex
 	var i int
 
-	if !cmsLockMutex(Icc.ContextID, (*cmsMutex)(mm)) {
+	if !cmsLockMutex(Icc.ContextID, (*cmsMutex)(mtx)) {
 		return false
 	}
 
-	if !cmsNewTag(ar, Icc, sig, &i) {
-		cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
+	if !cmsNewTag(mm, Icc, sig, &i) {
+		cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mtx))
 		return false
 	}
 
@@ -1813,7 +1815,7 @@ func cmsWriteRawTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, 
 	Icc.TagPtrs[i] = cmsDupMem(Icc.ContextID, data, size)
 	Icc.TagSizes[i] = size
 
-	cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
+	cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mtx))
 
 	if Icc.TagPtrs[i] == nil {
 		Icc.TagNames[i] = 0
@@ -1821,16 +1823,16 @@ func cmsWriteRawTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, 
 	}
 	return true
 }
-func cmsLinkTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, dest cmsTagSignature) bool {
+func cmsLinkTag(mm mem.Manager, hProfile CmsHPROFILE, sig cmsTagSignature, dest cmsTagSignature) bool {
 	Icc := hProfile.(*cmsICCPROFILE)
 	var i int
-	mm := &Icc.UsrMutex
-	if !cmsLockMutex(Icc.ContextID, (*cmsMutex)(mm)) {
+	mtx := &Icc.UsrMutex
+	if !cmsLockMutex(Icc.ContextID, (*cmsMutex)(mtx)) {
 		return false
 	}
 
-	if !cmsNewTag(ar, Icc, sig, &i) {
-		cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
+	if !cmsNewTag(mm, Icc, sig, &i) {
+		cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mtx))
 		return false
 	}
 
@@ -1841,7 +1843,7 @@ func cmsLinkTag(ar *arena.Arena, hProfile CmsHPROFILE, sig cmsTagSignature, dest
 	Icc.TagSizes[i] = 0
 	Icc.TagOffsets[i] = 0
 
-	cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mm))
+	cmsUnlockMutex(Icc.ContextID, (*cmsMutex)(mtx))
 	return true
 }
 func cmsTagLinkedTo(hProfile CmsHPROFILE, sig cmsTagSignature) cmsTagSignature {

@@ -3,12 +3,14 @@ package golcms
 import (
 	"encoding/binary"
 	//"errors"
-	"arena"
+
 	"bytes"
 
 	//"fmt"
 	"math"
 	"unsafe"
+
+	"github.com/yzigangirova/lcms-go/mem"
 )
 
 //FIRST HALF OF THE FILE SKIPPED YET
@@ -2066,7 +2068,7 @@ func PackDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride 
 	var v float64
 	size := 8 // float64 size in bytes
 
-	buf := make([]float64, (int(nChan)+int(Extra))*int(Stride)+1)
+	buf := mem.MakeSlice[float64](mem.Manager{}, (int(nChan)+int(Extra))*int(Stride)+1)
 
 	for i := uint32(0); i < nChan; i++ {
 		index := i
@@ -2126,7 +2128,7 @@ func PackFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride u
 	var v float64
 	size := 4 // float32 size in bytes
 
-	buf := make([]float32, (int(nChan)+int(Extra))*int(Stride)+1)
+	buf := mem.MakeSlice[float32](mem.Manager{}, (int(nChan)+int(Extra))*int(Stride)+1)
 
 	for i := uint32(0); i < nChan; i++ {
 		index := i
@@ -2184,7 +2186,7 @@ func PackFloatsFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Str
 	Stride /= PixelSize(info.OutputFormat)
 	size := 4 // float32
 
-	buf := make([]float32, (int(nChan)+int(Extra))*int(Stride)+1)
+	buf := mem.MakeSlice[float32](mem.Manager{}, (int(nChan)+int(Extra))*int(Stride)+1)
 
 	for i := uint32(0); i < nChan; i++ {
 		index := i
@@ -2242,7 +2244,7 @@ func PackDoublesFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, St
 	Stride /= PixelSize(info.OutputFormat)
 	size := 8 // float64
 
-	buf := make([]float64, (int(nChan)+int(Extra))*int(Stride)+1)
+	buf := mem.MakeSlice[float64](mem.Manager{}, (int(nChan)+int(Extra))*int(Stride)+1)
 
 	for i := uint32(0); i < nChan; i++ {
 		index := i
@@ -2287,7 +2289,7 @@ func PackLabFloatFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, S
 	if T_PLANAR(info.OutputFormat) != 0 {
 		Stride /= PixelSize(info.OutputFormat)
 
-		labBuf := make([]float32, 3*Stride)
+		labBuf := mem.MakeSlice[float32](mem.Manager{}, int(3*Stride))
 		labBuf[0] = L
 		labBuf[Stride] = a
 		labBuf[Stride*2] = b
@@ -2315,7 +2317,7 @@ func PackLabDoubleFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, 
 	if T_PLANAR(info.OutputFormat) != 0 {
 		Stride /= PixelSize(info.OutputFormat)
 
-		labBuf := make([]float64, 3*Stride)
+		labBuf := mem.MakeSlice[float64](mem.Manager{}, int(3*Stride))
 		labBuf[0] = L
 		labBuf[Stride] = a
 		labBuf[Stride*2] = b
@@ -2340,7 +2342,7 @@ func PackXYZFloatFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, S
 	if T_PLANAR(info.OutputFormat) != 0 {
 		Stride /= PixelSize(info.OutputFormat)
 
-		xyzBuf := make([]float32, 3*Stride)
+		xyzBuf := mem.MakeSlice[float32](mem.Manager{}, int(3*Stride))
 		xyzBuf[0] = float32(X)
 		xyzBuf[Stride] = float32(Y)
 		xyzBuf[Stride*2] = float32(Z)
@@ -2365,7 +2367,7 @@ func PackXYZDoubleFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, 
 	if T_PLANAR(info.OutputFormat) != 0 {
 		Stride /= PixelSize(info.OutputFormat)
 
-		xyzBuf := make([]float64, 3*Stride)
+		xyzBuf := mem.MakeSlice[float64](mem.Manager{}, int(3*Stride))
 		xyzBuf[0] = X
 		xyzBuf[Stride] = Y
 		xyzBuf[Stride*2] = Z
@@ -2398,7 +2400,7 @@ func UnrollHalfTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint
 
 	stride /= PixelSize(info.InputFormat)
 	buf := bytes.NewReader(accum)
-	accumWords := make([]uint16, len(accum)/2)
+	accumWords := mem.MakeSlice[uint16](mem.Manager{}, len(accum)/2)
 	binary.Read(buf, binary.LittleEndian, &accumWords)
 
 	if extraFirst != 0 {
@@ -2451,7 +2453,7 @@ func UnrollHalfToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride 
 
 	stride /= PixelSize(info.InputFormat)
 	buf := bytes.NewReader(accum)
-	accumWords := make([]uint16, len(accum)/2)
+	accumWords := mem.MakeSlice[uint16](mem.Manager{}, len(accum)/2)
 	binary.Read(buf, binary.LittleEndian, &accumWords)
 
 	if extraFirst != 0 {
@@ -2503,7 +2505,7 @@ func PackHalfFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride ui
 	}
 	stride /= PixelSize(info.OutputFormat)
 
-	outputWords := make([]uint16, (nChan+extra)*uint32(stride)+1)
+	outputWords := mem.MakeSlice[uint16](mem.Manager{}, int((nChan+extra)*uint32(stride)+1))
 	var start uint32
 	if extraFirst != 0 {
 		start = extra
@@ -2550,7 +2552,7 @@ func PackHalfFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, strid
 	}
 	stride /= PixelSize(info.OutputFormat)
 
-	outputWords := make([]uint16, (nChan+extra)*uint32(stride)+1)
+	outputWords := mem.MakeSlice[uint16](mem.Manager{}, int((nChan+extra)*uint32(stride)+1))
 	var start uint32
 	if extraFirst != 0 {
 		start = extra
@@ -2822,7 +2824,7 @@ type cmsFormattersFactoryList struct {
 var cmsFormattersPluginChunk = cmsFormattersPluginChunkType{FactoryList: nil}
 
 // Duplicate the zone of memory used by the plugin in the new context
-func DupFormatterFactoryList(ar *arena.Arena, ctx CmsContext, src CmsContext) {
+func DupFormatterFactoryList(mm mem.Manager, ctx CmsContext, src CmsContext) {
 	var newHead cmsFormattersPluginChunkType
 	var previousEntry *cmsFormattersFactoryList
 	head := (CmsContextStruct)(*src).chunks[FormattersPlugin].(*cmsFormattersPluginChunkType)
@@ -2833,7 +2835,7 @@ func DupFormatterFactoryList(ar *arena.Arena, ctx CmsContext, src CmsContext) {
 
 	// Walk the list and copy all nodes
 	for entry := head.FactoryList; entry != nil; entry = entry.Next {
-		newEntry := allocateStruct[cmsFormattersFactoryList](ar)
+		newEntry := mem.New[cmsFormattersFactoryList](mm)
 		if newEntry == nil {
 			return
 		}
@@ -2850,24 +2852,24 @@ func DupFormatterFactoryList(ar *arena.Arena, ctx CmsContext, src CmsContext) {
 		}
 	}
 
-	(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup(ar, (CmsContextStruct)(*ctx).MemPool, &newHead, uint32(unsafe.Sizeof(newHead)))
+	(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup(mm, (CmsContextStruct)(*ctx).MemPool, &newHead, uint32(unsafe.Sizeof(newHead)))
 }
 
 // Allocate and initialize the Formatters plugin chunk
-func cmsAllocFormattersPluginChunk(ar *arena.Arena, ctx CmsContext, src CmsContext) {
+func cmsAllocFormattersPluginChunk(mm mem.Manager, ctx CmsContext, src CmsContext) {
 	cmsAssert(ctx != nil, "Context is nil")
 
 	if src != nil {
 		// Duplicate the list
-		DupFormatterFactoryList(ar, ctx, src)
+		DupFormatterFactoryList(mm, ctx, src)
 	} else {
 		staticChunk := cmsFormattersPluginChunkType{}
-		(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup(ar, (CmsContextStruct)(*ctx).MemPool, &staticChunk, uint32(unsafe.Sizeof(staticChunk)))
+		(*ctx).chunks[FormattersPlugin] = cmsSubAllocDup(mm, (CmsContextStruct)(*ctx).MemPool, &staticChunk, uint32(unsafe.Sizeof(staticChunk)))
 	}
 }
 
 // Register formatters plugin
-func cmsRegisterFormattersPlugin(ar *arena.Arena, contextID CmsContext, Data PluginIntrfc) bool {
+func cmsRegisterFormattersPlugin(mm mem.Manager, contextID CmsContext, Data PluginIntrfc) bool {
 	//ctx := (*cmsFormattersPluginChunkType)((CmsContextStruct)(*contextID).chunks[FormattersPlugin])
 	ctx := CmsContextGetClientChunk(contextID, FormattersPlugin).(*cmsFormattersPluginChunkType)
 	plugin, ok := Data.(*cmsPluginFormatters)
@@ -2881,7 +2883,7 @@ func cmsRegisterFormattersPlugin(ar *arena.Arena, contextID CmsContext, Data Plu
 		return true
 	}
 	//newEntry := (*cmsFormattersFactoryList)(cmsPluginMalloc(contextID, uint32(unsafe.Sizeof(list))))
-	newEntry := allocateStruct[cmsFormattersFactoryList](ar)
+	newEntry := mem.New[cmsFormattersFactoryList](mm)
 
 	newEntry.Factory = plugin.FormattersFactory
 	newEntry.Next = ctx.FactoryList

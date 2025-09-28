@@ -5,8 +5,7 @@ import (
 	"math"
 	"sync"
 
-	//"unsafe"
-	"arena"
+	"github.com/yzigangirova/lcms-go/mem"
 )
 
 var lutBufferPool = sync.Pool{
@@ -28,8 +27,7 @@ var out16Pool = sync.Pool{
 	},
 }
 
-func cmsStageAllocPlaceholder(
-	ar *arena.Arena,
+func cmsStageAllocPlaceholder(mm mem.Manager,
 	ContextID CmsContext,
 	Type cmsStageSignature,
 	InputChannels, OutputChannels uint32,
@@ -39,7 +37,7 @@ func cmsStageAllocPlaceholder(
 	Data any,
 ) *cmsStage {
 	// Allocate memory for cmsStage and initialize to zero
-	ph := allocateStruct[cmsStage](ar)
+	ph := mem.New[cmsStage](mm)
 
 	if ph == nil {
 		return nil
@@ -59,11 +57,11 @@ func cmsStageAllocPlaceholder(
 	return ph
 }
 
-func EvaluateIdentity(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage) {
+func EvaluateIdentity(mm mem.Manager, In []float32, Out []float32, mpe *cmsStage) {
 	MemmoveSlice(Out, In, int(mpe.InputChannels))
 }
-func cmsStageAllocIdentity(ar *arena.Arena, ContextID CmsContext, nChannels uint32) *cmsStage {
-	return cmsStageAllocPlaceholder(ar, ContextID,
+func cmsStageAllocIdentity(mm mem.Manager, ContextID CmsContext, nChannels uint32) *cmsStage {
+	return cmsStageAllocPlaceholder(mm, ContextID,
 		CmsSigIdentityElemType,
 		nChannels, nChannels,
 		EvaluateIdentity,
@@ -123,7 +121,7 @@ func cmsPipelineCheckAndRetrieveStages(lut *cmsPipeline, n uint32, expectedTypes
 
 	return true
 }
-func Clipper(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage) {
+func Clipper(mm mem.Manager, In []float32, Out []float32, mpe *cmsStage) {
 	for i := uint32(0); i < mpe.InputChannels; i++ {
 		// Access In and Out using unsafe.Pointer arithmetic
 		inVal := In[i]
@@ -137,8 +135,8 @@ func Clipper(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage) {
 	}
 }
 
-func cmsStageClipNegatives(ar *arena.Arena, ContextID CmsContext, nChannels uint32) *cmsStage {
-	return cmsStageAllocPlaceholder(ar,
+func cmsStageClipNegatives(mm mem.Manager, ContextID CmsContext, nChannels uint32) *cmsStage {
+	return cmsStageAllocPlaceholder(mm,
 		ContextID,
 		CmsSigClipNegativesElemType,
 		nChannels,
@@ -159,7 +157,7 @@ func cmsStageGetPtrToCurveSet(mpe *cmsStage) []*CmsToneCurve {
 	return data.TheCurves
 }
 
-func EvaluateCurves(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage) {
+func EvaluateCurves(mm mem.Manager, In []float32, Out []float32, mpe *cmsStage) {
 	//fmt.Println("   START EvaluateCurves In ", In[0], In[1], In[2], In[3])
 
 	data, ok := mpe.Data.(*cmsStageToneCurvesData)
@@ -196,7 +194,7 @@ func EvaluateCurves(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage)
 
 }
 
-func CurveSetElemTypeFree(ar *arena.Arena, mpe *cmsStage) {
+func CurveSetElemTypeFree(mm mem.Manager, mpe *cmsStage) {
 	cmsAssert(mpe != nil, "")
 
 	data, ok := mpe.Data.(*cmsStageToneCurvesData)
@@ -217,7 +215,7 @@ func CurveSetElemTypeFree(ar *arena.Arena, mpe *cmsStage) {
 	}
 	cmsFree(mpe.ContextID, data)
 }
-func CurveSetDup(ar *arena.Arena, mpe *cmsStage) any {
+func CurveSetDup(mm mem.Manager, mpe *cmsStage) any {
 	//	fmt.Println("CurveSetDup")
 	// Access the data from the input stage
 	data, ok := mpe.Data.(*cmsStageToneCurvesData)
@@ -226,7 +224,7 @@ func CurveSetDup(ar *arena.Arena, mpe *cmsStage) any {
 		return nil
 	}
 	// Allocate memory for the new tone curves data structure
-	newElem := allocateStruct[cmsStageToneCurvesData](ar)
+	newElem := mem.New[cmsStageToneCurvesData](mm)
 	if newElem == nil {
 		return nil
 	}
@@ -234,11 +232,11 @@ func CurveSetDup(ar *arena.Arena, mpe *cmsStage) any {
 	newElem.NCurves = data.NCurves
 
 	// Allocate memory for the array of tone curve pointers
-	newElem.TheCurves = make([]*CmsToneCurve, newElem.NCurves)
+	newElem.TheCurves = mem.MakeSlice[*CmsToneCurve](mm, int(newElem.NCurves))
 
 	for i := uint32(0); i < newElem.NCurves; i++ {
 		// Duplicate each curve. It may fail.
-		newElem.TheCurves[i] = cmsDupToneCurve(ar, data.TheCurves[i])
+		newElem.TheCurves[i] = cmsDupToneCurve(mm, data.TheCurves[i])
 		if newElem.TheCurves[i] == nil {
 			goto Error
 		}
@@ -258,18 +256,18 @@ Error:
 	return nil
 }
 
-func cmsStageAllocToneCurves(ar *arena.Arena, ContextID CmsContext, nChannels uint32, Curves []*CmsToneCurve) *cmsStage {
+func cmsStageAllocToneCurves(mm mem.Manager, ContextID CmsContext, nChannels uint32, Curves []*CmsToneCurve) *cmsStage {
 	//fmt.Println("start cmsStageAllocToneCurves")
 	// Allocate the placeholder for the stage
-	newMPE := cmsStageAllocPlaceholder(ar, ContextID, CmsSigCurveSetElemType, nChannels, nChannels, EvaluateCurves, CurveSetDup, CurveSetElemTypeFree, nil)
+	newMPE := cmsStageAllocPlaceholder(mm, ContextID, CmsSigCurveSetElemType, nChannels, nChannels, EvaluateCurves, CurveSetDup, CurveSetElemTypeFree, nil)
 	if newMPE == nil {
 		return nil
 	}
 
 	// Allocate the tone curves data structure
-	newElem := allocateStruct[cmsStageToneCurvesData](ar)
+	newElem := mem.New[cmsStageToneCurvesData](mm)
 	if newElem == nil {
-		cmsStageFree(ar, newMPE)
+		cmsStageFree(mm, newMPE)
 		return nil
 	}
 
@@ -280,21 +278,21 @@ func cmsStageAllocToneCurves(ar *arena.Arena, ContextID CmsContext, nChannels ui
 
 	// Allocate memory for the slice of tone curve pointers
 	// Allocate memory for the array of tone curve pointers
-	newElem.TheCurves = make([]*CmsToneCurve, newElem.NCurves)
+	newElem.TheCurves = mem.MakeSlice[*CmsToneCurve](mm, int(newElem.NCurves))
 
 	// Handle the input curves, either creating identity curves or duplicating existing ones
 	for i := uint32(0); i < nChannels; i++ {
 		if Curves == nil {
 			// Assign a new tone curve if Curves is nil
-			newElem.TheCurves[i] = CmsBuildGamma(ar, ContextID, 1.0)
+			newElem.TheCurves[i] = CmsBuildGamma(mm, ContextID, 1.0)
 		} else {
 			// Duplicate the tone curve and assign it to NewElem.TheCurves
-			newElem.TheCurves[i] = cmsDupToneCurve(ar, Curves[i])
+			newElem.TheCurves[i] = cmsDupToneCurve(mm, Curves[i])
 		}
 
 		// Check if the assignment failed
 		if newElem.TheCurves[i] == nil {
-			cmsStageFree(ar, newMPE)
+			cmsStageFree(mm, newMPE)
 			return nil
 		}
 	}
@@ -304,8 +302,8 @@ func cmsStageAllocToneCurves(ar *arena.Arena, ContextID CmsContext, nChannels ui
 
 }
 
-func cmsStageAllocIdentityCurves(ar *arena.Arena, ContextID CmsContext, nChannels uint32) *cmsStage {
-	mpe := cmsStageAllocToneCurves(ar, ContextID, nChannels, nil)
+func cmsStageAllocIdentityCurves(mm mem.Manager, ContextID CmsContext, nChannels uint32) *cmsStage {
+	mpe := cmsStageAllocToneCurves(mm, ContextID, nChannels, nil)
 	if mpe == nil {
 		return nil
 	}
@@ -313,7 +311,7 @@ func cmsStageAllocIdentityCurves(ar *arena.Arena, ContextID CmsContext, nChannel
 	return mpe
 }
 
-func EvaluateMatrix(ar *arena.Arena, in []float32, out []float32, mpe *cmsStage) {
+func EvaluateMatrix(mm mem.Manager, in []float32, out []float32, mpe *cmsStage) {
 	//fmt.Printf("start EvaluateMatrix %.7f  %.7f  %.7f  %.7f \n", in[0], in[1], in[2], in[3])
 
 	data, ok := mpe.Data.(*cmsStageMatrixData)
@@ -353,7 +351,7 @@ func EvaluateMatrix(ar *arena.Arena, in []float32, out []float32, mpe *cmsStage)
 }
 
 // MatrixElemDup duplicates the matrix stage data.
-func MatrixElemDup(ar *arena.Arena, mpe *cmsStage) any {
+func MatrixElemDup(mm mem.Manager, mpe *cmsStage) any {
 	//	fmt.Println("MatrixElemDup")
 
 	if mpe == nil || mpe.Data == nil {
@@ -366,7 +364,7 @@ func MatrixElemDup(ar *arena.Arena, mpe *cmsStage) any {
 		return nil
 	}
 
-	NewElem := allocateStruct[cmsStageMatrixData](ar)
+	NewElem := mem.New[cmsStageMatrixData](mm)
 
 	NewElem.Double = cmsDupMemSlice(Data.Double)
 	if Data.Offset != nil {
@@ -377,7 +375,7 @@ func MatrixElemDup(ar *arena.Arena, mpe *cmsStage) any {
 }
 
 // MatrixElemTypeFree frees the matrix stage data.
-func MatrixElemTypeFree(ar *arena.Arena, mpe *cmsStage) {
+func MatrixElemTypeFree(mm mem.Manager, mpe *cmsStage) {
 	if mpe == nil || mpe.Data == nil {
 		return
 	}
@@ -394,8 +392,7 @@ func MatrixElemTypeFree(ar *arena.Arena, mpe *cmsStage) {
 }
 
 // USE ARENA!!!
-func cmsStageAllocMatrix(
-	ar *arena.Arena,
+func cmsStageAllocMatrix(mm mem.Manager,
 	ContextID CmsContext,
 	Rows, Cols uint32,
 	Matrix, Offset []float64,
@@ -411,7 +408,7 @@ func cmsStageAllocMatrix(
 		return nil
 	}
 
-	NewMPE := cmsStageAllocPlaceholder(ar,
+	NewMPE := cmsStageAllocPlaceholder(mm,
 		ContextID,
 		CmsSigMatrixElemType,
 		Cols,
@@ -427,18 +424,18 @@ func cmsStageAllocMatrix(
 		return nil
 	}
 
-	NewElem := allocateStruct[cmsStageMatrixData](ar)
+	NewElem := mem.New[cmsStageMatrixData](mm)
 	if NewElem == nil {
 		//		fmt.Println("[cmsStageAllocMatrix] Failed to allocate NewElem, cleaning up")
-		cmsStageFree(ar, NewMPE)
+		cmsStageFree(mm, NewMPE)
 		return nil
 	}
 
-	NewElem.Double = make([]float64, n)
+	NewElem.Double = mem.MakeSlice[float64](mm, int(n))
 	copy(NewElem.Double, Matrix)
 
 	if Offset != nil {
-		NewElem.Offset = make([]float64, Rows)
+		NewElem.Offset = mem.MakeSlice[float64](mm, int(Rows))
 		copy(NewElem.Offset, Offset)
 	}
 
@@ -448,7 +445,7 @@ func cmsStageAllocMatrix(
 	return NewMPE
 }
 
-func EvaluateXYZ2Lab(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage) {
+func EvaluateXYZ2Lab(mm mem.Manager, In []float32, Out []float32, mpe *cmsStage) {
 	//fmt.Printf("start EvaluateXYZ2Lab %.7f  %.7f  %.7f  %.7f \n", In[0], In[1], In[2], In[3])
 	const XYZadj = MAX_ENCODEABLE_XYZ
 
@@ -470,14 +467,14 @@ func EvaluateXYZ2Lab(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage
 
 }
 
-func cmsStageAllocXYZ2Lab(ar *arena.Arena, ContextID CmsContext) *cmsStage {
-	return cmsStageAllocPlaceholder(ar, ContextID, CmsSigXYZ2LabElemType, 3, 3, EvaluateXYZ2Lab, nil, nil, nil)
+func cmsStageAllocXYZ2Lab(mm mem.Manager, ContextID CmsContext) *cmsStage {
+	return cmsStageAllocPlaceholder(mm, ContextID, CmsSigXYZ2LabElemType, 3, 3, EvaluateXYZ2Lab, nil, nil, nil)
 }
 
 // This routine does a sweep on whole input space, and calls its callback
 // function on knots. returns TRUE if all ok, FALSE otherwise.
 
-func cmsSliceSpace16(ar *arena.Arena, nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLER16, cargo any) bool {
+func cmsSliceSpace16(mm mem.Manager, nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLER16, cargo any) bool {
 	if nInputs >= cmsMAXCHANNELS {
 		return false
 	}
@@ -498,12 +495,12 @@ func cmsSliceSpace16(ar *arena.Arena, nInputs uint32, clutPoints []uint32, Sampl
 	}
 
 	// Call the sampler with the current input
-	if Sampler(ar, In[:], nil, cargo) != 1 {
+	if Sampler(mm, In[:], nil, cargo) != 1 {
 		return false
 	}
 	return true
 }
-func cmsSliceSpaceFloat(ar *arena.Arena, nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLERFLOAT, cargo any) int32 {
+func cmsSliceSpaceFloat(mm mem.Manager, nInputs uint32, clutPoints []uint32, Sampler cmsSAMPLERFLOAT, cargo any) int32 {
 	if nInputs >= cmsMAXCHANNELS {
 		return 0 // FALSE
 	}
@@ -526,7 +523,7 @@ func cmsSliceSpaceFloat(ar *arena.Arena, nInputs uint32, clutPoints []uint32, Sa
 		}
 
 		// Call the sampler with the current input
-		if Sampler(ar, In[:], nil, cargo) != 1 {
+		if Sampler(mm, In[:], nil, cargo) != 1 {
 			return 0 // FALSE
 		}
 	}
@@ -538,7 +535,7 @@ func cmsSliceSpaceFloat(ar *arena.Arena, nInputs uint32, clutPoints []uint32, Sa
 // Type CmsSigLab2XYZElemType
 // ********************************************************************************
 
-func EvaluateLab2XYZ(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage) {
+func EvaluateLab2XYZ(mm mem.Manager, In []float32, Out []float32, mpe *cmsStage) {
 	//fmt.Println("start EvaluateLab2XYZ")
 	const XYZadj = MAX_ENCODEABLE_XYZ
 
@@ -563,8 +560,8 @@ func EvaluateLab2XYZ(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage
 }
 
 // No dup or free routines needed, as the structure has no pointers in it.
-func cmsStageAllocLab2XYZ(ar *arena.Arena, ContextID CmsContext) *cmsStage {
-	return cmsStageAllocPlaceholder(ar, ContextID, CmsSigLab2XYZElemType, 3, 3, EvaluateLab2XYZ, nil, nil, nil)
+func cmsStageAllocLab2XYZ(mm mem.Manager, ContextID CmsContext) *cmsStage {
+	return cmsStageAllocPlaceholder(mm, ContextID, CmsSigLab2XYZElemType, 3, 3, EvaluateLab2XYZ, nil, nil, nil)
 }
 
 // ********************************************************************************
@@ -575,15 +572,15 @@ func cmsStageAllocLab2XYZ(ar *arena.Arena, ContextID CmsContext) *cmsStage {
 // Almost all what we need, but unfortunately, the rest of entries should be scaled by
 // (255*257/256), and this is not exact.
 
-func cmsStageAllocLabV2ToV4curves(ar *arena.Arena, ContextID CmsContext) *cmsStage {
+func cmsStageAllocLabV2ToV4curves(mm mem.Manager, ContextID CmsContext) *cmsStage {
 	var LabTable [3]*CmsToneCurve
 	var mpe *cmsStage
 	var i, j int
 
 	// Build 258-entry tone curves for Lab components
-	LabTable[0] = cmsBuildTabulatedToneCurve16(ar, ContextID, 258, nil)
-	LabTable[1] = cmsBuildTabulatedToneCurve16(ar, ContextID, 258, nil)
-	LabTable[2] = cmsBuildTabulatedToneCurve16(ar, ContextID, 258, nil)
+	LabTable[0] = cmsBuildTabulatedToneCurve16(mm, ContextID, 258, nil)
+	LabTable[1] = cmsBuildTabulatedToneCurve16(mm, ContextID, 258, nil)
+	LabTable[2] = cmsBuildTabulatedToneCurve16(mm, ContextID, 258, nil)
 
 	// Ensure all tone curves were created successfully
 	for j = 0; j < 3; j++ {
@@ -604,7 +601,7 @@ func cmsStageAllocLabV2ToV4curves(ar *arena.Arena, ContextID CmsContext) *cmsSta
 	}
 
 	// Allocate the tone curve stage
-	mpe = cmsStageAllocToneCurves(ar, ContextID, 3, LabTable[:])
+	mpe = cmsStageAllocToneCurves(mm, ContextID, 3, LabTable[:])
 	cmsFreeToneCurveTriple(LabTable)
 
 	// Check if allocation was successful
@@ -618,7 +615,7 @@ func cmsStageAllocLabV2ToV4curves(ar *arena.Arena, ContextID CmsContext) *cmsSta
 }
 
 // _cmsStageAllocLabV2ToV4 allocates a matrix-based stage for Lab v2 to v4 conversion.
-func cmsStageAllocLabV2ToV4(ar *arena.Arena, ContextID CmsContext) *cmsStage {
+func cmsStageAllocLabV2ToV4(mm mem.Manager, ContextID CmsContext) *cmsStage {
 	//fmt.Println("cmsStageAllocLabV2ToV4")
 	var v2ToV4 = []float64{
 		65535.0 / 65280.0, 0, 0,
@@ -626,7 +623,7 @@ func cmsStageAllocLabV2ToV4(ar *arena.Arena, ContextID CmsContext) *cmsStage {
 		0, 0, 65535.0 / 65280.0,
 	}
 
-	mpe := cmsStageAllocMatrix(ar, ContextID, 3, 3, v2ToV4, nil)
+	mpe := cmsStageAllocMatrix(mm, ContextID, 3, 3, v2ToV4, nil)
 	if mpe == nil {
 		return nil
 	}
@@ -635,14 +632,14 @@ func cmsStageAllocLabV2ToV4(ar *arena.Arena, ContextID CmsContext) *cmsStage {
 }
 
 // _cmsStageAllocLabV4ToV2 allocates a matrix-based stage for Lab v4 to v2 conversion.
-func cmsStageAllocLabV4ToV2(ar *arena.Arena, ContextID CmsContext) *cmsStage {
+func cmsStageAllocLabV4ToV2(mm mem.Manager, ContextID CmsContext) *cmsStage {
 	var v4ToV2 = []float64{
 		65280.0 / 65535.0, 0, 0,
 		0, 65280.0 / 65535.0, 0,
 		0, 0, 65280.0 / 65535.0,
 	}
 
-	mpe := cmsStageAllocMatrix(ar, ContextID, 3, 3, v4ToV2, nil)
+	mpe := cmsStageAllocMatrix(mm, ContextID, 3, 3, v4ToV2, nil)
 	if mpe == nil {
 		return nil
 	}
@@ -657,7 +654,7 @@ const (
 )
 
 // _cmsStageNormalizeFromLabFloat normalizes Lab values from integer range to floating-point PCS range.
-func cmsStageNormalizeFromLabFloat(ar *arena.Arena, ContextID CmsContext) *cmsStage {
+func cmsStageNormalizeFromLabFloat(mm mem.Manager, ContextID CmsContext) *cmsStage {
 	a1 := []float64{
 		1.0 / 100.0, 0, 0,
 		0, 1.0 / 255.0, 0,
@@ -670,7 +667,7 @@ func cmsStageNormalizeFromLabFloat(ar *arena.Arena, ContextID CmsContext) *cmsSt
 		128.0 / 255.0,
 	}
 
-	mpe := cmsStageAllocMatrix(ar, ContextID, 3, 3, a1, o1)
+	mpe := cmsStageAllocMatrix(mm, ContextID, 3, 3, a1, o1)
 	if mpe == nil {
 		return nil
 	}
@@ -679,14 +676,14 @@ func cmsStageNormalizeFromLabFloat(ar *arena.Arena, ContextID CmsContext) *cmsSt
 }
 
 // _cmsStageNormalizeFromXyzFloat normalizes XYZ values from integer range to floating-point PCS range.
-func cmsStageNormalizeFromXyzFloat(ar *arena.Arena, ContextID CmsContext) *cmsStage {
+func cmsStageNormalizeFromXyzFloat(mm mem.Manager, ContextID CmsContext) *cmsStage {
 	a1 := []float64{
 		normFactorXYZToFloat, 0, 0,
 		0, normFactorXYZToFloat, 0,
 		0, 0, normFactorXYZToFloat,
 	}
 
-	mpe := cmsStageAllocMatrix(ar, ContextID, 3, 3, a1, nil)
+	mpe := cmsStageAllocMatrix(mm, ContextID, 3, 3, a1, nil)
 	if mpe == nil {
 		return nil
 	}
@@ -695,7 +692,7 @@ func cmsStageNormalizeFromXyzFloat(ar *arena.Arena, ContextID CmsContext) *cmsSt
 }
 
 // _cmsStageNormalizeToLabFloat normalizes Lab values from floating-point PCS range to integer range.
-func cmsStageNormalizeToLabFloat(ar *arena.Arena, ContextID CmsContext) *cmsStage {
+func cmsStageNormalizeToLabFloat(mm mem.Manager, ContextID CmsContext) *cmsStage {
 	a1 := []float64{
 		100.0, 0, 0,
 		0, 255.0, 0,
@@ -708,7 +705,7 @@ func cmsStageNormalizeToLabFloat(ar *arena.Arena, ContextID CmsContext) *cmsStag
 		-128.0,
 	}
 
-	mpe := cmsStageAllocMatrix(ar, ContextID, 3, 3, a1, o1)
+	mpe := cmsStageAllocMatrix(mm, ContextID, 3, 3, a1, o1)
 	if mpe == nil {
 		return nil
 	}
@@ -717,14 +714,14 @@ func cmsStageNormalizeToLabFloat(ar *arena.Arena, ContextID CmsContext) *cmsStag
 }
 
 // _cmsStageNormalizeToXyzFloat normalizes XYZ values from floating-point PCS range to integer range.
-func cmsStageNormalizeToXyzFloat(ar *arena.Arena, ContextID CmsContext) *cmsStage {
+func cmsStageNormalizeToXyzFloat(mm mem.Manager, ContextID CmsContext) *cmsStage {
 	a1 := []float64{
 		normFactorFloatToXYZ, 0, 0,
 		0, normFactorFloatToXYZ, 0,
 		0, 0, normFactorFloatToXYZ,
 	}
 
-	mpe := cmsStageAllocMatrix(ar, ContextID, 3, 3, a1, nil)
+	mpe := cmsStageAllocMatrix(mm, ContextID, 3, 3, a1, nil)
 	if mpe == nil {
 		return nil
 	}
@@ -732,19 +729,19 @@ func cmsStageNormalizeToXyzFloat(ar *arena.Arena, ContextID CmsContext) *cmsStag
 	return mpe
 }
 
-func cmsStageAllocLabPrelin(ar *arena.Arena, ContextID CmsContext) *cmsStage {
+func cmsStageAllocLabPrelin(mm mem.Manager, ContextID CmsContext) *cmsStage {
 	params := []float64{2.4}
 	var LabTable [3]*CmsToneCurve
 
-	LabTable[0] = CmsBuildGamma(ar, ContextID, 1.0)
-	LabTable[1] = cmsBuildParametricToneCurve(ar, ContextID, 108, params)
-	LabTable[2] = cmsBuildParametricToneCurve(ar, ContextID, 108, params)
+	LabTable[0] = CmsBuildGamma(mm, ContextID, 1.0)
+	LabTable[1] = cmsBuildParametricToneCurve(mm, ContextID, 108, params)
+	LabTable[2] = cmsBuildParametricToneCurve(mm, ContextID, 108, params)
 
-	return cmsStageAllocToneCurves(ar, ContextID, 3, LabTable[:])
+	return cmsStageAllocToneCurves(mm, ContextID, 3, LabTable[:])
 }
-func cmsStageFree(ar *arena.Arena, mpe *cmsStage) {
+func cmsStageFree(mm mem.Manager, mpe *cmsStage) {
 	if mpe.FreePtr != nil {
-		mpe.FreePtr(ar, mpe)
+		mpe.FreePtr(mm, mpe)
 	}
 	cmsFree(mpe.ContextID, mpe)
 }
@@ -766,14 +763,14 @@ func cmsGetStageContextID(mpe *cmsStage) CmsContext {
 func cmsStageNext(mpe *cmsStage) *cmsStage {
 	return mpe.Next
 }
-func cmsStageDup(ar *arena.Arena, mpe *cmsStage) *cmsStage {
+func cmsStageDup(mm mem.Manager, mpe *cmsStage) *cmsStage {
 	//	fmt.Println("cmsStageDup")
 
 	if mpe == nil {
 		return nil
 	}
 
-	NewMPE := cmsStageAllocPlaceholder(ar,
+	NewMPE := cmsStageAllocPlaceholder(mm,
 		mpe.ContextID,
 		mpe.Type,
 		mpe.InputChannels,
@@ -791,9 +788,9 @@ func cmsStageDup(ar *arena.Arena, mpe *cmsStage) *cmsStage {
 	NewMPE.Implements = mpe.Implements
 
 	if mpe.DupElemPtr != nil {
-		NewMPE.Data = mpe.DupElemPtr(ar, mpe)
+		NewMPE.Data = mpe.DupElemPtr(mm, mpe)
 		if NewMPE.Data == nil {
-			cmsStageFree(ar, NewMPE)
+			cmsStageFree(mm, NewMPE)
 			return nil
 		}
 	} else {
@@ -839,7 +836,7 @@ func BlessLUT(lut *cmsPipeline) bool {
 }
 
 // _LUTeval16 evaluates the LUT on a 16-bit basis
-func LUTeval16(ar *arena.Arena, In []uint16, Out []uint16, D any) {
+func LUTeval16(mm mem.Manager, In []uint16, Out []uint16, D any) {
 	lut, ok := D.(*cmsPipeline)
 	if !ok {
 		panic(" D  must be of type *cmsPipeline")
@@ -853,7 +850,7 @@ func LUTeval16(ar *arena.Arena, In []uint16, Out []uint16, D any) {
 	// Process each stage in the pipeline
 	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
 		NextPhase = Phase ^ 1
-		mpe.EvalPtr(ar, Storage[Phase][:], Storage[NextPhase][:], mpe)
+		mpe.EvalPtr(mm, Storage[Phase][:], Storage[NextPhase][:], mpe)
 		Phase = NextPhase
 	}
 
@@ -861,7 +858,7 @@ func LUTeval16(ar *arena.Arena, In []uint16, Out []uint16, D any) {
 	FromFloatTo16(Storage[Phase][:], Out, lut.OutputChannels)
 }
 
-func LUTevalFloat(_ *arena.Arena, In []float32, Out []float32, D any) {
+func LUTevalFloat(mm mem.Manager, In []float32, Out []float32, D any) {
 	lut, ok := D.(*cmsPipeline)
 	if !ok {
 		panic(" D must be of type *cmsPipeline")
@@ -876,7 +873,7 @@ func LUTevalFloat(_ *arena.Arena, In []float32, Out []float32, D any) {
 
 	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
 		NextPhase = Phase ^ 1
-		mpe.EvalPtr(nil, storagePtr[Phase][:], storagePtr[NextPhase][:], mpe)
+		mpe.EvalPtr(mm, storagePtr[Phase][:], storagePtr[NextPhase][:], mpe)
 		Phase = NextPhase
 	}
 
@@ -884,14 +881,14 @@ func LUTevalFloat(_ *arena.Arena, In []float32, Out []float32, D any) {
 }
 
 // cmsPipelineAlloc allocates and initializes a new LUT pipeline
-func cmsPipelineAlloc(ar *arena.Arena, contextID CmsContext, inputChannels, outputChannels uint32) *cmsPipeline {
+func cmsPipelineAlloc(mm mem.Manager, contextID CmsContext, inputChannels, outputChannels uint32) *cmsPipeline {
 	// A value of zero in channels is allowed as a placeholder
 	if inputChannels >= cmsMAXCHANNELS || outputChannels >= cmsMAXCHANNELS {
 		return nil
 	}
 
 	// Allocate memory for the cmsPipeline struct
-	newLUT := allocateStruct[cmsPipeline](ar)
+	newLUT := mem.New[cmsPipeline](mm)
 
 	// Initialize the LUT structure
 	newLUT.InputChannels = inputChannels
@@ -912,20 +909,20 @@ func cmsPipelineAlloc(ar *arena.Arena, contextID CmsContext, inputChannels, outp
 }
 
 func cmsGetPipelineContextID(lut *cmsPipeline) CmsContext {
-		cmsAssert(lut != nil,"lut is nil")
+	cmsAssert(lut != nil, "lut is nil")
 	return lut.ContextID
 }
 func cmsPipelineInputChannels(lut *cmsPipeline) uint32 {
-		cmsAssert(lut != nil,"lut is nil")
+	cmsAssert(lut != nil, "lut is nil")
 
 	return lut.InputChannels
 }
 func cmsPipelineOutputChannels(lut *cmsPipeline) uint32 {
-		cmsAssert(lut != nil,"lut is nil")
+	cmsAssert(lut != nil, "lut is nil")
 
 	return lut.OutputChannels
 }
-func cmsPipelineFree(ar *arena.Arena, lut *cmsPipeline) {
+func cmsPipelineFree(mm mem.Manager, lut *cmsPipeline) {
 	if lut == nil {
 		return
 	}
@@ -933,7 +930,7 @@ func cmsPipelineFree(ar *arena.Arena, lut *cmsPipeline) {
 	var next *cmsStage
 	for mpe := lut.Elements; mpe != nil; mpe = next {
 		next = mpe.Next
-		cmsStageFree(ar, mpe)
+		cmsStageFree(mm, mpe)
 	}
 
 	if lut.FreeDataFn != nil {
@@ -942,27 +939,27 @@ func cmsPipelineFree(ar *arena.Arena, lut *cmsPipeline) {
 
 	cmsFree(lut.ContextID, lut)
 }
-func cmsPipelineEval16(ar *arena.Arena, In []uint16, Out []uint16, lut *cmsPipeline) {
-		cmsAssert(lut != nil,"lut is nil")
+func cmsPipelineEval16(mm mem.Manager, In []uint16, Out []uint16, lut *cmsPipeline) {
+	cmsAssert(lut != nil, "lut is nil")
 
-	lut.Eval16Fn(ar, In, Out, lut.Data)
+	lut.Eval16Fn(mm, In, Out, lut.Data)
 }
-func cmsPipelineEvalFloat(ar *arena.Arena, In []float32, Out []float32, lut *cmsPipeline) {
-		cmsAssert(lut != nil,"lut is nil")
+func cmsPipelineEvalFloat(mm mem.Manager, In []float32, Out []float32, lut *cmsPipeline) {
+	cmsAssert(lut != nil, "lut is nil")
 
 	/*fmt.Printf("In[0] %.7f\n", In[0])
 	fmt.Printf("In[1] %.7f\n", In[1])
 	fmt.Printf("In[2] %.7f\n", In[2])*/
 
-	lut.EvalFloatFn(ar, In, Out, lut)
+	lut.EvalFloatFn(mm, In, Out, lut)
 }
-func cmsPipelineDup(ar *arena.Arena, lut *cmsPipeline) *cmsPipeline {
+func cmsPipelineDup(mm mem.Manager, lut *cmsPipeline) *cmsPipeline {
 	//	fmt.Println("cmsPipelineDup")
 	if lut == nil {
 		return nil
 	}
 
-	NewLUT := cmsPipelineAlloc(ar, lut.ContextID, lut.InputChannels, lut.OutputChannels)
+	NewLUT := cmsPipelineAlloc(mm, lut.ContextID, lut.InputChannels, lut.OutputChannels)
 	if NewLUT == nil {
 		return nil
 	}
@@ -971,9 +968,9 @@ func cmsPipelineDup(ar *arena.Arena, lut *cmsPipeline) *cmsPipeline {
 	first := true
 
 	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
-		NewMPE := cmsStageDup(ar, mpe)
+		NewMPE := cmsStageDup(mm, mpe)
 		if NewMPE == nil {
-			cmsPipelineFree(ar, NewLUT)
+			cmsPipelineFree(mm, NewLUT)
 			return nil
 		}
 
@@ -1032,7 +1029,7 @@ func cmsPipelineInsertStage(lut *cmsPipeline, loc cmsStageLoc, mpe *cmsStage) bo
 
 	return BlessLUT(lut)
 }
-func cmsPipelineUnlinkStage(ar *arena.Arena, lut *cmsPipeline, loc cmsStageLoc, mpe **cmsStage) {
+func cmsPipelineUnlinkStage(mm mem.Manager, lut *cmsPipeline, loc cmsStageLoc, mpe **cmsStage) {
 	//	fmt.Println("cmsPipelineUnlinkStage")
 	if lut.Elements == nil {
 		if mpe != nil {
@@ -1068,12 +1065,12 @@ func cmsPipelineUnlinkStage(ar *arena.Arena, lut *cmsPipeline, loc cmsStageLoc, 
 	if mpe != nil {
 		*mpe = unlinked
 	} else {
-		cmsStageFree(ar, unlinked)
+		cmsStageFree(mm, unlinked)
 	}
 
 	BlessLUT(lut)
 }
-func cmsPipelineCat(ar *arena.Arena, l1 *cmsPipeline, l2 *cmsPipeline) bool {
+func cmsPipelineCat(mm mem.Manager, l1 *cmsPipeline, l2 *cmsPipeline) bool {
 	//	fmt.Println("cmsPipelineCat")
 	if l1.Elements == nil && l2.Elements == nil {
 		l1.InputChannels = l2.InputChannels
@@ -1081,7 +1078,7 @@ func cmsPipelineCat(ar *arena.Arena, l1 *cmsPipeline, l2 *cmsPipeline) bool {
 	}
 
 	for mpe := l2.Elements; mpe != nil; mpe = mpe.Next {
-		if !cmsPipelineInsertStage(l1, CmsAT_END, cmsStageDup(ar, mpe)) {
+		if !cmsPipelineInsertStage(l1, CmsAT_END, cmsStageDup(mm, mpe)) {
 			return false
 		}
 	}
@@ -1185,7 +1182,7 @@ func EuclideanDistance(a, b []float32, n int) float32 {
 // Target: LabK, 3 values of Lab plus destination K which is fixed
 // Result: The obtained CMYK
 // Hint: Location where to begin the search
-func cmsPipelineEvalReverseFloat(ar *arena.Arena, Target, Result, Hint []float32, lut *cmsPipeline) bool {
+func cmsPipelineEvalReverseFloat(mm mem.Manager, Target, Result, Hint []float32, lut *cmsPipeline) bool {
 	var (
 		i, j           uint32
 		error          float64
@@ -1224,7 +1221,7 @@ func cmsPipelineEvalReverseFloat(ar *arena.Arena, Target, Result, Hint []float32
 	// Iterate
 	for i = 0; i < INVERSION_MAX_ITERATIONS; i++ {
 		// Get beginning fx
-		cmsPipelineEvalFloat(ar, x[:], fx[:], lut)
+		cmsPipelineEvalFloat(mm, x[:], fx[:], lut)
 
 		// Compute error
 		error = float64(EuclideanDistance(fx[:], Target[:], 3))
@@ -1251,7 +1248,7 @@ func cmsPipelineEvalReverseFloat(ar *arena.Arena, Target, Result, Hint []float32
 
 			IncDelta(&xd[j]) // Apply a small delta to the j-th dimension
 
-			cmsPipelineEvalFloat(ar, xd[:], fxd[:], lut)
+			cmsPipelineEvalFloat(mm, xd[:], fxd[:], lut)
 
 			Jacobian.V[0].N[j] = float64(fxd[0]-fx[0]) / JACOBIAN_EPSILON
 			Jacobian.V[1].N[j] = float64(fxd[1]-fx[1]) / JACOBIAN_EPSILON
@@ -1284,7 +1281,7 @@ func cmsPipelineEvalReverseFloat(ar *arena.Arena, Target, Result, Hint []float32
 }
 
 // EvaluateCLUTfloat evaluates a CLUT in true floating point.
-func EvaluateCLUTfloat(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage) {
+func EvaluateCLUTfloat(mm mem.Manager, In []float32, Out []float32, mpe *cmsStage) {
 	//fmt.Println("start EvaluateCLUTfloat")
 	data, ok := mpe.Data.(*cmsStageCLutData)
 	if !ok {
@@ -1294,7 +1291,7 @@ func EvaluateCLUTfloat(ar *arena.Arena, In []float32, Out []float32, mpe *cmsSta
 	data.Params.Interpolation.LerpFloat(In, Out, data.Params)
 }
 
-func EvaluateCLUTfloatIn16(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage) {
+func EvaluateCLUTfloatIn16(mm mem.Manager, In []float32, Out []float32, mpe *cmsStage) {
 	in16 := in16Pool.Get().(*[MAX_STAGE_CHANNELS]uint16)
 	out16 := out16Pool.Get().(*[MAX_STAGE_CHANNELS]uint16)
 	defer func() {
@@ -1342,13 +1339,13 @@ func CubeSize(Dims []uint32, b uint32) uint32 {
 }
 
 // CLUTElemDup duplicates a CLUT element.
-func CLUTElemDup(ar *arena.Arena, mpe *cmsStage) any {
+func CLUTElemDup(mm mem.Manager, mpe *cmsStage) any {
 	data, ok := mpe.Data.(*cmsStageCLutData)
 	if !ok {
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageClutData\n")
 		return nil
 	}
-	newElem := allocateStruct[cmsStageCLutData](ar)
+	newElem := mem.New[cmsStageCLutData](mm)
 	if newElem == nil {
 		return nil
 	}
@@ -1364,7 +1361,7 @@ func CLUTElemDup(ar *arena.Arena, mpe *cmsStage) any {
 		}
 	}
 
-	newElem.Params = cmsComputeInterpParamsEx(ar,
+	newElem.Params = cmsComputeInterpParamsEx(mm,
 		mpe.ContextID,
 		data.Params.nSamples[:],
 		data.Params.nInputs,
@@ -1381,7 +1378,7 @@ func CLUTElemDup(ar *arena.Arena, mpe *cmsStage) any {
 }
 
 // CLutElemTypeFree frees the resources of a CLUT element.
-func CLutElemTypeFree(ar *arena.Arena, mpe *cmsStage) {
+func CLutElemTypeFree(mm mem.Manager, mpe *cmsStage) {
 	data, ok := mpe.Data.(*cmsStageCLutData)
 
 	// Already empty
@@ -1401,8 +1398,7 @@ func CLutElemTypeFree(ar *arena.Arena, mpe *cmsStage) {
 
 // Allocates a 16-bit multidimensional CLUT. This is evaluated at 16-bit precision.
 // The table may have different granularity on each dimension.
-func cmsStageAllocCLut16bitGranular(
-	ar *arena.Arena,
+func cmsStageAllocCLut16bitGranular(mm mem.Manager,
 	ContextID CmsContext,
 	clutPoints []uint32,
 	inputChan, outputChan uint32,
@@ -1417,14 +1413,14 @@ func cmsStageAllocCLut16bitGranular(
 		return nil
 	}
 
-	NewMPE := cmsStageAllocPlaceholder(ar, ContextID, CmsSigCLutElemType, inputChan, outputChan, EvaluateCLUTfloatIn16, CLUTElemDup, CLutElemTypeFree, nil)
+	NewMPE := cmsStageAllocPlaceholder(mm, ContextID, CmsSigCLutElemType, inputChan, outputChan, EvaluateCLUTfloatIn16, CLUTElemDup, CLutElemTypeFree, nil)
 	if NewMPE == nil {
 		return nil
 	}
 
-	NewElem := allocateStruct[cmsStageCLutData](ar)
+	NewElem := mem.New[cmsStageCLutData](mm)
 	if NewElem == nil {
-		cmsStageFree(ar, NewMPE)
+		cmsStageFree(mm, NewMPE)
 		return nil
 	}
 	NewMPE.Data = NewElem
@@ -1433,11 +1429,11 @@ func cmsStageAllocCLut16bitGranular(
 	NewElem.HasFloatValues = false
 
 	if NewElem.NEntries == 0 {
-		cmsStageFree(ar, NewMPE)
+		cmsStageFree(mm, NewMPE)
 		return nil
 	}
-	NewElem.Tab = make([]uint16, NewElem.NEntries)
-	//fmt.Printf("111 make([]uint16 %d %p %p\n", NewElem.NEntries, &NewElem.Tab.([]uint16)[0], NewElem.Tab)
+	NewElem.Tab = mem.MakeSlice[uint16](mm, int(NewElem.NEntries))
+	//fmt.Printf("111 mem.MakeSlice[uint16 %d %p %p\n", NewElem.NEntries, &NewElem.Tab.([]uint16)[0], NewElem.Tab)
 
 	if Table != nil {
 		for i := 0; i < int(NewElem.NEntries); i++ {
@@ -1445,9 +1441,9 @@ func cmsStageAllocCLut16bitGranular(
 		}
 	}
 
-	NewElem.Params = cmsComputeInterpParamsEx(ar, ContextID, clutPoints, inputChan, outputChan, NewElem.Tab, CMS_LERP_FLAGS_16BITS)
+	NewElem.Params = cmsComputeInterpParamsEx(mm, ContextID, clutPoints, inputChan, outputChan, NewElem.Tab, CMS_LERP_FLAGS_16BITS)
 	if NewElem.Params == nil {
-		cmsStageFree(ar, NewMPE)
+		cmsStageFree(mm, NewMPE)
 		return nil
 	}
 
@@ -1455,8 +1451,7 @@ func cmsStageAllocCLut16bitGranular(
 }
 
 // Allocates a 16-bit CLUT with the same granularity on all dimensions.
-func cmsStageAllocCLut16bit(
-	ar *arena.Arena,
+func cmsStageAllocCLut16bit(mm mem.Manager,
 	ContextID CmsContext,
 	nGridPoints, inputChan, outputChan uint32,
 	Table []uint16,
@@ -1465,12 +1460,11 @@ func cmsStageAllocCLut16bit(
 	for i := range Dimensions {
 		Dimensions[i] = nGridPoints
 	}
-	return cmsStageAllocCLut16bitGranular(ar, ContextID, Dimensions[:], inputChan, outputChan, Table)
+	return cmsStageAllocCLut16bitGranular(mm, ContextID, Dimensions[:], inputChan, outputChan, Table)
 }
 
 // Allocates a floating-point CLUT with the same granularity on all dimensions.
-func cmsStageAllocCLutFloat(
-	ar *arena.Arena,
+func cmsStageAllocCLutFloat(mm mem.Manager,
 	ContextID CmsContext,
 	nGridPoints, inputChan, outputChan uint32,
 	Table []float32,
@@ -1479,12 +1473,11 @@ func cmsStageAllocCLutFloat(
 	for i := range Dimensions {
 		Dimensions[i] = nGridPoints
 	}
-	return cmsStageAllocCLutFloatGranular(ar, ContextID, Dimensions[:], inputChan, outputChan, Table)
+	return cmsStageAllocCLutFloatGranular(mm, ContextID, Dimensions[:], inputChan, outputChan, Table)
 }
 
 // Allocates a floating-point multidimensional CLUT. Table may have different granularity on each dimension.
-func cmsStageAllocCLutFloatGranular(
-	ar *arena.Arena,
+func cmsStageAllocCLutFloatGranular(mm mem.Manager,
 	ContextID CmsContext,
 	clutPoints []uint32,
 	inputChan, outputChan uint32,
@@ -1499,22 +1492,22 @@ func cmsStageAllocCLutFloatGranular(
 		return nil
 	}
 
-	NewMPE := cmsStageAllocPlaceholder(ar, ContextID, CmsSigCLutElemType, inputChan, outputChan, EvaluateCLUTfloat, CLUTElemDup, CLutElemTypeFree, nil)
+	NewMPE := cmsStageAllocPlaceholder(mm, ContextID, CmsSigCLutElemType, inputChan, outputChan, EvaluateCLUTfloat, CLUTElemDup, CLutElemTypeFree, nil)
 	if NewMPE == nil {
 		return nil
 	}
 
-	NewElem := allocateStruct[cmsStageCLutData](ar)
+	NewElem := mem.New[cmsStageCLutData](mm)
 	NewMPE.Data = NewElem
 
 	NewElem.NEntries = uint32(outputChan) * CubeSize(clutPoints, inputChan)
 	NewElem.HasFloatValues = true
 
 	if NewElem.NEntries == 0 {
-		cmsStageFree(ar, NewMPE)
+		cmsStageFree(mm, NewMPE)
 		return nil
 	}
-	NewElem.Tab = make([]float32, NewElem.NEntries)
+	NewElem.Tab = mem.MakeSlice[float32](mm, int(NewElem.NEntries))
 
 	if Table != nil {
 		for i := 0; i < int(NewElem.NEntries); i++ {
@@ -1522,16 +1515,16 @@ func cmsStageAllocCLutFloatGranular(
 		}
 	}
 
-	NewElem.Params = cmsComputeInterpParamsEx(ar, ContextID, clutPoints, inputChan, outputChan, NewElem.Tab.([]float32), CMS_LERP_FLAGS_FLOAT)
+	NewElem.Params = cmsComputeInterpParamsEx(mm, ContextID, clutPoints, inputChan, outputChan, NewElem.Tab.([]float32), CMS_LERP_FLAGS_FLOAT)
 	if NewElem.Params == nil {
-		cmsStageFree(ar, NewMPE)
+		cmsStageFree(mm, NewMPE)
 		return nil
 	}
 
 	return NewMPE
 }
 
-func IdentitySampler(ar *arena.Arena, In []uint16, Out []uint16, cargo any) int32 {
+func IdentitySampler(mm mem.Manager, In []uint16, Out []uint16, cargo any) int32 {
 	var nChan int
 
 	switch v := cargo.(type) {
@@ -1570,19 +1563,19 @@ func IdentitySampler(ar *arena.Arena, In []uint16, Out []uint16, cargo any) int3
 	return 1
 }
 
-func cmsStageAllocIdentityCLut(ar *arena.Arena, ContextID CmsContext, nChan uint32) *cmsStage {
+func cmsStageAllocIdentityCLut(mm mem.Manager, ContextID CmsContext, nChan uint32) *cmsStage {
 	var Dimensions [MAX_INPUT_DIMENSIONS]uint32
 	for i := 0; i < MAX_INPUT_DIMENSIONS; i++ {
 		Dimensions[i] = 2
 	}
 
-	mpe := cmsStageAllocCLut16bitGranular(ar, ContextID, Dimensions[:], nChan, nChan, nil)
+	mpe := cmsStageAllocCLut16bitGranular(mm, ContextID, Dimensions[:], nChan, nChan, nil)
 	if mpe == nil {
 		return nil
 	}
 
-	if !cmsStageSampleCLut16bit(ar, mpe, IdentitySampler, &nChan, 0) {
-		cmsStageFree(ar, mpe)
+	if !cmsStageSampleCLut16bit(mm, mpe, IdentitySampler, &nChan, 0) {
+		cmsStageFree(mm, mpe)
 		return nil
 	}
 
@@ -1599,8 +1592,7 @@ func cmsQuantizeVal(i float64, MaxSamples uint32) uint16 {
 // Performs a sweep over the entire input space and calls the provided callback function on the knots.
 // Returns true if all operations succeed, false otherwise.
 // здесь происходит ошибка в tab
-func cmsStageSampleCLut16bit(
-	ar *arena.Arena,
+func cmsStageSampleCLut16bit(mm mem.Manager,
 	mpe *cmsStage,
 	Sampler cmsSAMPLER16,
 	cargo any,
@@ -1652,7 +1644,7 @@ func cmsStageSampleCLut16bit(
 			}
 		}
 
-		if Sampler(ar, In[:], Out[:], cargo) == 0 {
+		if Sampler(mm, In[:], Out[:], cargo) == 0 {
 			return false
 		}
 
@@ -1675,8 +1667,7 @@ func cmsStageSampleCLut16bit(
 
 // Performs a sweep over the entire input space for floating-point CLUTs and calls the provided callback function on the knots.
 // Returns true if all operations succeed, false otherwise.
-func cmsStageSampleCLutFloat(
-	ar *arena.Arena,
+func cmsStageSampleCLutFloat(mm mem.Manager,
 	mpe *cmsStage,
 	Sampler cmsSAMPLERFLOAT,
 	cargo any,
@@ -1725,7 +1716,7 @@ func cmsStageSampleCLutFloat(
 			}
 		}
 
-		if Sampler(ar, In[:], Out[:], cargo) != 0 {
+		if Sampler(mm, In[:], Out[:], cargo) != 0 {
 			return false
 		}
 

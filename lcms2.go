@@ -1,11 +1,10 @@
 package golcms
 
-import (
-	//"math"
-	//"reflect"
-	//"unsafe"
-	"arena"
-)
+import "github.com/yzigangirova/lcms-go/mem"
+
+//"math"
+//"reflect"
+//"unsafe"
 
 // yuliana
 // this is used instead of pointer to void
@@ -981,10 +980,10 @@ type cmsCurveSegment struct {
 	SampledPoints []float32
 }
 
-type cmsSAMPLER16 func(ar *arena.Arena, In []uint16, Out []uint16, cargo any) int32
+type cmsSAMPLER16 func(mm mem.Manager, In []uint16, Out []uint16, cargo any) int32
 
 //lint:ignore U1000 kept for parity with lcms; used in future ports
-type cmsSAMPLERFLOAT func(ar *arena.Arena, In []float32, Out []float32, cargo any) int32
+type cmsSAMPLERFLOAT func(mm mem.Manager, In []float32, Out []float32, cargo any) int32
 
 // Use this flag to prevent changes being written to destination
 const SAMPLER_INSPECT = 0x01000000

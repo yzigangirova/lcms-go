@@ -6,10 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"arena"
 	//"fmt"
 	"math"
 	"unsafe"
+
+	"github.com/yzigangirova/lcms-go/mem"
 )
 
 // Check if the platform is little-endian
@@ -396,18 +397,18 @@ func cmsWriteAlignment(io *cmsIOHANDLER) bool {
 }*/
 
 // Main plugin dispatcher
-func cmsPlugin(ar *arena.Arena, plugin PluginIntrfc) bool {
-	return cmsPluginTHR(ar, nil, plugin)
+func cmsPlugin(mm mem.Manager, plugin PluginIntrfc) bool {
+	return cmsPluginTHR(mm, nil, plugin)
 }
 
 // Plugin dispatcher for a specific thread
 //
 //lint:ignore U1000 kept for parity with lcms; used in future ports
-func cmsPluginTHR(ar *arena.Arena, contextID CmsContext, plugin PluginIntrfc) bool {
+func cmsPluginTHR(mm mem.Manager, contextID CmsContext, plugin PluginIntrfc) bool {
 	currentPlugin, ok := plugin.(*cmsPluginBase)
 	if !ok {
 		panic("Plugin is not of the type cmsPluginBase\n")
-		
+
 	}
 	for currentPlugin != nil {
 		if currentPlugin.Magic != cmsPluginMagicNumber {
@@ -430,35 +431,35 @@ func cmsPluginTHR(ar *arena.Arena, contextID CmsContext, plugin PluginIntrfc) bo
 				return false
 			}
 		case cmsPluginTagTypeSig:
-			if !cmsRegisterTagTypePlugin(ar, contextID, currentPlugin) {
+			if !cmsRegisterTagTypePlugin(mm, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginTagSig:
-			if !cmsRegisterTagPlugin(ar, contextID, currentPlugin) {
+			if !cmsRegisterTagPlugin(mm, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginFormattersSig:
-			if !cmsRegisterFormattersPlugin(ar, contextID, currentPlugin) {
+			if !cmsRegisterFormattersPlugin(mm, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginRenderingIntentSig:
-			if !cmsRegisterRenderingIntentPlugin(ar, contextID, currentPlugin) {
+			if !cmsRegisterRenderingIntentPlugin(mm, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginParametricCurveSig:
-			if !cmsRegisterParametricCurvesPlugin(ar, contextID, currentPlugin) {
+			if !cmsRegisterParametricCurvesPlugin(mm, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginMultiProcessElementSig:
-			if !cmsRegisterMultiProcessElementPlugin(ar, contextID, currentPlugin) {
+			if !cmsRegisterMultiProcessElementPlugin(mm, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginOptimizationSig:
-			if !cmsRegisterOptimizationPlugin(ar, contextID, currentPlugin) {
+			if !cmsRegisterOptimizationPlugin(mm, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginTransformSig:
-			if !cmsRegisterTransformPlugin(ar, contextID, currentPlugin) {
+			if !cmsRegisterTransformPlugin(mm, contextID, currentPlugin) {
 				return false
 			}
 		case cmsPluginMutexSig:
@@ -482,8 +483,8 @@ func cmsPluginTHR(ar *arena.Arena, contextID CmsContext, plugin PluginIntrfc) bo
 }
 
 // Revert all plugins to default
-func cmsUnregisterPlugins(ar *arena.Arena) {
-	cmsUnregisterPluginsTHR(ar, nil)
+func cmsUnregisterPlugins(mm mem.Manager) {
+	cmsUnregisterPluginsTHR(mm, nil)
 }
 
 /* C-code The context pool (linked list head)  NOT IMPEMENTED NEEDS FURTHER CONSIDERATION
@@ -588,17 +589,17 @@ func cmsGetContext(ContextID CmsContext) CmsContext {
 // identify which plug-in to unregister.
 //
 //lint:ignore U1000 kept for parity with lcms; used in future ports
-func cmsUnregisterPluginsTHR(ar *arena.Arena, ContextID CmsContext) {
+func cmsUnregisterPluginsTHR(mm mem.Manager, ContextID CmsContext) {
 	cmsRegisterMemHandlerPlugin(ContextID, nil)
 	cmsRegisterInterpPlugin(ContextID, nil)
-	cmsRegisterTagTypePlugin(ar, ContextID, nil)
-	cmsRegisterTagPlugin(ar, ContextID, nil)
-	cmsRegisterFormattersPlugin(ar, ContextID, nil)
-	cmsRegisterRenderingIntentPlugin(ar, ContextID, nil)
-	cmsRegisterParametricCurvesPlugin(ar, ContextID, nil)
-	cmsRegisterMultiProcessElementPlugin(ar, ContextID, nil)
-	cmsRegisterOptimizationPlugin(ar, ContextID, nil)
-	cmsRegisterTransformPlugin(ar, ContextID, nil)
+	cmsRegisterTagTypePlugin(mm, ContextID, nil)
+	cmsRegisterTagPlugin(mm, ContextID, nil)
+	cmsRegisterFormattersPlugin(mm, ContextID, nil)
+	cmsRegisterRenderingIntentPlugin(mm, ContextID, nil)
+	cmsRegisterParametricCurvesPlugin(mm, ContextID, nil)
+	cmsRegisterMultiProcessElementPlugin(mm, ContextID, nil)
+	cmsRegisterOptimizationPlugin(mm, ContextID, nil)
+	cmsRegisterTransformPlugin(mm, ContextID, nil)
 	cmsRegisterMutexPlugin(ContextID, nil)
 	cmsRegisterParallelizationPlugin(ContextID, nil)
 

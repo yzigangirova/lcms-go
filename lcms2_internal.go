@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 	"unsafe"
+
+	"github.com/yzigangirova/lcms-go/mem"
 )
 
 // Determinant lower than that are assumed zero (used on matrix invert)
@@ -295,9 +297,9 @@ type cmsStage struct {
 
 // Pipelines, Multi Process Elements.
 // Define function pointer types
-type cmsStageEvalFn func(ar *arena.Arena, In []float32, Out []float32, mpe *cmsStage)
-type cmsStageDupElemFn func(ar *arena.Arena, mpe *cmsStage) any
-type cmsStageFreeElemFn func(ar *arena.Arena, mpe *cmsStage)
+type cmsStageEvalFn func(mm mem.Manager, In []float32, Out []float32, mpe *cmsStage)
+type cmsStageDupElemFn func(mm mem.Manager, mpe *cmsStage) any
+type cmsStageFreeElemFn func(mm mem.Manager, mpe *cmsStage)
 
 type cmsPipeline struct {
 	Elements       *cmsStage // Points to elements chain
