@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "golcms-demo",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/golcms-demo",
+      "cwd": "${workspaceFolder}",
+      "args": []
+    }
+  ]
+}
