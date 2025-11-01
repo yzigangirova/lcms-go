@@ -3,29 +3,9 @@ package golcms
 import (
 	//"fmt"
 	"math"
-	"sync"
 
 	"github.com/yzigangirova/lcms-go/mem"
 )
-
-var lutBufferPool = sync.Pool{
-	New: func() any {
-		// Allocate once
-		return new([2][MAX_STAGE_CHANNELS]float32)
-	},
-}
-
-var in16Pool = sync.Pool{
-	New: func() any {
-		return new([MAX_STAGE_CHANNELS]uint16)
-	},
-}
-
-var out16Pool = sync.Pool{
-	New: func() any {
-		return new([MAX_STAGE_CHANNELS]uint16)
-	},
-}
 
 func cmsStageAllocPlaceholder(mm mem.Manager,
 	ContextID CmsContext,
@@ -186,7 +166,7 @@ func EvaluateCurves(mm mem.Manager, In []float32, Out []float32, mpe *cmsStage) 
 
 	for i := uint32(0); i < data.NCurves; i++ {
 		//patchedValue := patchInput(In[i])
-		Out[i] = cmsEvalToneCurveFloat(data.TheCurves[i], In[i])
+		Out[i] = cmsEvalToneCurveFloat(mm, data.TheCurves[i], In[i])
 	}
 
 	// Debug: Print final output values
@@ -835,49 +815,44 @@ func BlessLUT(lut *cmsPipeline) bool {
 	return true
 }
 
-// _LUTeval16 evaluates the LUT on a 16-bit basis
-func LUTeval16(mm mem.Manager, In []uint16, Out []uint16, D any) {
+func LUTeval16(mm mem.Manager, In, Out []uint16, D any) {
 	lut, ok := D.(*cmsPipeline)
 	if !ok {
-		panic(" D  must be of type *cmsPipeline")
+		panic("D must be *cmsPipeline")
 	}
-	var Storage [2][MAX_STAGE_CHANNELS]float32
-	var Phase, NextPhase int
+	sc := mm.Scratch()
 
-	// Convert input from 16-bit to float
-	From16ToFloat(In, Storage[Phase][:], lut.InputChannels)
+	nIn := int(lut.InputChannels)
+	nOut := int(lut.OutputChannels)
 
-	// Process each stage in the pipeline
+	phase := 0
+	From16ToFloat(In[:nIn], sc.LUT[phase][:nIn], lut.InputChannels)
+
 	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
-		NextPhase = Phase ^ 1
-		mpe.EvalPtr(mm, Storage[Phase][:], Storage[NextPhase][:], mpe)
-		Phase = NextPhase
+		next := phase ^ 1
+		mpe.EvalPtr(mm, sc.LUT[phase][:nIn], sc.LUT[next][:nOut], mpe)
+		phase = next
 	}
-
-	// Convert output from float to 16-bit
-	FromFloatTo16(Storage[Phase][:], Out, lut.OutputChannels)
+	FromFloatTo16(sc.LUT[phase][:nOut], Out[:nOut], lut.OutputChannels)
 }
 
-func LUTevalFloat(mm mem.Manager, In []float32, Out []float32, D any) {
+func LUTevalFloat(mm mem.Manager, In, Out []float32, D any) {
 	lut, ok := D.(*cmsPipeline)
 	if !ok {
-		panic(" D must be of type *cmsPipeline")
+		panic("D must be *cmsPipeline")
 	}
 
-	storagePtr := lutBufferPool.Get().(*[2][MAX_STAGE_CHANNELS]float32)
-	defer lutBufferPool.Put(storagePtr) // reuse for next call
-
-	// Work with pointer directly, no copying
-	var Phase, NextPhase int
-	MemmoveSlice(storagePtr[Phase][:], In, int(lut.InputChannels))
+	sc := mm.Scratch()
+	phase := 0
+	copy(sc.LUT[phase][:], In[:lut.InputChannels])
 
 	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
-		NextPhase = Phase ^ 1
-		mpe.EvalPtr(mm, storagePtr[Phase][:], storagePtr[NextPhase][:], mpe)
-		Phase = NextPhase
+		next := phase ^ 1
+		mpe.EvalPtr(mm, sc.LUT[phase][:], sc.LUT[next][:], mpe)
+		phase = next
 	}
 
-	MemmoveSlice(Out, storagePtr[Phase][:], int(lut.OutputChannels))
+	copy(Out[:lut.OutputChannels], sc.LUT[phase][:])
 }
 
 // cmsPipelineAlloc allocates and initializes a new LUT pipeline
@@ -1288,29 +1263,26 @@ func EvaluateCLUTfloat(mm mem.Manager, In []float32, Out []float32, mpe *cmsStag
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageClutData\n")
 		return
 	}
-	data.Params.Interpolation.LerpFloat(In, Out, data.Params)
+	data.Params.Interpolation.LerpFloat(mm, In, Out, data.Params)
 }
 
-func EvaluateCLUTfloatIn16(mm mem.Manager, In []float32, Out []float32, mpe *cmsStage) {
-	in16 := in16Pool.Get().(*[MAX_STAGE_CHANNELS]uint16)
-	out16 := out16Pool.Get().(*[MAX_STAGE_CHANNELS]uint16)
-	defer func() {
-		in16Pool.Put(in16)
-		out16Pool.Put(out16)
-	}()
+func EvaluateCLUTfloatIn16(mm mem.Manager, In, Out []float32, mpe *cmsStage) {
+	sc := mm.Scratch()
 
 	data, ok := mpe.Data.(*cmsStageCLutData)
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageClutData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not *cmsStageCLutData")
 		return
 	}
-	if mpe.InputChannels > MAX_STAGE_CHANNELS || mpe.OutputChannels > MAX_STAGE_CHANNELS {
-		panic("Number of channels exceeds MAX_STAGE_CHANNELS")
+	inCh := int(mpe.InputChannels)
+	outCh := int(mpe.OutputChannels)
+	if inCh > MAX_STAGE_CHANNELS || outCh > MAX_STAGE_CHANNELS {
+		panic("channels exceed MAX_STAGE_CHANNELS")
 	}
 
-	FromFloatTo16(In, in16[:], mpe.InputChannels)
-	data.Params.Interpolation.Lerp16(in16[:], out16[:], data.Params)
-	From16ToFloat(out16[:], Out, mpe.OutputChannels)
+	FromFloatTo16(In[:inCh], sc.In16[:inCh], mpe.InputChannels)
+	data.Params.Interpolation.Lerp16(mm, sc.In16[:inCh], sc.Out16[:outCh], data.Params)
+	From16ToFloat(sc.Out16[:outCh], Out[:outCh], mpe.OutputChannels)
 }
 
 // CubeSize calculates the total number of nodes in a hypercube.

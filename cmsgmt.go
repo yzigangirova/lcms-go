@@ -538,7 +538,7 @@ func cmsDetectRGBProfileGamma(mm mem.Manager, hProfile CmsHPROFILE, threshold fl
 	}
 
 	// Estimate gamma
-	gamma = cmsEstimateGamma(YCurve, threshold)
+	gamma = cmsEstimateGamma(mm, YCurve, threshold)
 
 	// Free the tone curve and return the gamma value
 	CmsFreeToneCurve(YCurve)

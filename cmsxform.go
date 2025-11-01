@@ -156,6 +156,7 @@ func cmsDeleteTransform(mm mem.Manager, hTransform CmsHTRANSFORM) {
 	if p == nil {
 		return
 	}
+	mm = p.mem_manager // use the canonical manager that did the allocations
 
 	// Free GamutCheck pipeline if it exists
 	if p.GamutCheck != nil {
@@ -191,6 +192,9 @@ func cmsDeleteTransform(mm mem.Manager, hTransform CmsHTRANSFORM) {
 
 	// Finally, free the transform object itself
 	cmsFree(p.ContextID, p)
+
+	// If  created an arena-backed Manager, this releases it:
+	p.mem_manager.FreeAll()
 }
 
 // PixelSize calculates the size of a pixel in bytes based on its format.
@@ -211,13 +215,15 @@ func PixelSize(Format uint32) uint32 {
 func CmsDoTransform(mm mem.Manager, Transform CmsHTRANSFORM, InputBuffer, OutputBuffer any, Size uint32) {
 
 	//fmt.Printf("start CmsDoTransform\n")
-	/*if ar == nil {
-		ar = arena.NewArena()
-		defer ar.Free()
-	}*/
+
 	p, ok := Transform.(*cmsTRANSFORM) // Cast the generic Transform to the specific type cmsTRANSFORM
 	if !ok {
 		panic("p is not of the type cmsTransform")
+	}
+	//the main memory manager is stored inside cmsTransform.  The separate memory manager for each
+	//cmsDoTransform may be provided for concurrent transforming
+	if mm.IsZero() {
+		mm = p.mem_manager
 	}
 	var stride cmsStride
 
@@ -244,6 +250,11 @@ func CmsDoTransformStride(mm mem.Manager,
 		defer ar.Free()
 	}*/
 	p := Transform.(*cmsTRANSFORM)
+	//the main memory manager is stored inside cmsTransform.  The separate memory manager for each
+	//cmsDoTransform may be provided for concurrent transforming
+	if mm.IsZero() {
+		mm = p.mem_manager
+	}
 	var stride cmsStride
 
 	stride.BytesPerLineIn = 0
@@ -269,6 +280,11 @@ func CmsDoTransformLineStride(mm mem.Manager,
 		defer ar.Free()
 	}*/
 	p := Transform.(*cmsTRANSFORM)
+	//the main memory manager is stored inside cmsTransform.  The separate memory manager for each
+	//cmsDoTransform may be provided for concurrent transforming
+	if mm.IsZero() {
+		mm = p.mem_manager
+	}
 	var stride cmsStride
 
 	stride.BytesPerLineIn = BytesPerLineIn
@@ -350,7 +366,7 @@ func FloatXFORM(mm mem.Manager,
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			//  Process input correctly using slice indexing
-			accum = p.FromInputFloat(p, fIn[:], accum, Stride.BytesPerPlaneIn)
+			accum = p.FromInputFloat(mm, p, fIn[:], accum, Stride.BytesPerPlaneIn)
 
 			//  Replace unsafe pointer arithmetic for `OutOfGamut`
 			outOfGamutSlice := []float32{OutOfGamut}
@@ -380,7 +396,7 @@ func FloatXFORM(mm mem.Manager,
 			//  Process output correctly
 			//	fmt.Println("fOut[:] ", fOut[:])
 
-			output = p.ToOutputFloat(p, fOut[:], output, Stride.BytesPerPlaneOut)
+			output = p.ToOutputFloat(mm, p, fOut[:], output, Stride.BytesPerPlaneOut)
 		}
 
 		//  Update strides correctly
@@ -480,8 +496,8 @@ func NullFloatXFORM(mm mem.Manager,
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			//  Process input correctly using slice indexing
-			accum = p.FromInputFloat(p, fIn[:], accum, Stride.BytesPerPlaneIn)
-			output = p.ToOutputFloat(p, fIn[:], output, Stride.BytesPerPlaneOut)
+			accum = p.FromInputFloat(mm, p, fIn[:], accum, Stride.BytesPerPlaneIn)
+			output = p.ToOutputFloat(mm, p, fIn[:], output, Stride.BytesPerPlaneOut)
 		}
 
 		//  Update strides correctly
@@ -573,8 +589,8 @@ func NullXFORM(mm mem.Manager,
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			//  Process input correctly using slice indexing
-			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
-			output = p.ToOutput(p, wIn[:], output, Stride.BytesPerPlaneOut)
+			accum = p.FromInput(mm, p, wIn[:], accum, Stride.BytesPerPlaneIn)
+			output = p.ToOutput(mm, p, wIn[:], output, Stride.BytesPerPlaneOut)
 		}
 
 		//  Update strides correctly
@@ -667,11 +683,11 @@ func PrecalculatedXFORM(mm mem.Manager,
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			// Process input
-			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
+			accum = p.FromInput(mm, p, wIn[:], accum, Stride.BytesPerPlaneIn)
 			// Evaluate LUT
 			p.Lut.Eval16Fn(mm, wIn[:], wOut[:], p.Lut.Data)
 			// Process output
-			output = p.ToOutput(p, wOut[:], output, Stride.BytesPerPlaneOut)
+			output = p.ToOutput(mm, p, wOut[:], output, Stride.BytesPerPlaneOut)
 		}
 
 		// Update strides
@@ -785,9 +801,9 @@ func PrecalculatedXFORMGamutCheck(mm mem.Manager,
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			// Correctly advance accum and output slices
-			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
+			accum = p.FromInput(mm, p, wIn[:], accum, Stride.BytesPerPlaneIn)
 			TransformOnePixelWithGamutCheck(mm, p, wIn[:], wOut[:])
-			output = p.ToOutput(p, wOut[:], output, Stride.BytesPerPlaneOut)
+			output = p.ToOutput(mm, p, wOut[:], output, Stride.BytesPerPlaneOut)
 		}
 
 		// Update strides correctly
@@ -889,7 +905,7 @@ func CachedXFORM(mm mem.Manager,
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			// Correctly advance accum and output using slices
-			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
+			accum = p.FromInput(mm, p, wIn[:], accum, Stride.BytesPerPlaneIn)
 
 			// Use cache to avoid redundant calculations
 			equal := true
@@ -915,7 +931,7 @@ func CachedXFORM(mm mem.Manager,
 			}
 
 			// Advance output using slice indexing
-			output = p.ToOutput(p, wOut[:], output, Stride.BytesPerPlaneOut)
+			output = p.ToOutput(mm, p, wOut[:], output, Stride.BytesPerPlaneOut)
 		}
 
 		// Update strides correctly
@@ -1017,7 +1033,7 @@ func CachedXFORMGamutCheck(mm mem.Manager,
 
 		for j := uint32(0); j < PixelsPerLine; j++ {
 			//  Correctly advance accum using slices
-			accum = p.FromInput(p, wIn[:], accum, Stride.BytesPerPlaneIn)
+			accum = p.FromInput(mm, p, wIn[:], accum, Stride.BytesPerPlaneIn)
 
 			//  Use cache for performance optimization
 			// Use cache to avoid redundant calculations
@@ -1037,7 +1053,7 @@ func CachedXFORMGamutCheck(mm mem.Manager,
 			}
 
 			//  Correctly advance output using slices
-			output = p.ToOutput(p, wOut[:], output, Stride.BytesPerPlaneOut)
+			output = p.ToOutput(mm, p, wOut[:], output, Stride.BytesPerPlaneOut)
 		}
 
 		//  Update strides correctly
@@ -1282,7 +1298,7 @@ func ParallelizeIfSuitable(p *cmsTRANSFORM) {
 		p.WorkerFlags = uint32(ctx.WorkerFlags)
 	}
 }
-func UnrollNothing(
+func UnrollNothing(mm mem.Manager,
 	info *cmsTRANSFORM,
 	wIn []uint16,
 	accum []uint8,
@@ -1291,7 +1307,7 @@ func UnrollNothing(
 	// No operation, return the input slice unchanged
 	return accum
 }
-func PackNothing(
+func PackNothing(mm mem.Manager,
 	info *cmsTRANSFORM,
 	wOut []uint16,
 	output []uint8,
@@ -1318,6 +1334,7 @@ func AllocEmptyTransform(mm mem.Manager,
 		cmsPipelineFree(mm, lut)
 		return nil
 	}
+	p.mem_manager = mm
 
 	// Store the proposed pipeline
 	p.Lut = lut
@@ -1667,7 +1684,6 @@ func cmsCreateExtendedTransform(mm mem.Manager,
 
 	}
 	//fmt.Println("end cmsCreateExtendedTransform before returning form")
-	xform.Ar = mm.GerArenaPtr()
 	return xform
 }
 
@@ -1756,7 +1772,7 @@ func cmsCreateTransformTHR(mm mem.Manager,
 	return cmsCreateMultiprofileTransformTHR(mm, ContextID, hProfiles, nProfiles, InputFormat, OutputFormat, Intent, dwFlags)
 }
 
-func CmsCreateTransform(mm mem.Manager,
+func CmsCreateTransform(
 	Input CmsHPROFILE,
 	InputFormat uint32,
 	Output CmsHPROFILE,
@@ -1765,6 +1781,8 @@ func CmsCreateTransform(mm mem.Manager,
 	dwFlags uint32,
 ) CmsHTRANSFORM {
 	//  fmt.Println("start CmsCreateTransform")
+	mm := mem.NewManager() // or NewArena(), depending
+
 	return cmsCreateTransformTHR(mm, cmsGetProfileContextID(Input), Input, InputFormat, Output, OutputFormat, Intent, dwFlags)
 	//fmt.Println("end CmsCreateTransform")
 

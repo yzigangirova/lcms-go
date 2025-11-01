@@ -1383,7 +1383,7 @@ type FILEMEM struct {
 func MemoryRead(iohandler *cms_io_handler, buffer any, size, count uint32) uint32 {
 	resData, ok := iohandler.Stream.(*FILEMEM)
 	if !ok {
-		panic("Stream is not a *FILENULL")
+		panic("Stream is not a *FILEMEM")
 	}
 	length := size * count
 
@@ -1415,7 +1415,7 @@ func MemoryRead(iohandler *cms_io_handler, buffer any, size, count uint32) uint3
 func MemorySeek(iohandler *cms_io_handler, offset uint32) bool {
 	resData, ok := iohandler.Stream.(*FILEMEM)
 	if !ok {
-		panic("Stream is not a *FILENULL")
+		panic("Stream is not a *FILEMEM")
 	}
 
 	if offset > resData.Size {
@@ -1431,7 +1431,7 @@ func MemorySeek(iohandler *cms_io_handler, offset uint32) bool {
 func MemoryTell(iohandler *cms_io_handler) uint32 {
 	resData, ok := iohandler.Stream.(*FILEMEM)
 	if !ok {
-		panic("Stream is not a *FILENULL")
+		panic("Stream is not a *FILEMEM")
 	}
 	return resData.Pointer
 }
@@ -1440,7 +1440,7 @@ func MemoryTell(iohandler *cms_io_handler) uint32 {
 func MemoryWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 	resData, ok := iohandler.Stream.(*FILEMEM)
 	if !ok {
-		panic("Stream is not a *FILENULL")
+		panic("Stream is not a *FILEMEM")
 	}
 
 	// Check for available space
@@ -1469,7 +1469,7 @@ func MemoryWrite(iohandler *cms_io_handler, size uint32, ptr []byte) bool {
 func MemoryClose(iohandler *cms_io_handler) bool {
 	resData, ok := iohandler.Stream.(*FILEMEM)
 	if !ok {
-		panic("Stream is not a *FILENULL")
+		panic("Stream is not a *FILEMEM")
 	}
 
 	if resData.FreeBlockOnClose {
@@ -1673,7 +1673,7 @@ func FileRead(iohandler *cms_io_handler, buffer any, size, count uint32) uint32 
 	//	fmt.Println("fileread")
 	file, ok := iohandler.Stream.(*os.File)
 	if !ok {
-		panic("Stream is not a *FILENULL")
+		panic("Stream is not a *os.File")
 	}
 	totalBytes := int(size * count)
 
@@ -1782,7 +1782,7 @@ func FileWrite(iohandler *cms_io_handler, size uint32, buffer []byte) bool {
 func FileClose(iohandler *cms_io_handler) bool {
 	file, ok := iohandler.Stream.(*os.File)
 	if !ok {
-		panic("Stream is not a *FILENULL, do nothing")
+		panic("Stream is not a *os.File, do nothing")
 
 	}
 

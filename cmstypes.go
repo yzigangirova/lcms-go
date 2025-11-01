@@ -138,8 +138,8 @@ func ReadPositionTable(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER
 	}
 
 	// Allocate memory for offsets and sizes
-	elementOffsets = mem.MakeSlice[uint32](mem.Manager{}, int(count))
-	elementSizes = mem.MakeSlice[uint32](mem.Manager{}, int(count))
+	elementOffsets = mem.MakeSlice[uint32](mm, int(count))
+	elementSizes = mem.MakeSlice[uint32](mm, int(count))
 
 	// Read the offsets and sizes
 	for i := uint32(0); i < count; i++ {
@@ -1394,7 +1394,7 @@ func TypeU16Fixed16Read(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLE
 	n := sizeOfTag / uint32(unsafe.Sizeof(uint32(0)))
 	// Allocate memory for the array
 	arrayDouble := mem.MakeSlice[float64](mm, int(n))
-
+	*nItems = 0
 	for i := uint32(0); i < n; i++ {
 		var v uint32
 		if !cmsReadUInt32Number(io, &v) {
@@ -2464,7 +2464,7 @@ func TypeColorantTableRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHAN
 			goto Error
 		}
 		nameStr := string(name[:bytes.IndexByte(name[:], 0)])
-		if !cmsAppendNamedColor(list, nameStr, &pcs, nil) {
+		if !cmsAppendNamedColor(mm,list, nameStr, &pcs, nil) {
 			goto Error
 		}
 	}
@@ -2617,7 +2617,7 @@ func TypeNamedColorRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLE
 		}
 
 		rootStr := string(root[:bytes.IndexByte(root[:], 0)])
-		if !cmsAppendNamedColor(namedColorList, rootStr, &pcs, &colorant) {
+		if !cmsAppendNamedColor(mm,namedColorList, rootStr, &pcs, &colorant) {
 			goto Error
 		}
 	}
@@ -2692,26 +2692,27 @@ func TypeNamedColorFree(mm mem.Manager, self *cmsTagTypeHandler, ptr any) {
 // typically used with the DeviceLink profile.
 func ReadEmbeddedText(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, mlu **cmsMLU, sizeOfTag uint32) bool {
 	baseType := cmsReadTypeBase(io)
+	var nItems uint32
 	switch baseType {
 	case CmsSigTextType:
 		if *mlu != nil {
 			cmsMLUfree(*mlu)
 		}
-		*mlu = TypeTextRead(mm, self, io, new(uint32), sizeOfTag).(*cmsMLU)
+		*mlu = TypeTextRead(mm, self, io, &nItems, sizeOfTag).(*cmsMLU)
 		return *mlu != nil
 
 	case CmsSigTextDescriptionType:
 		if *mlu != nil {
 			cmsMLUfree(*mlu)
 		}
-		*mlu = TypeTextDescriptionRead(mm, self, io, new(uint32), sizeOfTag).(*cmsMLU)
+		*mlu = TypeTextDescriptionRead(mm, self, io, &nItems, sizeOfTag).(*cmsMLU)
 		return *mlu != nil
 
 	case CmsSigMultiLocalizedUnicodeType:
 		if *mlu != nil {
 			cmsMLUfree(*mlu)
 		}
-		*mlu = TypeMLURead(mm, self, io, new(uint32), sizeOfTag).(*cmsMLU)
+		*mlu = TypeMLURead(mm, self, io, &nItems, sizeOfTag).(*cmsMLU)
 		return *mlu != nil
 
 	default:
@@ -3737,12 +3738,12 @@ func ReadCLUT(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, offset,
 }
 func ReadEmbeddedCurve(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER) *CmsToneCurve {
 	baseType := cmsReadTypeBase(io)
-
+	var nItems uint32
 	switch baseType {
 	case CmsSigCurveType:
-		return TypeCurveRead(mm, self, io, nil, 0).(*CmsToneCurve)
+		return TypeCurveRead(mm, self, io, &nItems, 0).(*CmsToneCurve)
 	case CmsSigParametricCurveType:
-		return TypeParametricCurveRead(mm, self, io, nil, 0).(*CmsToneCurve)
+		return TypeParametricCurveRead(mm, self, io, &nItems, 0).(*CmsToneCurve)
 	default:
 		//	str := cmsTagSignature2String(sig)
 		cmsSignalError(self.ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unknown curve type ")
@@ -4198,9 +4199,9 @@ type cmsDICarray struct {
 }
 
 // Allocate an empty array element
-func AllocElem(contextID CmsContext, e *cmsDICelem, count uint32) bool {
-	e.Offsets = mem.MakeSlice[uint32](mem.Manager{}, int(count))
-	e.Sizes = mem.MakeSlice[uint32](mem.Manager{}, int(count))
+func AllocElem(mm mem.Manager, contextID CmsContext, e *cmsDICelem, count uint32) bool {
+	e.Offsets = mem.MakeSlice[uint32](mm, int(count))
+	e.Sizes = mem.MakeSlice[uint32](mm, int(count))
 
 	e.ContextID = contextID
 	return e.Offsets != nil && e.Sizes != nil
@@ -4221,19 +4222,19 @@ func FreeArray(a *cmsDICarray) {
 }
 
 // Allocate the entire array
-func AllocArray(contextID CmsContext, a *cmsDICarray, count uint32, length uint32) bool {
+func AllocArray(mm mem.Manager, contextID CmsContext, a *cmsDICarray, count uint32, length uint32) bool {
 	*a = cmsDICarray{}
-	if !AllocElem(contextID, &a.Name, count) || !AllocElem(contextID, &a.Value, count) {
+	if !AllocElem(mm,contextID, &a.Name, count) || !AllocElem(mm,contextID, &a.Value, count) {
 		goto Error
 	}
 
 	if length > 16 {
-		if !AllocElem(contextID, &a.DisplayName, count) {
+		if !AllocElem(mm,contextID, &a.DisplayName, count) {
 			goto Error
 		}
 	}
 	if length > 24 {
-		if !AllocElem(contextID, &a.DisplayValue, count) {
+		if !AllocElem(mm,contextID, &a.DisplayValue, count) {
 			goto Error
 		}
 	}
@@ -4391,7 +4392,7 @@ func TypeDictionaryRead(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLE
 	// Create an empty dictionary
 	hDict = cmsDictAlloc(mm, self.ContextID)
 	// Allocate column arrays
-	if !AllocArray(self.ContextID, &a, count, length) {
+	if !AllocArray(mm,self.ContextID, &a, count, length) {
 		goto Error
 	}
 
@@ -4489,7 +4490,7 @@ func TypeDictionaryWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDL
 
 	// Allocate and write offsets
 	directoryPos = uint32(io.Tell((*cms_io_handler)(io)))
-	if !AllocArray(self.ContextID, &a, count, length) || !WriteOffsetArray(io, &a, count, length) {
+	if !AllocArray(mm,self.ContextID, &a, count, length) || !WriteOffsetArray(io, &a, count, length) {
 		goto Error
 	}
 
@@ -4722,7 +4723,7 @@ func TypeVcgtWrite(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLER, pt
 
 		for i := 0; i < 3; i++ {
 			for j := 0; j < 256; j++ {
-				value := cmsEvalToneCurveFloat(curves[i], float32(j)/255.0)
+				value := cmsEvalToneCurveFloat(mm,curves[i], float32(j)/255.0)
 				saturated := cmsQuickSaturateWord(float64(value * 65535.0))
 
 				if !cmsWriteUInt16Number(io, saturated) {
@@ -4872,7 +4873,7 @@ func ReadSegmentedCurve(mm mem.Manager, self *cmsTagTypeHandler, io *cmsIOHANDLE
 	// Fix implicit points
 	for i := uint32(0); i < uint32(nSegments); i++ {
 		if curve.Segments[i].Type == 0 {
-			curve.Segments[i].SampledPoints[0] = cmsEvalToneCurveFloat(curve, curve.Segments[i].X0)
+			curve.Segments[i].SampledPoints[0] = cmsEvalToneCurveFloat(mm,curve, curve.Segments[i].X0)
 		}
 	}
 

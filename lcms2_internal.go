@@ -1,10 +1,9 @@
 package golcms
 
 import (
-	"arena"
+	//"arena"
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -206,7 +205,7 @@ func cmsLeaveCriticalSectionPrimitive(m *cmsMutex) int {
 
 // cmsTRANSFORM represents the translation of the C struct cmsTRANSFORM in Go.
 type cmsTRANSFORM struct {
-	Ar              *arena.Arena
+	mem_manager     mem.Manager
 	InputFormat     uint32                 // uint32
 	OutputFormat    uint32                 // uint32
 	Xform           cmsTransform2Fn        // cmsTransform2Fn (function pointer, requires C interop)
@@ -236,13 +235,6 @@ type cmsTRANSFORM struct {
 	WorkerFlags     uint32                 // uint32
 }
 
-func (tr *cmsTRANSFORM) DestroyArena() {
-	fmt.Println("DestroyArena")
-	if tr.Ar != nil {
-		fmt.Println("freeing arena")
-		tr.Ar.Free()
-	}
-}
 
 // Named color list internal representation
 type cmsNAMEDCOLOR struct {
