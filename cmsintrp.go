@@ -157,8 +157,6 @@ func LinearInterp(a, l, h int32) uint16 {
 }
 
 // Linear interpolation (Fixed-point optimized)
-
-// Linear interpolation (Fixed-point optimized)
 func LinLerp1D(mm mem.Manager, Value, Output []uint16, p *cmsInterpParams) {
 	var y1, y0 uint16
 	var val3, cell0, rest int32
@@ -230,6 +228,41 @@ func LinLerp1Dfloat(mm mem.Manager, Value []float32, Output []float32, p *cmsInt
 
 		Output[0] = y0 + (y1-y0)*rest
 	}
+}
+
+// Scalar, fixed-point path (uint16 -> uint16)
+func LinLerp1DScalar16(v uint16, p *cmsInterpParams) uint16 {
+	// Table is []uint16, domain is number of intervals (so last node is Domain[0])
+	LutTable, ok := p.Table.([]uint16)
+	if !ok {
+		panic("p.Table is not of type []uint16 in LinLerp1DScalar16")
+	}
+
+	// If last value or degenerate domain => return last node
+	if v == 0xFFFF || p.Domain[0] == 0 {
+		idx := int(p.Domain[0])
+		if idx < 0 || idx >= len(LutTable) {
+			panic("LinLerp1DScalar16: last index out of range")
+		}
+		return LutTable[idx]
+	}
+
+	// Scale to table domain and convert to 15.16 fixed
+	val := uint32(p.Domain[0]) * uint32(v)     // up to ~65535*65535, fits in uint32
+	fixed := int32(cmsToFixedDomain(int(val))) // 15.16 fixed
+
+	cell0 := int32(FIXED_TO_INT(cmsS15Fixed16Number(fixed)))     // integer part
+	rest := int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fixed))) // fractional (0..65535)
+
+	// Bounds: we need cell0 and cell0+1 valid
+	if cell0 < 0 || int(cell0)+1 >= len(LutTable) {
+		panic("LinLerp1DScalar16: interpolation index out of range")
+	}
+
+	y0 := int32(LutTable[cell0])
+	y1 := int32(LutTable[cell0+1])
+
+	return LinearInterp(rest, y0, y1)
 }
 
 // Eval1Input performs 1D interpolation for a single input.
@@ -2413,11 +2446,11 @@ func DefaultInterpolatorsFactory(nInputChannels, nOutputChannels, dwFlags uint32
 	case 1: // Gray LUT / linear
 
 		if nOutputChannels == 1 {
-
 			if IsFloat {
 				Interpolation.LerpFloat = LinLerp1Dfloat
 			} else {
 				Interpolation.Lerp16 = LinLerp1D
+				Interpolation.Lerp16Scalar = LinLerp1DScalar16 // NEW
 			}
 		} else {
 			if IsFloat {

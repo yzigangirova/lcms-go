@@ -611,7 +611,7 @@ func BlackPreservingGrayOnlySampler(mm mem.Manager, In []uint16, Out []uint16, c
 	if In[0] == 0 && In[1] == 0 && In[2] == 0 {
 		// TAC does not apply because it is black ink!
 		Out[0], Out[1], Out[2] = 0, 0, 0
-		Out[3] = cmsEvalToneCurve16(mm,bp.KTone, In[3])
+		Out[3] = cmsEvalToneCurve16(mm, bp.KTone, In[3])
 		return int32(1)
 	}
 
@@ -765,7 +765,7 @@ func BlackPreservingSampler(mm mem.Manager, In, Out []uint16, cargo any) int32 {
 	}
 
 	// Get the K across Tone curve
-	LabK[3] = cmsEvalToneCurveFloat(mm,bp.KTone, Inf[3])
+	LabK[3] = cmsEvalToneCurveFloat(mm, bp.KTone, Inf[3])
 
 	// If going across black only, keep black only
 	if In[0] == 0 && In[1] == 0 && In[2] == 0 {
@@ -948,10 +948,10 @@ Cleanup:
 		cmsPipelineFree(mm, bp.Cmyk2Cmyk)
 	}
 	if bp.Cmyk2Lab != nil {
-		cmsDeleteTransform(mm, bp.Cmyk2Lab)
+		CmsDeleteTransform(bp.Cmyk2Lab)
 	}
 	if bp.HProofOutput != nil {
-		cmsDeleteTransform(mm, bp.HProofOutput)
+		CmsDeleteTransform(bp.HProofOutput)
 	}
 	if bp.KTone != nil {
 		CmsFreeToneCurve(bp.KTone)

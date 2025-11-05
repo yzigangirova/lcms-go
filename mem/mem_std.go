@@ -11,6 +11,11 @@ type Scratch struct {
 	LUT   [2][]float32 // len == MaxScratchChannels
 	In16  []uint16     // len == MaxScratchChannels
 	Out16 []uint16     // len == MaxScratchChannels
+	  // new: tiny, tone-curve-only buffers, never used elsewhere
+    ToneInU16  [1]uint16
+    ToneOutU16 [1]uint16
+    ToneInF32  [1]float32
+    ToneOutF32 [1]float32
 }
 
 // Manager carries one reusable Scratch bundle (heap-backed).

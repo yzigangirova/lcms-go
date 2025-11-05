@@ -295,7 +295,7 @@ func BlackPointAsDarkerColorant(mm mem.Manager, hInput CmsHPROFILE, Intent uint3
 	}
 
 	// Free the resources.
-	cmsDeleteTransform(mm, xform)
+	CmsDeleteTransform(xform)
 
 	// Convert from Lab (now clipped) to XYZ.
 	cmsLab2XYZ(nil, &BlackXYZ, &Lab)
@@ -345,7 +345,7 @@ func BlackPointUsingPerceptualBlack(mm mem.Manager, BlackPoint *cmsCIEXYZ, hProf
 	LabOut.a, LabOut.b = 0, 0
 
 	// Free the transformation resource
-	cmsDeleteTransform(mm, hRoundTrip)
+	CmsDeleteTransform(hRoundTrip)
 
 	// Convert the output Lab to XYZ
 	cmsLab2XYZ(nil, &BlackXYZ, &LabOut)
@@ -580,7 +580,7 @@ func cmsDetectDestinationBlackPoint(mm mem.Manager, BlackPoint *cmsCIEXYZ, hProf
 
 	// Validate monotonicity
 	if !(outRamp[0] < outRamp[255]) {
-		cmsDeleteTransform(mm, hRoundTrip)
+		CmsDeleteTransform(hRoundTrip)
 		if BlackPoint != nil {
 			BlackPoint.X, BlackPoint.Y, BlackPoint.Z = 0.0, 0.0, 0.0
 		}
@@ -600,7 +600,7 @@ func cmsDetectDestinationBlackPoint(mm mem.Manager, BlackPoint *cmsCIEXYZ, hProf
 
 		if NearlyStraightMidrange {
 			cmsLab2XYZ(nil, BlackPoint, &InitialLab)
-			cmsDeleteTransform(mm, hRoundTrip)
+			CmsDeleteTransform(hRoundTrip)
 			return true
 		}
 	}
@@ -629,7 +629,7 @@ func cmsDetectDestinationBlackPoint(mm mem.Manager, BlackPoint *cmsCIEXYZ, hProf
 
 	// Validate points
 	if n < 3 {
-		cmsDeleteTransform(mm, hRoundTrip)
+		CmsDeleteTransform(hRoundTrip)
 		if BlackPoint != nil {
 			BlackPoint.X, BlackPoint.Y, BlackPoint.Z = 0.0, 0.0, 0.0
 		}
@@ -646,7 +646,7 @@ func cmsDetectDestinationBlackPoint(mm mem.Manager, BlackPoint *cmsCIEXYZ, hProf
 	Lab.b = InitialLab.b
 	cmsLab2XYZ(nil, BlackPoint, &Lab)
 
-	cmsDeleteTransform(mm, hRoundTrip)
+	CmsDeleteTransform(hRoundTrip)
 	//fmt("end cmsDetectDestinationBlackPoint\n")
 
 	return true

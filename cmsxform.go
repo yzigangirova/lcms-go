@@ -149,25 +149,24 @@ func cmsAllocAlarmCodesChunk(mm mem.Manager, ctx CmsContext, src CmsContext) {
 // -----------------------------------------------------------------------
 
 // cmsDeleteTransform releases the resources associated with a transform.
-func cmsDeleteTransform(mm mem.Manager, hTransform CmsHTRANSFORM) {
+func CmsDeleteTransform(hTransform CmsHTRANSFORM) {
 	//fmt.Println("cmsDeleteTransform")
 	p := hTransform.(*cmsTRANSFORM)
 
 	if p == nil {
 		return
 	}
-	mm = p.mem_manager // use the canonical manager that did the allocations
 
 	// Free GamutCheck pipeline if it exists
 	if p.GamutCheck != nil {
-		cmsPipelineFree(mm, p.GamutCheck)
+		cmsPipelineFree(p.mem_manager, p.GamutCheck)
 	}
 
 	// Free the LUT pipeline if it exists
 	if p.Lut != nil {
 		//	fmt.Printf(" cmsPipelineFree pipeline ptr = %p\n", p.Lut)
 
-		cmsPipelineFree(mm, p.Lut)
+		cmsPipelineFree(p.mem_manager, p.Lut)
 	}
 
 	// Free input named color list if it exists
@@ -193,8 +192,6 @@ func cmsDeleteTransform(mm mem.Manager, hTransform CmsHTRANSFORM) {
 	// Finally, free the transform object itself
 	cmsFree(p.ContextID, p)
 
-	// If  created an arena-backed Manager, this releases it:
-	p.mem_manager.FreeAll()
 }
 
 // PixelSize calculates the size of a pixel in bytes based on its format.
@@ -245,10 +242,7 @@ func CmsDoTransformStride(mm mem.Manager,
 	InputBuffer, OutputBuffer any,
 	Size uint32,
 	Stride uint32) {
-	/*	if ar == nil {
-		ar = arena.NewArena()
-		defer ar.Free()
-	}*/
+
 	p := Transform.(*cmsTRANSFORM)
 	//the main memory manager is stored inside cmsTransform.  The separate memory manager for each
 	//cmsDoTransform may be provided for concurrent transforming
@@ -275,10 +269,7 @@ func CmsDoTransformLineStride(mm mem.Manager,
 	BytesPerLineOut uint32,
 	BytesPerPlaneIn uint32,
 	BytesPerPlaneOut uint32) {
-	/*	if ar == nil {
-		ar = arena.NewArena()
-		defer ar.Free()
-	}*/
+
 	p := Transform.(*cmsTRANSFORM)
 	//the main memory manager is stored inside cmsTransform.  The separate memory manager for each
 	//cmsDoTransform may be provided for concurrent transforming
@@ -1389,7 +1380,7 @@ func AllocEmptyTransform(mm mem.Manager,
 
 		if p.FromInputFloat == nil || p.ToOutputFloat == nil {
 			cmsSignalError(ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unsupported raster format")
-			cmsDeleteTransform(mm, CmsHTRANSFORM(p))
+			CmsDeleteTransform(CmsHTRANSFORM(p))
 			return nil
 		}
 
@@ -1410,7 +1401,7 @@ func AllocEmptyTransform(mm mem.Manager,
 
 			if p.FromInput == nil || p.ToOutput == nil {
 				cmsSignalError(ContextID, cmsERROR_UNKNOWN_EXTENSION, "Unsupported raster format")
-				cmsDeleteTransform(mm, CmsHTRANSFORM(p))
+				CmsDeleteTransform(CmsHTRANSFORM(p))
 				return nil
 			}
 
@@ -1772,7 +1763,7 @@ func cmsCreateTransformTHR(mm mem.Manager,
 	return cmsCreateMultiprofileTransformTHR(mm, ContextID, hProfiles, nProfiles, InputFormat, OutputFormat, Intent, dwFlags)
 }
 
-func CmsCreateTransform(
+func CmsCreateTransform(mm mem.Manager,
 	Input CmsHPROFILE,
 	InputFormat uint32,
 	Output CmsHPROFILE,
@@ -1780,8 +1771,9 @@ func CmsCreateTransform(
 	Intent uint32,
 	dwFlags uint32,
 ) CmsHTRANSFORM {
-	//  fmt.Println("start CmsCreateTransform")
-	mm := mem.NewManager() // or NewArena(), depending
+	if mm.IsZero() {
+		panic("CmsCreateTransform: zero mem.Manager (call mem.NewManager() or mem.NewArena())")
+	}
 
 	return cmsCreateTransformTHR(mm, cmsGetProfileContextID(Input), Input, InputFormat, Output, OutputFormat, Intent, dwFlags)
 	//fmt.Println("end CmsCreateTransform")

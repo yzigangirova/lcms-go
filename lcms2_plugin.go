@@ -52,20 +52,21 @@ const (
 
 // Maximum input dimensions for interpolation
 const MAX_INPUT_DIMENSIONS = 15
-
-// _cmsInterpFn16 is a function type for 16-bit interpolation functions.
-// Performs precision-limited linear interpolation (e.g., tetrahedral or trilinear).
-type cmsInterpFn16 func(mm mem.Manager, input []uint16, output []uint16, params *cmsInterpParams)
-
-// _cmsInterpFnFloat is a function type for floating-point interpolation functions.
-// Performs full-precision interpolation (e.g., tetrahedral or trilinear).
+// Existing:
+type cmsInterpFn16   func(mm mem.Manager, input []uint16, output []uint16, params *cmsInterpParams)
 type cmsInterpFnFloat func(mm mem.Manager, input []float32, output []float32, params *cmsInterpParams)
 
-// cmsInterpFunction holds either a 16-bit or floating-point interpolation function.
+// NEW: single-sample fast paths (no slices)
+type cmsInterpFn16Scalar   func(v uint16,  params *cmsInterpParams) uint16
+type cmsInterpFnFloatScalar func(v float32, params *cmsInterpParams) float32
+
 type cmsInterpFunction struct {
-	Lerp16    cmsInterpFn16
-	LerpFloat cmsInterpFnFloat
+    Lerp16           cmsInterpFn16
+    LerpFloat        cmsInterpFnFloat
+    // Optional fast paths — present only when the mapping is 1→1 (tone curves).
+    Lerp16Scalar     cmsInterpFn16Scalar
 }
+
 
 // cmsInterpParams represents the parameters for interpolation.
 type cmsInterpParams struct {
