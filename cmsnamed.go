@@ -271,7 +271,7 @@ func _cmsMLUgetWide(
 				if entry.StrW+entry.Len > mlu.PoolSize {
 					return nil
 				}
-				return bytesToUint16Slice(memPool[entry.StrW : entry.StrW+entry.Len])
+				return BytesToUint16sLE(memPool[entry.StrW : entry.StrW+entry.Len])
 			}
 		}
 	}
@@ -294,7 +294,7 @@ func _cmsMLUgetWide(
 	if entry.StrW+entry.Len > mlu.PoolSize {
 		return nil
 	}
-	return bytesToUint16Slice(memPool[entry.StrW : entry.StrW+entry.Len])
+	return BytesToUint16sLE(memPool[entry.StrW : entry.StrW+entry.Len])
 }
 func cmsMLUgetWide(
 	mlu *cmsMLU,

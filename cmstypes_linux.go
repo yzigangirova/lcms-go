@@ -60,7 +60,7 @@ func ReadOneWChar(io *cmsIOHANDLER, e *cmsDICelem, i uint32) (string, bool) {
 	nChars := e.Sizes[i] / 2 // 2 bytes per character for UTF-16
 
 	// Read the string data
-	rawData := mem.MakeSlice[uint16, nChars)
+	rawData := make([]uint16, nChars)
 	if !cmsReadUInt16Array(io, nChars, rawData) {
 		return "", false
 	}

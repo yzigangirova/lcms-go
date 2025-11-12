@@ -292,6 +292,8 @@ type cmsStage struct {
 type cmsStageEvalFn func(mm mem.Manager, In []float32, Out []float32, mpe *cmsStage)
 type cmsStageDupElemFn func(mm mem.Manager, mpe *cmsStage) any
 type cmsStageFreeElemFn func(mm mem.Manager, mpe *cmsStage)
+type Lerp16Fn = func(mm mem.Manager, in, out []uint16, p *cmsInterpParams)
+
 
 type cmsPipeline struct {
 	Elements       *cmsStage // Points to elements chain
@@ -300,6 +302,9 @@ type cmsPipeline struct {
 
 	// Data & evaluators
 	Data any
+   // NEW: fast typed path (no interface{}, no closure)
+    fastEval16  Lerp16Fn
+    fastParams  *cmsInterpParams
 
 	Eval16Fn    cmsPipelineEval16Fn
 	EvalFloatFn cmsPipelineEvalFloatFn

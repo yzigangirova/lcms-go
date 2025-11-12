@@ -2,6 +2,7 @@ package golcms
 
 import (
 	//"errors"
+	"fmt"
 	"math"
 	"unsafe"
 )
@@ -734,6 +735,12 @@ func cmsHandleExtraChannels(
 	LineCount uint32,
 	Stride *cmsStride,
 ) {
+
+	// Check if alpha copying is needed
+	if p.DwOriginalFlags&CmsFLAGS_COPY_ALPHA == 0 {
+		return
+	}
+	fmt.Println("222 cmsHandleExtraChannels")
 	var (
 		SourceStartingOrder [cmsMAXCHANNELS]uint32
 		SourceIncrements    [cmsMAXCHANNELS]uint32
@@ -741,10 +748,6 @@ func cmsHandleExtraChannels(
 		DestIncrements      [cmsMAXCHANNELS]uint32
 	)
 
-	// Check if alpha copying is needed
-	if p.DwOriginalFlags&CmsFLAGS_COPY_ALPHA == 0 {
-		return
-	}
 	// Type assertion for input and output
 	inBytes, okIn := in.([]byte)
 	outBytes, okOut := out.([]byte)

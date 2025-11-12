@@ -8,14 +8,18 @@ const MaxScratchChannels = 128 //== MAX_STAGE_CHANNELS in lcms
 // Scratch holds reusable working buffers for hot paths.
 // Preallocated once when the Manager is created.
 type Scratch struct {
-	LUT   [2][]float32 // len == MaxScratchChannels
-	In16  []uint16     // len == MaxScratchChannels
-	Out16 []uint16     // len == MaxScratchChannels
-	  // new: tiny, tone-curve-only buffers, never used elsewhere
-    ToneInU16  [1]uint16
-    ToneOutU16 [1]uint16
-    ToneInF32  [1]float32
-    ToneOutF32 [1]float32
+	LUT     [2][]float32 // len == MaxScratchChannels
+	In16    []uint16     // len == MaxScratchChannels
+	Out16   []uint16     // len == MaxScratchChannels
+	WInU16  []uint16     // len == MaxScratchChannelsShort
+	WOutU16 []uint16     // len == MaxScratchChannelsShort
+	WInF32  []float32    // len == MaxScratchChannelsShort
+	WOutF32 []float32    // len == MaxScratchChannelsShort
+	// new: tiny, tone-curve-only buffers, never used elsewhere
+	ToneInU16  [1]uint16
+	ToneOutU16 [1]uint16
+	ToneInF32  [1]float32
+	ToneOutF32 [1]float32
 }
 
 // Manager carries one reusable Scratch bundle (heap-backed).
@@ -31,10 +35,14 @@ func NewManager() Manager {
 			make([]float32, MaxScratchChannels),
 			make([]float32, MaxScratchChannels),
 		},
-		In16:        make([]uint16, MaxScratchChannels),
-		Out16:       make([]uint16, MaxScratchChannels),
-		Tmp1U16:  make([]uint16, MaxScratchChannels),  // len == MaxScratchChannels
-		Tmp2U16:  make([]uint16, MaxScratchChannels),  // len == MaxScratchChannels
+		In16:    make([]uint16, MaxScratchChannels),
+		Out16:   make([]uint16, MaxScratchChannels),
+		wInU16:  make([]uint16, MaxScratchChannelsShort),
+		wOutU16: make([]uint16, MaxScratchChannelsShort),
+		wInF32:  make([]float32, MaxScratchChannelsShort),
+		wOutF32: make([]float32, MaxScratchChannelsShort),
+		Tmp1U16: make([]uint16, MaxScratchChannels),  // len == MaxScratchChannels
+		Tmp2U16: make([]uint16, MaxScratchChannels),  // len == MaxScratchChannels
 		Tmp1F32: make([]float32, MaxScratchChannels), // len == MaxScratchChannels
 		Tmp2F32: make([]float32, MaxScratchChannels), // len == MaxScratchChannels
 
@@ -57,6 +65,7 @@ func (Manager) FreeAll() {}
 
 // Compatibility stub — there is no arena here; return nil.
 func (Manager) GerArenaPtr() any { return nil }
+
 // IsZero reports whether the Manager has no backing state.
 // Passing a zero Manager means "please use the transform's manager".
 func (m Manager) IsZero() bool { return m.Scratch() == nil || m.Sc == nil }

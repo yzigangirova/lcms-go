@@ -1081,6 +1081,10 @@ func cmsPipelineGetPtrToLastStage(lut *cmsPipeline) *cmsStage {
 	}
 	return prev
 }
+func cmsPipelineSetFastOptimization(dst *cmsPipeline, eval Lerp16Fn, params *cmsInterpParams) {
+	dst.fastEval16 = eval
+	dst.fastParams = params
+}
 
 // This function may be used to set the optional evaluator and a block of private data. If private data is being used, an optional
 // duplicator and free functions should also be specified in order to duplicate the LUT construct. Use nil to inhibit such functionality.

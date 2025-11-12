@@ -678,11 +678,16 @@ func OptimizeByResampling(mm mem.Manager, Lut **cmsPipeline, Intent uint32, Inpu
 	}
 
 	if DataSetIn == nil && DataSetOut == nil {
-		cmsPipelineSetOptimizationParameters(Dest,
-			func(mm mem.Manager, In, Out []uint16, Data any) {
-				Data.(*cmsInterpParams).Interpolation.Lerp16(mm, In, Out, Data.(*cmsInterpParams))
-			},
-			DataCLUT.Params, nil, nil)
+		/*cmsPipelineSetOptimizationParameters(Dest,
+		func(mm mem.Manager, In, Out []uint16, Data any) {
+			Data.(*cmsInterpParams).Interpolation.Lerp16(mm, In, Out, Data.(*cmsInterpParams))
+		},
+		DataCLUT.Params, nil, nil)*/
+		cmsPipelineSetFastOptimization(
+			Dest,
+			DataCLUT.Params.Interpolation.Lerp16, // e.g., Eval4Inputs
+			DataCLUT.Params,
+		)
 
 	} else {
 
@@ -1506,13 +1511,13 @@ func SetMatShaper(mm mem.Manager, Dest *cmsPipeline, Curve1 [3]*CmsToneCurve, Ma
 	p.ContextID = Dest.ContextID
 
 	// Fill the first and second shapers
-	FillFirstShaper(mm,p.Shaper1R[:], Curve1[0])
-	FillFirstShaper(mm,p.Shaper1G[:], Curve1[1])
-	FillFirstShaper(mm,p.Shaper1B[:], Curve1[2])
+	FillFirstShaper(mm, p.Shaper1R[:], Curve1[0])
+	FillFirstShaper(mm, p.Shaper1G[:], Curve1[1])
+	FillFirstShaper(mm, p.Shaper1B[:], Curve1[2])
 
-	FillSecondShaper(mm,p.Shaper2R[:], Curve2[0], cmsFormatterIs8bit(*OutputFormat))
-	FillSecondShaper(mm,p.Shaper2G[:], Curve2[1], cmsFormatterIs8bit(*OutputFormat))
-	FillSecondShaper(mm,p.Shaper2B[:], Curve2[2], cmsFormatterIs8bit(*OutputFormat))
+	FillSecondShaper(mm, p.Shaper2R[:], Curve2[0], cmsFormatterIs8bit(*OutputFormat))
+	FillSecondShaper(mm, p.Shaper2G[:], Curve2[1], cmsFormatterIs8bit(*OutputFormat))
+	FillSecondShaper(mm, p.Shaper2B[:], Curve2[2], cmsFormatterIs8bit(*OutputFormat))
 
 	// Convert the matrix to fixed-point representation
 	for i := 0; i < 3; i++ {

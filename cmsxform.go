@@ -5,8 +5,8 @@ import (
 	"unsafe"
 	//"sync"
 
-	"bytes"
-	"encoding/binary"
+	//"bytes"
+	//"encoding/binary"
 
 	"github.com/yzigangirova/lcms-go/mem"
 )
@@ -300,7 +300,9 @@ func FloatXFORM(mm mem.Manager,
 
 	//fmt.Println("FloatXFORM")
 
-	var fIn, fOut [cmsMAXCHANNELS]float32
+	sc := mm.Scratch()
+	fIn := sc.WInF32
+	fOut := sc.WOutF32
 	var OutOfGamut float32
 	var strideIn, strideOut uint32
 	var inBytes, outBytes []byte
@@ -312,16 +314,16 @@ func FloatXFORM(mm mem.Manager,
 	case []byte:
 		inBytes = v
 	case []float32:
-		inBytes = float32SliceToBytes(v)
+		inBytes = Float32sToBytesLE(v)
 	case []float64:
 		/*	fmt.Printf("v[0] %.7f\n", v[0])
 			fmt.Printf("v[1] %.7f\n", v[1])
 			fmt.Printf("v[2] %.7f\n", v[2])*/
-		inBytes = float64SliceToBytes(v)
+		inBytes = Float64sToBytesLE(v)
 	case []uint16:
-		inBytes = uint16SliceToBytes(v)
+		inBytes = Uint16sToBytesLE(v)
 	case *cmsCIELab:
-		inBytes = float64SliceToBytes(LabToSlice(*v))
+		inBytes = Float64sToBytesLE(LabToSlice(*v))
 	default:
 		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16 , or *cmsCIELab")
 	}
@@ -331,13 +333,13 @@ func FloatXFORM(mm mem.Manager,
 	case []byte:
 		outBytes = v
 	case []float32:
-		outBytes = float32SliceToBytes(v)
+		outBytes = Float32sToBytesLE(v)
 	case []float64:
-		outBytes = float64SliceToBytes(v)
+		outBytes = Float64sToBytesLE(v)
 	case []uint16:
-		outBytes = uint16SliceToBytes(v)
+		outBytes = Uint16sToBytesLE(v)
 	case *cmsCIELab:
-		outBytes = float64SliceToBytes(LabToSlice(*v))
+		outBytes = Float64sToBytesLE(LabToSlice(*v))
 	default:
 		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
@@ -393,35 +395,31 @@ func FloatXFORM(mm mem.Manager,
 		//  Update strides correctly
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
-	}
-	//fmt.Println("outBytes ", outBytes)
-	/*fmt.Printf("outBytes[0] %d\n", outBytes[0])
-	fmt.Printf("outBytes[1] %d\n", outBytes[1])
-	fmt.Printf("outBytes[2] %d\n", outBytes[2])*/
 
+		//fmt.Println("outBytes ", outBytes)
+		/*fmt.Printf("outBytes[0] %d\n", outBytes[0])
+		fmt.Printf("outBytes[1] %d\n", outBytes[1])
+		fmt.Printf("outBytes[2] %d\n", outBytes[2])*/
+	}
 	switch v := out.(type) {
 	case []byte:
 		copy(v, outBytes)
+
 	case []float32:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoFloat32Slice(v, outBytes)
+
 	case []float64:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoFloat64Slice(v, outBytes)
+
 	case []uint16:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoUint16Slice(v, outBytes)
+
 	case *cmsCIELab:
 		lab := bytesToLab(outBytes)
 		v.L = lab.L
 		v.a = lab.a
 		v.b = lab.b
+
 	default:
 		panic("Unsupported type in FloatXFORM output finalization")
 	}
@@ -436,7 +434,8 @@ func NullFloatXFORM(mm mem.Manager,
 ) {
 	//fmt.Println("NullXFORM ")
 
-	var fIn [cmsMAXCHANNELS]float32
+	sc := mm.Scratch()
+	fIn := sc.WInF32
 	var strideIn, strideOut uint32
 	var accum, output []byte
 	var inBytes, outBytes []byte
@@ -446,16 +445,16 @@ func NullFloatXFORM(mm mem.Manager,
 	case []byte:
 		inBytes = v
 	case []float32:
-		inBytes = float32SliceToBytes(v)
+		inBytes = Float32sToBytesLE(v)
 	case []float64:
 		/*	fmt.Printf("v[0] %.7f\n", v[0])
 			fmt.Printf("v[1] %.7f\n", v[1])
 			fmt.Printf("v[2] %.7f\n", v[2])*/
-		inBytes = float64SliceToBytes(v)
+		inBytes = Float64sToBytesLE(v)
 	case []uint16:
-		inBytes = uint16SliceToBytes(v)
+		inBytes = Uint16sToBytesLE(v)
 	case *cmsCIELab:
-		inBytes = float64SliceToBytes(LabToSlice(*v))
+		inBytes = Float64sToBytesLE(LabToSlice(*v))
 	default:
 		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16 , or *cmsCIELab")
 	}
@@ -465,13 +464,13 @@ func NullFloatXFORM(mm mem.Manager,
 	case []byte:
 		outBytes = v
 	case []float32:
-		outBytes = float32SliceToBytes(v)
+		outBytes = Float32sToBytesLE(v)
 	case []float64:
-		outBytes = float64SliceToBytes(v)
+		outBytes = Float64sToBytesLE(v)
 	case []uint16:
-		outBytes = uint16SliceToBytes(v)
+		outBytes = Uint16sToBytesLE(v)
 	case *cmsCIELab:
-		outBytes = float64SliceToBytes(LabToSlice(*v))
+		outBytes = Float64sToBytesLE(LabToSlice(*v))
 	default:
 		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
@@ -498,26 +497,22 @@ func NullFloatXFORM(mm mem.Manager,
 	switch v := out.(type) {
 	case []byte:
 		copy(v, outBytes)
+
 	case []float32:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoFloat32Slice(v, outBytes)
+
 	case []float64:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoFloat64Slice(v, outBytes)
+
 	case []uint16:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoUint16Slice(v, outBytes)
+
 	case *cmsCIELab:
 		lab := bytesToLab(outBytes)
 		v.L = lab.L
 		v.a = lab.a
 		v.b = lab.b
+
 	default:
 		panic("Unsupported type in NullFloatXFORM output finalization")
 	}
@@ -529,7 +524,8 @@ func NullXFORM(mm mem.Manager,
 	PixelsPerLine, LineCount uint32,
 	Stride *cmsStride,
 ) {
-	var wIn [cmsMAXCHANNELS]uint16
+	sc := mm.Scratch()
+	wIn := sc.WInU16
 	var strideIn, strideOut uint32
 	var accum, output []byte
 	var inBytes, outBytes []byte
@@ -539,16 +535,16 @@ func NullXFORM(mm mem.Manager,
 	case []byte:
 		inBytes = v
 	case []float32:
-		inBytes = float32SliceToBytes(v)
+		inBytes = Float32sToBytesLE(v)
 	case []float64:
 		/*	fmt.Printf("v[0] %.7f\n", v[0])
 			fmt.Printf("v[1] %.7f\n", v[1])
 			fmt.Printf("v[2] %.7f\n", v[2])*/
-		inBytes = float64SliceToBytes(v)
+		inBytes = Float64sToBytesLE(v)
 	case []uint16:
-		inBytes = uint16SliceToBytes(v)
+		inBytes = Uint16sToBytesLE(v)
 	case *cmsCIELab:
-		inBytes = float64SliceToBytes(LabToSlice(*v))
+		inBytes = Float64sToBytesLE(LabToSlice(*v))
 	default:
 		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16 , or *cmsCIELab")
 	}
@@ -558,13 +554,13 @@ func NullXFORM(mm mem.Manager,
 	case []byte:
 		outBytes = v
 	case []float32:
-		outBytes = float32SliceToBytes(v)
+		outBytes = Float32sToBytesLE(v)
 	case []float64:
-		outBytes = float64SliceToBytes(v)
+		outBytes = Float64sToBytesLE(v)
 	case []uint16:
-		outBytes = uint16SliceToBytes(v)
+		outBytes = Uint16sToBytesLE(v)
 	case *cmsCIELab:
-		outBytes = float64SliceToBytes(LabToSlice(*v))
+		outBytes = Float64sToBytesLE(LabToSlice(*v))
 	default:
 		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
@@ -591,28 +587,33 @@ func NullXFORM(mm mem.Manager,
 	switch v := out.(type) {
 	case []byte:
 		copy(v, outBytes)
+
 	case []float32:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoFloat32Slice(v, outBytes)
+
 	case []float64:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoFloat64Slice(v, outBytes)
+
 	case []uint16:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoUint16Slice(v, outBytes)
+
 	case *cmsCIELab:
 		lab := bytesToLab(outBytes)
 		v.L = lab.L
 		v.a = lab.a
 		v.b = lab.b
+
 	default:
 		panic("Unsupported type in NullXFORM output finalization")
+	}
+}
+
+// eval16 dispatches to the zero-closure fast path when available.
+func eval16(mm mem.Manager, lut *cmsPipeline, in, out []uint16) {
+	if lut.fastEval16 != nil {
+		lut.fastEval16(mm, in, out, lut.fastParams)
+	} else {
+		lut.Eval16Fn(mm, in, out, lut.Data)
 	}
 }
 
@@ -624,7 +625,9 @@ func PrecalculatedXFORM(mm mem.Manager,
 ) {
 	//("PrecalculatedXFORM ")
 
-	var wIn, wOut [cmsMAXCHANNELS]uint16
+	sc := mm.Scratch()
+	wIn := sc.WInU16
+	wOut := sc.WOutU16
 	var strideIn, strideOut uint32
 	var accum, output []byte
 	var inBytes, outBytes []byte
@@ -633,16 +636,16 @@ func PrecalculatedXFORM(mm mem.Manager,
 	case []byte:
 		inBytes = v
 	case []float32:
-		inBytes = float32SliceToBytes(v)
+		inBytes = Float32sToBytesLE(v)
 	case []float64:
 		/*	fmt.Printf("v[0] %.7f\n", v[0])
 			fmt.Printf("v[1] %.7f\n", v[1])
 			fmt.Printf("v[2] %.7f\n", v[2])*/
-		inBytes = float64SliceToBytes(v)
+		inBytes = Float64sToBytesLE(v)
 	case []uint16:
-		inBytes = uint16SliceToBytes(v)
+		inBytes = Uint16sToBytesLE(v)
 	case *cmsCIELab:
-		inBytes = float64SliceToBytes(LabToSlice(*v))
+		inBytes = Float64sToBytesLE(LabToSlice(*v))
 	default:
 		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16 , or *cmsCIELab")
 	}
@@ -652,13 +655,13 @@ func PrecalculatedXFORM(mm mem.Manager,
 	case []byte:
 		outBytes = v
 	case []float32:
-		outBytes = float32SliceToBytes(v)
+		outBytes = Float32sToBytesLE(v)
 	case []float64:
-		outBytes = float64SliceToBytes(v)
+		outBytes = Float64sToBytesLE(v)
 	case []uint16:
-		outBytes = uint16SliceToBytes(v)
+		outBytes = Uint16sToBytesLE(v)
 	case *cmsCIELab:
-		outBytes = float64SliceToBytes(LabToSlice(*v))
+		outBytes = Float64sToBytesLE(LabToSlice(*v))
 	default:
 		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
@@ -676,7 +679,8 @@ func PrecalculatedXFORM(mm mem.Manager,
 			// Process input
 			accum = p.FromInput(mm, p, wIn[:], accum, Stride.BytesPerPlaneIn)
 			// Evaluate LUT
-			p.Lut.Eval16Fn(mm, wIn[:], wOut[:], p.Lut.Data)
+			eval16(mm, p.Lut, wIn[:], wOut[:])
+
 			// Process output
 			output = p.ToOutput(mm, p, wOut[:], output, Stride.BytesPerPlaneOut)
 		}
@@ -688,26 +692,22 @@ func PrecalculatedXFORM(mm mem.Manager,
 	switch v := out.(type) {
 	case []byte:
 		copy(v, outBytes)
+
 	case []float32:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoFloat32Slice(v, outBytes)
+
 	case []float64:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoFloat64Slice(v, outBytes)
+
 	case []uint16:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoUint16Slice(v, outBytes)
+
 	case *cmsCIELab:
 		lab := bytesToLab(outBytes)
 		v.L = lab.L
 		v.a = lab.a
 		v.b = lab.b
+
 	default:
 		panic("Unsupported type in PrecalculatedXFORMoutput finalization")
 	}
@@ -729,7 +729,7 @@ func TransformOnePixelWithGamutCheck(mm mem.Manager, p *cmsTRANSFORM, wIn, wOut 
 		}
 	} else {
 		// Otherwise, evaluate the LUT
-		p.Lut.Eval16Fn(mm, wIn, wOut, p.Lut.Data)
+		eval16(mm, p.Lut, wIn, wOut)
 	}
 }
 
@@ -741,7 +741,9 @@ func PrecalculatedXFORMGamutCheck(mm mem.Manager,
 ) {
 	//fmt.Println("PrecalculatedXFORMGamutCheck ")
 
-	var wIn, wOut [cmsMAXCHANNELS]uint16
+	sc := mm.Scratch()
+	wIn := sc.WInU16
+	wOut := sc.WOutU16
 	var strideIn, strideOut uint32
 	var accum, output []byte
 	var inBytes, outBytes []byte
@@ -751,16 +753,16 @@ func PrecalculatedXFORMGamutCheck(mm mem.Manager,
 	case []byte:
 		inBytes = v
 	case []float32:
-		inBytes = float32SliceToBytes(v)
+		inBytes = Float32sToBytesLE(v)
 	case []float64:
 		/*	fmt.Printf("v[0] %.7f\n", v[0])
 			fmt.Printf("v[1] %.7f\n", v[1])
 			fmt.Printf("v[2] %.7f\n", v[2])*/
-		inBytes = float64SliceToBytes(v)
+		inBytes = Float64sToBytesLE(v)
 	case []uint16:
-		inBytes = uint16SliceToBytes(v)
+		inBytes = Uint16sToBytesLE(v)
 	case *cmsCIELab:
-		inBytes = float64SliceToBytes(LabToSlice(*v))
+		inBytes = Float64sToBytesLE(LabToSlice(*v))
 	default:
 		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16 , or *cmsCIELab")
 	}
@@ -770,13 +772,13 @@ func PrecalculatedXFORMGamutCheck(mm mem.Manager,
 	case []byte:
 		outBytes = v
 	case []float32:
-		outBytes = float32SliceToBytes(v)
+		outBytes = Float32sToBytesLE(v)
 	case []float64:
-		outBytes = float64SliceToBytes(v)
+		outBytes = Float64sToBytesLE(v)
 	case []uint16:
-		outBytes = uint16SliceToBytes(v)
+		outBytes = Uint16sToBytesLE(v)
 	case *cmsCIELab:
-		outBytes = float64SliceToBytes(LabToSlice(*v))
+		outBytes = Float64sToBytesLE(LabToSlice(*v))
 	default:
 		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
@@ -804,32 +806,28 @@ func PrecalculatedXFORMGamutCheck(mm mem.Manager,
 	switch v := out.(type) {
 	case []byte:
 		copy(v, outBytes)
+
 	case []float32:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoFloat32Slice(v, outBytes)
+
 	case []float64:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoFloat64Slice(v, outBytes)
+
 	case []uint16:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoUint16Slice(v, outBytes)
+
 	case *cmsCIELab:
 		lab := bytesToLab(outBytes)
 		v.L = lab.L
 		v.a = lab.a
 		v.b = lab.b
+
 	default:
 		panic("Unsupported type in PrecalculatedXFORMGamutCheck output finalization")
 	}
 }
 
-func CachedXFORM(mm mem.Manager,
+/*func CachedXFORM(mm mem.Manager,
 	p *cmsTRANSFORM,
 	in, out any,
 	PixelsPerLine, LineCount uint32,
@@ -837,7 +835,9 @@ func CachedXFORM(mm mem.Manager,
 ) {
 	//fmt.Println("CachedXFORM")
 
-	var wIn, wOut [cmsMAXCHANNELS]uint16
+	sc := mm.Scratch()
+	wIn := sc.WInU16
+	wOut := sc.WOutU16
 	var strideIn, strideOut uint32
 	var cache cmsCACHE
 	var accum, output []byte
@@ -848,16 +848,14 @@ func CachedXFORM(mm mem.Manager,
 	case []byte:
 		inBytes = v
 	case []float32:
-		inBytes = float32SliceToBytes(v)
+		inBytes = Float32sToBytesLE(v)
 	case []float64:
-		/*	fmt.Printf("v[0] %.7f\n", v[0])
-			fmt.Printf("v[1] %.7f\n", v[1])
-			fmt.Printf("v[2] %.7f\n", v[2])*/
-		inBytes = float64SliceToBytes(v)
+
+		inBytes = Float64sToBytesLE(v)
 	case []uint16:
-		inBytes = uint16SliceToBytes(v)
+		inBytes = Uint16sToBytesLE(v)
 	case *cmsCIELab:
-		inBytes = float64SliceToBytes(LabToSlice(*v))
+		inBytes = Float64sToBytesLE(LabToSlice(*v))
 	default:
 		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16 , or *cmsCIELab")
 	}
@@ -867,13 +865,13 @@ func CachedXFORM(mm mem.Manager,
 	case []byte:
 		outBytes = v
 	case []float32:
-		outBytes = float32SliceToBytes(v)
+		outBytes = Float32sToBytesLE(v)
 	case []float64:
-		outBytes = float64SliceToBytes(v)
+		outBytes = Float64sToBytesLE(v)
 	case []uint16:
-		outBytes = uint16SliceToBytes(v)
+		outBytes = Uint16sToBytesLE(v)
 	case *cmsCIELab:
-		outBytes = float64SliceToBytes(LabToSlice(*v))
+		outBytes = Float64sToBytesLE(LabToSlice(*v))
 	default:
 		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
@@ -884,10 +882,6 @@ func CachedXFORM(mm mem.Manager,
 	cache = p.Cache
 
 	strideIn, strideOut = 0, 0
-	/*	fmt.Println("inBytes ", inBytes)
-		fmt.Println("inBytes[0] ", inBytes[0])
-		fmt.Println("inBytes[1] ", inBytes[1])
-		fmt.Println("inBytes[2] ", inBytes[2])*/
 
 	for i := uint32(0); i < LineCount; i++ {
 		// Use slices with offsets instead of pointer arithmetic
@@ -909,14 +903,10 @@ func CachedXFORM(mm mem.Manager,
 			if equal {
 				copy(wOut[:], cache.CacheOut[:])
 			} else {
-				/*		fmt.Printf("wIn[0] %d\n", wIn[0])
-						fmt.Printf("wIn[1] %d\n", wIn[1])
-						fmt.Printf("wIn[2] %d\n", wIn[2])*/
 
-				p.Lut.Eval16Fn(mm, wIn[:], wOut[:], p.Lut.Data)
-				/*	fmt.Printf("wOut[0] %d\n", wOut[0])
-					fmt.Printf("wOut[1] %d\n", wOut[1])
-					fmt.Printf("wOut[2] %d\n", wOut[2])*/
+				//p.Lut.Eval16Fn(mm, wIn[:], wOut[:], p.Lut.Data)
+				eval16(mm, p.Lut, wIn[:], wOut[:])
+
 				copy(cache.CacheIn[:], wIn[:])
 				copy(cache.CacheOut[:], wOut[:])
 			}
@@ -929,37 +919,187 @@ func CachedXFORM(mm mem.Manager,
 		strideIn += Stride.BytesPerLineIn
 		strideOut += Stride.BytesPerLineOut
 	}
-	/*	fmt.Println("outBytes ", outBytes)
-		fmt.Println("outBytes[0] ", outBytes[0])
-		fmt.Println("outBytes[1] ", outBytes[1])
-		fmt.Println("outBytes[2] ", outBytes[2])*/
+
 	switch v := out.(type) {
 	case []byte:
 		copy(v, outBytes)
+
 	case []float32:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoFloat32Slice(v, outBytes)
+
 	case []float64:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoFloat64Slice(v, outBytes)
+
 	case []uint16:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoUint16Slice(v, outBytes)
+
 	case *cmsCIELab:
 		lab := bytesToLab(outBytes)
 		v.L = lab.L
 		v.a = lab.a
 		v.b = lab.b
+
 	default:
 		panic("Unsupported type in CachedXFORM output finalization")
 	}
 
+}*/
+
+func CachedXFORM(
+	mm mem.Manager,
+	p *cmsTRANSFORM,
+	in, out any,
+	PixelsPerLine, LineCount uint32,
+	Stride *cmsStride,
+) {
+	// --- Scratch once
+	sc := mm.Scratch()
+	wIn := sc.WInU16 // len >= cmsMAXCHANNELS (16)
+	wOut := sc.WOutU16
+
+	// --- Derive channel counts (input side is what the cache compares)
+	nIn := channelsOf(p.EntryColorSpace) // Gray=1, RGB/Lab/XYZ=3, CMYK=4, else clamp [1..16]
+	if nIn < 1 {
+		nIn = 1
+	} else if nIn > 16 {
+		nIn = 16
+	}
+
+	// --- Normalize input/output into byte slices exactly once (no per-pixel switches)
+	var inBytes, outBytes []byte
+	switch v := in.(type) {
+	case []byte:
+		inBytes = v
+	case []float32:
+		inBytes = Float32sToBytesLE(v)
+	case []float64:
+		inBytes = Float64sToBytesLE(v)
+	case []uint16:
+		inBytes = Uint16sToBytesLE(v) // allocates once; safe and simple
+	case *cmsCIELab:
+		inBytes = Float64sToBytesLE(LabToSlice(*v))
+	default:
+		panic("CachedXFORM: unsupported input type")
+	}
+
+	switch v := out.(type) {
+	case []byte:
+		outBytes = v
+	case []float32:
+		outBytes = Float32sToBytesLE(v)
+	case []float64:
+		outBytes = Float64sToBytesLE(v)
+	case []uint16:
+		outBytes = Uint16sToBytesLE(v)
+	case *cmsCIELab:
+		outBytes = Float64sToBytesLE(LabToSlice(*v))
+	default:
+		panic("CachedXFORM: unsupported output type")
+	}
+
+	// --- Handle extra channels once 
+	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
+
+	// --- Local copies / aliases to avoid repeated indirections
+	cache := p.Cache
+	fromIn := p.FromInput
+	toOut := p.ToOutput
+	eval := eval16
+
+	// Fast local stride vars (bytes)
+	var strideIn, strideOut uint32
+	if Stride != nil {
+		strideIn = Stride.BytesPerLineIn
+		strideOut = Stride.BytesPerLineOut
+	} else {
+		// Fallback: planes are contiguous if Stride is nil (rare path)
+		strideIn, strideOut = 0, 0
+	}
+
+	// --- Inner loops: tight, branch-light
+	for i := uint32(0); i < LineCount; i++ {
+
+		// Slice windows for this scanline
+		accum := inBytes[strideIn:]
+		output := outBytes[strideOut:]
+
+		for j := uint32(0); j < PixelsPerLine; j++ {
+			// Decode one pixel to wIn; accum advanced by BytesPerPlaneIn
+			accum = fromIn(mm, p, wIn[:], accum, Stride.BytesPerPlaneIn)
+
+			// Check cache on the *actual* channels only
+			hit := true
+			// manual unroll gives a tiny edge for RGB/CMYK common cases
+			switch nIn {
+			case 1:
+				hit = (wIn[0] == cache.CacheIn[0])
+			case 3:
+				hit = (wIn[0] == cache.CacheIn[0] &&
+					wIn[1] == cache.CacheIn[1] &&
+					wIn[2] == cache.CacheIn[2])
+			case 4:
+				hit = (wIn[0] == cache.CacheIn[0] &&
+					wIn[1] == cache.CacheIn[1] &&
+					wIn[2] == cache.CacheIn[2] &&
+					wIn[3] == cache.CacheIn[3])
+			default:
+				for k := 0; k < nIn; k++ {
+					if wIn[k] != cache.CacheIn[k] {
+						hit = false
+						break
+					}
+				}
+			}
+
+			if hit {
+				// Copy cached output (only relevant lanes; copying 16 is cheap and branchless)
+				copy(wOut[:], cache.CacheOut[:])
+			} else {
+				// Evaluate LUT
+				eval(mm, p.Lut, wIn[:], wOut[:])
+				// Update cache for next pixel
+				copy(cache.CacheIn[:nIn], wIn[:nIn])
+				copy(cache.CacheOut[:], wOut[:])
+			}
+
+			// Encode one pixel from wOut; output advanced by BytesPerPlaneOut
+			output = toOut(mm, p, wOut[:], output, Stride.BytesPerPlaneOut)
+		}
+
+		// Advance to next line
+		strideIn += Stride.BytesPerLineIn
+		strideOut += Stride.BytesPerLineOut
+	}
+
+	// --- Finalize (write back only when needed)
+	switch v := out.(type) {
+	case []byte:
+		// outBytes already aliases v; nothing to do
+	case []float32:
+		writeIntoFloat32Slice(v, outBytes)
+	case []float64:
+		writeIntoFloat64Slice(v, outBytes)
+	case []uint16:
+		writeIntoUint16Slice(v, outBytes)
+	case *cmsCIELab:
+		lab := bytesToLab(outBytes)
+		v.L, v.a, v.b = lab.L, lab.a, lab.b
+	}
+}
+
+// channelsOf returns the canonical number of components for a color space signature.
+func channelsOf(sig cmsColorSpaceSignature) int {
+	switch sig {
+	case CmsSigGrayData:
+		return 1
+	case CmsSigRgbData, CmsSigLabData, CmsSigXYZData:
+		return 3
+	case CmsSigCmykData:
+		return 4
+	// Add other spaces as you wire them (e.g.,  n-color deviceN if ever needed)
+	default:
+		return 4 // conservative default; prevents zero, caps to 16 above
+	}
 }
 
 func CachedXFORMGamutCheck(mm mem.Manager,
@@ -970,7 +1110,9 @@ func CachedXFORMGamutCheck(mm mem.Manager,
 ) {
 	//fmt.Println("CachedXFORMGamutCheck ")
 
-	var wIn, wOut [cmsMAXCHANNELS]uint16
+	sc := mm.Scratch()
+	wIn := sc.WInU16
+	wOut := sc.WOutU16
 	var strideIn, strideOut uint32
 	var cache cmsCACHE
 	var accum, output []byte
@@ -980,16 +1122,16 @@ func CachedXFORMGamutCheck(mm mem.Manager,
 	case []byte:
 		inBytes = v
 	case []float32:
-		inBytes = float32SliceToBytes(v)
+		inBytes = Float32sToBytesLE(v)
 	case []float64:
 		/*	fmt.Printf("v[0] %.7f\n", v[0])
 			fmt.Printf("v[1] %.7f\n", v[1])
 			fmt.Printf("v[2] %.7f\n", v[2])*/
-		inBytes = float64SliceToBytes(v)
+		inBytes = Float64sToBytesLE(v)
 	case []uint16:
-		inBytes = uint16SliceToBytes(v)
+		inBytes = Uint16sToBytesLE(v)
 	case *cmsCIELab:
-		inBytes = float64SliceToBytes(LabToSlice(*v))
+		inBytes = Float64sToBytesLE(LabToSlice(*v))
 	default:
 		panic("Error: 'in' must be of type []byte, []float32, []float64, or []uint16 , or *cmsCIELab")
 	}
@@ -999,13 +1141,13 @@ func CachedXFORMGamutCheck(mm mem.Manager,
 	case []byte:
 		outBytes = v
 	case []float32:
-		outBytes = float32SliceToBytes(v)
+		outBytes = Float32sToBytesLE(v)
 	case []float64:
-		outBytes = float64SliceToBytes(v)
+		outBytes = Float64sToBytesLE(v)
 	case []uint16:
-		outBytes = uint16SliceToBytes(v)
+		outBytes = Uint16sToBytesLE(v)
 	case *cmsCIELab:
-		outBytes = float64SliceToBytes(LabToSlice(*v))
+		outBytes = Float64sToBytesLE(LabToSlice(*v))
 	default:
 		panic("Error: 'out' must be of type []byte, []float32, []float64, or []uint16, or *cmsCIELab")
 	}
@@ -1054,26 +1196,22 @@ func CachedXFORMGamutCheck(mm mem.Manager,
 	switch v := out.(type) {
 	case []byte:
 		copy(v, outBytes)
+
 	case []float32:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoFloat32Slice(v, outBytes)
+
 	case []float64:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoFloat64Slice(v, outBytes)
+
 	case []uint16:
-		buf := bytes.NewReader(outBytes)
-		for i := range v {
-			binary.Read(buf, binary.LittleEndian, &v[i])
-		}
+		writeIntoUint16Slice(v, outBytes)
+
 	case *cmsCIELab:
 		lab := bytesToLab(outBytes)
 		v.L = lab.L
 		v.a = lab.a
 		v.b = lab.b
+
 	default:
 		panic("Unsupported type in CachedXFORMGamutCheck output finalization")
 	}
@@ -1670,7 +1808,7 @@ func cmsCreateExtendedTransform(mm mem.Manager,
 		if xform.GamutCheck != nil {
 			TransformOnePixelWithGamutCheck(mm, xform, xform.Cache.CacheIn[:], xform.Cache.CacheOut[:])
 		} else {
-			xform.Lut.Eval16Fn(mm, xform.Cache.CacheIn[:], xform.Cache.CacheOut[:], xform.Lut.Data)
+			eval16(mm, xform.Lut, xform.Cache.CacheIn[:], xform.Cache.CacheOut[:])
 		}
 
 	}

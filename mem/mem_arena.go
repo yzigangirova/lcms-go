@@ -5,6 +5,7 @@ package mem
 import "arena"
 
 const MaxScratchChannels = 128 //== MAX_STAGE_CHANNELS in lcms
+const MaxScratchChannelsShort = 16  //cmsMAXCHANNELS
 
 // Scratch holds reusable working buffers for hot paths.
 // These are preallocated to MaxScratchChannels once when the Manager is created.
@@ -12,6 +13,10 @@ type Scratch struct {
 	LUT         [2][]float32 // len == MaxScratchChannels
 	In16        []uint16     // len == MaxScratchChannels
 	Out16       []uint16     // len == MaxScratchChannels
+	WInU16        []uint16     // len == MaxScratchChannelsShort
+	WOutU16       []uint16     // len == MaxScratchChannelsShort
+	WInF32        []float32     // len == MaxScratchChannelsShort
+	WOutF32       []float32     // len == MaxScratchChannelsShort
 	Tmp1U16  []uint16     // len == MaxScratchChannels
 	Tmp2U16  []uint16     // len == MaxScratchChannels
 	Tmp1F32  []float32    // len == MaxScratchChannels
@@ -44,6 +49,10 @@ func NewManager() Manager {
 		Tmp2U16:  make([]uint16, MaxScratchChannels),  // len == MaxScratchChannels
 		Tmp1F32:  make([]float32, MaxScratchChannels), // len == MaxScratchChannels
 		Tmp2F32:  make([]float32, MaxScratchChannels), // len == MaxScratchChannels
+		WInU16:        make([]uint16, MaxScratchChannelsShort),
+		WOutU16:       make([]uint16, MaxScratchChannelsShort),
+		WInF32:        make([]float32, MaxScratchChannelsShort),
+		WOutF32:       make([]float32, MaxScratchChannelsShort),
 
 	}
 	return Manager{A: nil, Sc: s}
@@ -59,6 +68,10 @@ func NewArena() Manager {
 		},
 		In16:        arena.MakeSlice[uint16](a, MaxScratchChannels, MaxScratchChannels),
 		Out16:       arena.MakeSlice[uint16](a, MaxScratchChannels, MaxScratchChannels),
+		WInU16:        arena.MakeSlice[uint16](a, MaxScratchChannelsShort, MaxScratchChannelsShort),
+		WOutU16:       arena.MakeSlice[uint16](a, MaxScratchChannelsShort, MaxScratchChannelsShort),
+		WInF32:        arena.MakeSlice[float32](a, MaxScratchChannelsShort, MaxScratchChannelsShort),
+		WOutF32:       arena.MakeSlice[float32](a, MaxScratchChannelsShort, MaxScratchChannelsShort),
 		Tmp1U16:  arena.MakeSlice[uint16](a, MaxScratchChannels, MaxScratchChannels),
 		Tmp2U16:  arena.MakeSlice[uint16](a, MaxScratchChannels, MaxScratchChannels),
 		Tmp1F32: arena.MakeSlice[float32](a, MaxScratchChannels, MaxScratchChannels),
