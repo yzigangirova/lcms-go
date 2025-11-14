@@ -861,371 +861,375 @@ func TetrahedralInterp16(mm mem.Manager, Input []uint16, Output []uint16, p *cms
 	}
 }
 
-// Eval4Inputs performs tetrahedral interpolation with 4 input channels for 16-bit values.
-/*func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
-	//fmt.Println("Start Eval4Inputs Input", Input[0], Input[1], Input[2], Input[3])
-	var fk int32
-	var k0, rk int32
-	var K0, K1 int32
-	var fx, fy, fz int32
-	var rx, ry, rz int32
-	var x0, y0, z0 int32
-	var X0, X1, Y0, Y1, Z0, Z1 int32
 
-	TotalOut := int(p.nOutputs)
-
-	// Ensure p.Table is a []uint16
-	LutTable, ok := p.Table.([]uint16)
-	if !ok {
-		panic("p.Table is not of type []uint16 in Eval4Inputs\n")
-
-	}
-
-	// Inline function for LUT lookup
-	DENS := func(i, j, k int32, outChan uint32) int32 {
-		return int32(LutTable[i+j+k+int32(outChan)])
-	}
-
-	// Convert input values to fixed-point representation
-	fk = int32(cmsToFixedDomain(int(Input[0]) * int(p.Domain[0])))
-	fx = int32(cmsToFixedDomain(int(Input[1]) * int(p.Domain[1])))
-	fy = int32(cmsToFixedDomain(int(Input[2]) * int(p.Domain[2])))
-	fz = int32(cmsToFixedDomain(int(Input[3]) * int(p.Domain[3])))
-
-	// Compute integer indices and fractional parts
-	k0 = FIXED_TO_INT(cmsS15Fixed16Number(fk))
-	x0 = FIXED_TO_INT(cmsS15Fixed16Number(fx))
-	y0 = FIXED_TO_INT(cmsS15Fixed16Number(fy))
-	z0 = FIXED_TO_INT(cmsS15Fixed16Number(fz))
-
-	rk = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fk)))
-	rx = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fx)))
-	ry = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fy)))
-	rz = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fz)))
-
-	// Compute LUT table indices
-	K0 = int32(p.opta[3]) * int32(k0)
-	K1 = K0
-	if Input[0] != 0xFFFF {
-		K1 += int32(p.opta[3])
-	}
-
-	X0 = int32(p.opta[2]) * int32(x0)
-	X1 = X0
-	if Input[1] != 0xFFFF {
-		X1 += int32(p.opta[2])
-	}
-
-	Y0 = int32(p.opta[1]) * int32(y0)
-	Y1 = Y0
-	if Input[2] != 0xFFFF {
-		Y1 += int32(p.opta[1])
-	}
-
-	Z0 = int32(p.opta[0]) * int32(z0)
-	Z1 = Z0
-	if Input[3] != 0xFFFF {
-		Z1 += int32(p.opta[0])
-	}
-
-	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
-
-	// Process K0
-
-	fmt.Println("got K0", K0)
-	fmt.Println("got X0", X0)
-	fmt.Println("got Y0", Y0)
-	fmt.Println("got Z0", Z0)
-	fmt.Println("got X1", X1)
-	fmt.Println("got Y1", Y1)
-	fmt.Println("got Z1", Z1)
-
-	LutTable, _ = p.Table.([]uint16) // Reset to original LUT
-
-	LutTable = LutTable[K0:] // Shift by K0
-
-	for outChan := uint32(0); outChan < uint32(TotalOut); outChan++ {
-		c0 := DENS(X0, Y0, Z0, outChan)
-		//	fmt.Printf("X0+Y0+Z0+int32(outChan) %d\n", X0+Y0+Z0+int32(outChan))
-		//	fmt.Printf("returning LutTable[X0+Y0+Z0+int32(outChan)] %d\n", LutTable[X0+Y0+Z0+int32(outChan)])
-		var c1, c2, c3 cmsS15Fixed16Number
-
-		if rx >= ry && ry >= rz {
-			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z0, outChan) - c0)
-			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z0, outChan) - DENS(X1, Y0, Z0, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan))
-		} else if rx >= rz && rz >= ry {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z0, outChan) - c0)
-			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X1, Y0, Z1, outChan) - DENS(X1, Y0, Z0, outChan))
-
-		} else if rz >= rx && rx >= ry {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z1, outChan) - DENS(X0, Y0, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X0, Y0, Z1, outChan) - c0)
-
-		} else if ry >= rx && rx >= rz {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z0, outChan) - DENS(X0, Y1, Z0, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z0, outChan) - c0)
-			c3 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan))
-
-		} else if ry >= rz && rz >= rx {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z0, outChan) - c0)
-			c3 = cmsS15Fixed16Number(DENS(X0, Y1, Z1, outChan) - DENS(X0, Y1, Z0, outChan))
-
-		} else if rz >= ry && ry >= rx {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z1, outChan) - DENS(X0, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X0, Y0, Z1, outChan) - c0)
-
-		} else {
-			c1, c2, c3 = 0, 0, 0
-		}
-
-		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-			fmt.Printf("c0 %d\n", c0)
-			fmt.Printf("c1 %d\n", c1)
-			fmt.Printf("c2 %d\n", c2)
-			fmt.Printf("c3 %d\n", c3)
-			fmt.Printf("rx %d\n", rx)
-			fmt.Printf("ry %d\n", ry)
-			fmt.Printf("rz %d\n", rz)
-			fmt.Printf("Rest %d\n", Rest)
-
-		Tmp1[outChan] = uint16(c0 + ROUND_FIXED_TO_INT(cmsToFixedDomain(int(Rest))))
-
-		//fmt.Printf("Tmp1[outChan] %d\n", Tmp1[outChan])
-
-	}
-
-	// Process K1
-	LutTable, _ = p.Table.([]uint16) // Reset to original LUT
-	LutTable = LutTable[K1:]         // Shift by K1
-
-	for outChan := uint32(0); outChan < uint32(TotalOut); outChan++ {
-		c0 := DENS(X0, Y0, Z0, outChan)
-		var c1, c2, c3 cmsS15Fixed16Number
-
-		if rx >= ry && ry >= rz {
-			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z0, outChan) - c0)
-			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z0, outChan) - DENS(X1, Y0, Z0, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan))
-		} else if rx >= rz && rz >= ry {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z0, outChan) - c0)
-			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X1, Y0, Z1, outChan) - DENS(X1, Y0, Z0, outChan))
-
-		} else if rz >= rx && rx >= ry {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z1, outChan) - DENS(X0, Y0, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X0, Y0, Z1, outChan) - c0)
-
-		} else if ry >= rx && rx >= rz {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z0, outChan) - DENS(X0, Y1, Z0, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z0, outChan) - c0)
-			c3 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan))
-
-		} else if ry >= rz && rz >= rx {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z0, outChan) - c0)
-			c3 = cmsS15Fixed16Number(DENS(X0, Y1, Z1, outChan) - DENS(X0, Y1, Z0, outChan))
-
-		} else if rz >= ry && ry >= rx {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z1, outChan) - DENS(X0, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X0, Y0, Z1, outChan) - c0)
-
-		} else {
-			c1, c2, c3 = 0, 0, 0
-		}
-
-		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-		fmt.Printf("c0 %d\n", c0)
-		fmt.Printf("c1 %d\n", c1)
-		fmt.Printf("c2 %d\n", c2)
-		fmt.Printf("c3 %d\n", c3)
-		fmt.Printf("rx %d\n", rx)
-		fmt.Printf("ry %d\n", ry)
-		fmt.Printf("rz %d\n", rz)
-		fmt.Printf("Rest %d\n", Rest)
-
-		Tmp2[outChan] = uint16(c0 + (ROUND_FIXED_TO_INT(cmsToFixedDomain(int(Rest)))))
-
-		//fmt.Printf("Tmp2[outChan] %d\n", Tmp2[outChan])
-	}
-
-	// Final interpolation
-	for i := 0; i < TotalOut; i++ {
-			fmt.Println("rk", rk)
-			fmt.Println("Tmp1[i]", Tmp1[i])
-			fmt.Println("Tmp2[i]", Tmp2[i])
-		Output[i] = LinearInterp(rk, int32(Tmp1[i]), int32(Tmp2[i]))
-		//fmt.Printf("Output[i] %d\n", Output[i])
-	}
-	//fmt.Println("End Eval4Inputs")
-
-}*/
-
-// Eval4Inputs performs tetrahedral interpolation with 4 input channels for 16-bit values,
-// using preallocated scratch from mem.Manager instead of per-call big arrays.
-/*func Eval4Inputs(mm mem.Manager, Input, Output []uint16, p *cmsInterpParams) {
-	var fk, k0, rk int32
-	var K0, K1 int32
-	var fx, fy, fz int32
-	var rx, ry, rz int32
-	var x0, y0, z0 int32
-	var X0, X1, Y0, Y1, Z0, Z1 int32
-
-	TotalOut := int(p.nOutputs)
+// Eval4Inputs — optimized, WASM-safe, no unsafe pointers.
+// Key changes explained after the code.
+func Eval4Inputs(mm mem.Manager, Input, Output []uint16, p *cmsInterpParams) {
+	totalOut := int(p.nOutputs)
 
 	LutTable, ok := p.Table.([]uint16)
 	if !ok {
 		panic("p.Table is not of type []uint16 in Eval4Inputs")
 	}
 
-	// Fast local accessor; base slice is shifted below
-	DENS := func(base []uint16, i, j, k int32, outChan uint32) int32 {
-		return int32(base[i+j+k+int32(outChan)])
-	}
+	// --- fixed-point mapping of inputs to grid (keep your original helpers here) ---
+	fk := cmsToFixedDomain(int(Input[0]) * int(p.Domain[0]))
+	fx := cmsToFixedDomain(int(Input[1]) * int(p.Domain[1]))
+	fy := cmsToFixedDomain(int(Input[2]) * int(p.Domain[2]))
+	fz := cmsToFixedDomain(int(Input[3]) * int(p.Domain[3]))
 
-	// fixed-point mapping of inputs to grid
-	fk = int32(cmsToFixedDomain(int(Input[0]) * int(p.Domain[0])))
-	fx = int32(cmsToFixedDomain(int(Input[1]) * int(p.Domain[1])))
-	fy = int32(cmsToFixedDomain(int(Input[2]) * int(p.Domain[2])))
-	fz = int32(cmsToFixedDomain(int(Input[3]) * int(p.Domain[3])))
+	// integer parts (grid indices)
+	k0 := FIXED_TO_INT(fk)
+	x0 := FIXED_TO_INT(fx)
+	y0 := FIXED_TO_INT(fy)
+	z0 := FIXED_TO_INT(fz)
 
-	k0 = FIXED_TO_INT(cmsS15Fixed16Number(fk))
-	x0 = FIXED_TO_INT(cmsS15Fixed16Number(fx))
-	y0 = FIXED_TO_INT(cmsS15Fixed16Number(fy))
-	z0 = FIXED_TO_INT(cmsS15Fixed16Number(fz))
+	// fractional parts [0..65535]
+	rk := int32(FIXED_REST_TO_INT(fk))
+	rx := int32(FIXED_REST_TO_INT(fx))
+	ry := int32(FIXED_REST_TO_INT(fy))
+	rz := int32(FIXED_REST_TO_INT(fz))
 
-	rk = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fk)))
-	rx = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fx)))
-	ry = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fy)))
-	rz = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fz)))
+	// Convert stride multipliers once
+	opk := int(p.opta[3])
+	opx := int(p.opta[2])
+	opy := int(p.opta[1])
+	opz := int(p.opta[0])
 
-	K0 = int32(p.opta[3]) * k0
-	K1 = K0
+	// Base offsets for K planes
+	K0 := int(k0) * opk
+	K1 := K0
 	if Input[0] != 0xFFFF {
-		K1 += int32(p.opta[3])
+		K1 += opk
 	}
 
-	X0 = int32(p.opta[2]) * x0
-	X1 = X0
+	// Base offsets for X/Y/Z planes
+	X0 := int(x0) * opx
+	X1 := X0
 	if Input[1] != 0xFFFF {
-		X1 += int32(p.opta[2])
+		X1 += opx
 	}
-
-	Y0 = int32(p.opta[1]) * y0
-	Y1 = Y0
+	Y0 := int(y0) * opy
+	Y1 := Y0
 	if Input[2] != 0xFFFF {
-		Y1 += int32(p.opta[1])
+		Y1 += opy
 	}
-
-	Z0 = int32(p.opta[0]) * z0
-	Z1 = Z0
+	Z0 := int(z0) * opz
+	Z1 := Z0
 	if Input[3] != 0xFFFF {
-		Z1 += int32(p.opta[0])
+		Z1 += opz
 	}
 
-	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	// ---- scratch buffers (preallocated) ----
 	sc := mm.Scratch()
-	Tmp1 := sc.Tmp1U16[:TotalOut]
-	Tmp2 := sc.Tmp2U16[:TotalOut]
+	Tmp1 := sc.Tmp1U16[:totalOut]
+	Tmp2 := sc.Tmp2U16[:totalOut]
+
+	// ---- slice bases and a single bounds-guard to elide inner checks ----
+	baseK0 := LutTable[K0:]
+	baseK1 := LutTable[K1:]
+	maxOff := X1 + Y1 + Z1 + (totalOut - 1)
+	_ = baseK0[maxOff]
+	_ = baseK1[maxOff]
+
+	// Corner indices once (independent of channel)
+	idx000 := X0 + Y0 + Z0
+	idx100 := X1 + Y0 + Z0
+	idx110 := X1 + Y1 + Z0
+	idx111 := X1 + Y1 + Z1
+	idx101 := X1 + Y0 + Z1
+	idx001 := X0 + Y0 + Z1
+	idx011 := X0 + Y1 + Z1
+	idx010 := X0 + Y1 + Z0
+
+	// Decide permutation order ONCE (don’t redo per channel)
+	var caseID int
+	switch {
+	case rx >= ry && ry >= rz:
+		caseID = 0
+	case rx >= rz && rz >= ry:
+		caseID = 1
+	case rz >= rx && rx >= ry:
+		caseID = 2
+	case ry >= rx && rx >= rz:
+		caseID = 3
+	case ry >= rz && rz >= rx:
+		caseID = 4
+	default: // rz >= ry && ry >= rx
+		caseID = 5
+	}
+
+	// Pre-widen fractions once
+	rx64, ry64, rz64 := int64(rx), int64(ry), int64(rz)
+
+	// Plane runner: identical math as before, but we (1) avoid cmsToFixedDomain+ROUND inside,
+	// and (2) avoid re-evaluating the branchy order selection per channel.
+	doPlane := func(base []uint16, tmp []uint16) {
+		switch caseID {
+		case 0: // rx >= ry >= rz
+			for out := 0; out < totalOut; out++ {
+				c0 := int32(base[idx000+out])
+				p100 := int32(base[idx100+out])
+				p110 := int32(base[idx110+out])
+				p111 := int32(base[idx111+out])
+
+				c1 := p100 - c0
+				c2 := p110 - p100
+				c3 := p111 - p110
+
+				rest := int64(c1)*rx64 + int64(c2)*ry64 + int64(c3)*rz64 // 16.16
+				tmp[out] = uint16(c0 + int32((rest+0x8000)>>16))         // round >> 16
+			}
+		case 1: // rx >= rz >= ry
+			for out := 0; out < totalOut; out++ {
+				c0 := int32(base[idx000+out])
+				p100 := int32(base[idx100+out])
+				p101 := int32(base[idx101+out])
+				p111 := int32(base[idx111+out])
+
+				c1 := p100 - c0
+				c2 := p111 - p101
+				c3 := p101 - p100
+
+				rest := int64(c1)*rx64 + int64(c2)*ry64 + int64(c3)*rz64
+				tmp[out] = uint16(c0 + int32((rest+0x8000)>>16))
+			}
+		case 2: // rz >= rx >= ry
+			for out := 0; out < totalOut; out++ {
+				c0 := int32(base[idx000+out])
+				p001 := int32(base[idx001+out])
+				p101 := int32(base[idx101+out])
+				p111 := int32(base[idx111+out])
+
+				c1 := p101 - p001
+				c2 := p111 - p101
+				c3 := p001 - c0
+
+				rest := int64(c1)*rx64 + int64(c2)*ry64 + int64(c3)*rz64
+				tmp[out] = uint16(c0 + int32((rest+0x8000)>>16))
+			}
+		case 3: // ry >= rx >= rz
+			for out := 0; out < totalOut; out++ {
+				c0 := int32(base[idx000+out])
+				p010 := int32(base[idx010+out])
+				p110 := int32(base[idx110+out])
+				p111 := int32(base[idx111+out])
+
+				c1 := p110 - p010
+				c2 := p010 - c0
+				c3 := p111 - p110
+
+				rest := int64(c1)*rx64 + int64(c2)*ry64 + int64(c3)*rz64
+				tmp[out] = uint16(c0 + int32((rest+0x8000)>>16))
+			}
+		case 4: // ry >= rz >= rx
+			for out := 0; out < totalOut; out++ {
+				c0 := int32(base[idx000+out])
+				p010 := int32(base[idx010+out])
+				p011 := int32(base[idx011+out])
+				p111 := int32(base[idx111+out])
+
+				c1 := p111 - p011
+				c2 := p010 - c0
+				c3 := p011 - p010
+
+				rest := int64(c1)*rx64 + int64(c2)*ry64 + int64(c3)*rz64
+				tmp[out] = uint16(c0 + int32((rest+0x8000)>>16))
+			}
+		default: // 5: rz >= ry >= rx
+			for out := 0; out < totalOut; out++ {
+				c0 := int32(base[idx000+out])
+				p001 := int32(base[idx001+out])
+				p011 := int32(base[idx011+out])
+				p111 := int32(base[idx111+out])
+
+				c1 := p111 - p011
+				c2 := p011 - p001
+				c3 := p001 - c0
+
+				rest := int64(c1)*rx64 + int64(c2)*ry64 + int64(c3)*rz64
+				tmp[out] = uint16(c0 + int32((rest+0x8000)>>16))
+			}
+		}
+	}
+
+	// Process both planes
+	doPlane(baseK0, Tmp1)
+	doPlane(baseK1, Tmp2)
+
+	// ---- final blend (inline LinearInterp) ----
+	rk64 := int64(rk)
+	for i := 0; i < totalOut; i++ {
+		lo := int32(Tmp1[i])
+		hi := int32(Tmp2[i])
+		// lo + ((hi-lo)*rk + 0x8000)>>16
+		Output[i] = uint16(lo + int32(((int64(hi-lo)*rk64 + 0x8000) >> 16)))
+	}
+}
+
+// Assume cmsS15Fixed16Number == int32 (16.16 fixed)
+/*func Eval4Inputs(mm mem.Manager, Input, Output []uint16, p *cmsInterpParams) {
+	totalOut := int(p.nOutputs)
+
+	LutTable, ok := p.Table.([]uint16)
+	if !ok {
+		panic("p.Table is not of type []uint16 in Eval4Inputs")
+	}
+
+	// --- fixed-point mapping of inputs to grid ---
+	fk := cmsToFixedDomain(int(Input[0]) * int(p.Domain[0]))
+	fx := cmsToFixedDomain(int(Input[1]) * int(p.Domain[1]))
+	fy := cmsToFixedDomain(int(Input[2]) * int(p.Domain[2]))
+	fz := cmsToFixedDomain(int(Input[3]) * int(p.Domain[3]))
+
+	k0 := FIXED_TO_INT(fk) // int32 grid index (integer part)
+	x0 := FIXED_TO_INT(fx)
+	y0 := FIXED_TO_INT(fy)
+	z0 := FIXED_TO_INT(fz)
+
+	// fractional parts as int32 in [0, 65535]
+	rk := int32(FIXED_REST_TO_INT(fk))
+	rx := int32(FIXED_REST_TO_INT(fx))
+	ry := int32(FIXED_REST_TO_INT(fy))
+	rz := int32(FIXED_REST_TO_INT(fz))
+
+	// Convert stride multipliers once to int for indexing
+	opk := int(p.opta[3])
+	opx := int(p.opta[2])
+	opy := int(p.opta[1])
+	opz := int(p.opta[0])
+
+	// Base offsets for K planes (as int indices)
+	K0 := int(k0) * opk
+	K1 := K0
+	if Input[0] != 0xFFFF {
+		K1 += opk
+	}
+
+	// Base offsets for X/Y/Z (as int offsets)
+	X0 := int(x0) * opx
+	X1 := X0
+	if Input[1] != 0xFFFF {
+		X1 += opx
+	}
+
+	Y0 := int(y0) * opy
+	Y1 := Y0
+	if Input[2] != 0xFFFF {
+		Y1 += opy
+	}
+
+	Z0 := int(z0) * opz
+	Z1 := Z0
+	if Input[3] != 0xFFFF {
+		Z1 += opz
+	}
+
+	// ---- scratch buffers (preallocated) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1U16[:totalOut]
+	Tmp2 := sc.Tmp2U16[:totalOut]
+
+	// ---- slice bases and single bounds-guard to elide inner checks ----
+	baseK0 := LutTable[K0:]
+	baseK1 := LutTable[K1:]
+	maxOff := X1 + Y1 + Z1 + (totalOut - 1)
+	_ = baseK0[maxOff]
+	_ = baseK1[maxOff]
+
+	// Helper to fetch once (saves a few adds/repeats)
+	idx000 := X0 + Y0 + Z0
+	idx100 := X1 + Y0 + Z0
+	idx110 := X1 + Y1 + Z0
+	idx111 := X1 + Y1 + Z1
+	idx101 := X1 + Y0 + Z1
+	idx001 := X0 + Y0 + Z1
+	idx011 := X0 + Y1 + Z1
+	idx010 := X0 + Y1 + Z0
 
 	// ----- Process K0 -----
-	baseK0 := LutTable[K0:]
+	for out := 0; out < totalOut; out++ {
+		// c0 as int32 baseline
+		c0 := int32(baseK0[idx000+out])
 
-	for outChan := uint32(0); outChan < uint32(TotalOut); outChan++ {
-		c0 := DENS(baseK0, X0, Y0, Z0, outChan)
-		var c1, c2, c3 cmsS15Fixed16Number
+		var c1, c2, c3 int32 // cmsS15Fixed16Number compatible
 
+		// order selection (same branching as original)
 		if rx >= ry && ry >= rz {
-			c1 = cmsS15Fixed16Number(DENS(baseK0, X1, Y0, Z0, outChan) - c0)
-			c2 = cmsS15Fixed16Number(DENS(baseK0, X1, Y1, Z0, outChan) - DENS(baseK0, X1, Y0, Z0, outChan))
-			c3 = cmsS15Fixed16Number(DENS(baseK0, X1, Y1, Z1, outChan) - DENS(baseK0, X1, Y1, Z0, outChan))
+			c1 = int32(baseK0[idx100+out]) - c0
+			c2 = int32(baseK0[idx110+out]) - int32(baseK0[idx100+out])
+			c3 = int32(baseK0[idx111+out]) - int32(baseK0[idx110+out])
 		} else if rx >= rz && rz >= ry {
-			c1 = cmsS15Fixed16Number(DENS(baseK0, X1, Y0, Z0, outChan) - c0)
-			c2 = cmsS15Fixed16Number(DENS(baseK0, X1, Y1, Z1, outChan) - DENS(baseK0, X1, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(baseK0, X1, Y0, Z1, outChan) - DENS(baseK0, X1, Y0, Z0, outChan))
+			c1 = int32(baseK0[idx100+out]) - c0
+			c2 = int32(baseK0[idx111+out]) - int32(baseK0[idx101+out])
+			c3 = int32(baseK0[idx101+out]) - int32(baseK0[idx100+out])
 		} else if rz >= rx && rx >= ry {
-			c1 = cmsS15Fixed16Number(DENS(baseK0, X1, Y0, Z1, outChan) - DENS(baseK0, X0, Y0, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(baseK0, X1, Y1, Z1, outChan) - DENS(baseK0, X1, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(baseK0, X0, Y0, Z1, outChan) - c0)
+			c1 = int32(baseK0[idx101+out]) - int32(baseK0[idx001+out])
+			c2 = int32(baseK0[idx111+out]) - int32(baseK0[idx101+out])
+			c3 = int32(baseK0[idx001+out]) - c0
 		} else if ry >= rx && rx >= rz {
-			c1 = cmsS15Fixed16Number(DENS(baseK0, X1, Y1, Z0, outChan) - DENS(baseK0, X0, Y1, Z0, outChan))
-			c2 = cmsS15Fixed16Number(DENS(baseK0, X0, Y1, Z0, outChan) - c0)
-			c3 = cmsS15Fixed16Number(DENS(baseK0, X1, Y1, Z1, outChan) - DENS(baseK0, X1, Y1, Z0, outChan))
+			c1 = int32(baseK0[idx110+out]) - int32(baseK0[idx010+out])
+			c2 = int32(baseK0[idx010+out]) - c0
+			c3 = int32(baseK0[idx111+out]) - int32(baseK0[idx110+out])
 		} else if ry >= rz && rz >= rx {
-			c1 = cmsS15Fixed16Number(DENS(baseK0, X1, Y1, Z1, outChan) - DENS(baseK0, X0, Y1, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(baseK0, X0, Y1, Z0, outChan) - c0)
-			c3 = cmsS15Fixed16Number(DENS(baseK0, X0, Y1, Z1, outChan) - DENS(baseK0, X0, Y1, Z0, outChan))
+			c1 = int32(baseK0[idx111+out]) - int32(baseK0[idx011+out])
+			c2 = int32(baseK0[idx010+out]) - c0
+			c3 = int32(baseK0[idx011+out]) - int32(baseK0[idx010+out])
 		} else { // rz >= ry && ry >= rx
-			c1 = cmsS15Fixed16Number(DENS(baseK0, X1, Y1, Z1, outChan) - DENS(baseK0, X0, Y1, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(baseK0, X0, Y1, Z1, outChan) - DENS(baseK0, X0, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(baseK0, X0, Y0, Z1, outChan) - c0)
+			c1 = int32(baseK0[idx111+out]) - int32(baseK0[idx011+out])
+			c2 = int32(baseK0[idx011+out]) - int32(baseK0[idx001+out])
+			c3 = int32(baseK0[idx001+out]) - c0
 		}
 
-		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-		Tmp1[outChan] = uint16(c0 + ROUND_FIXED_TO_INT(cmsToFixedDomain(int(Rest))))
+		// use 64-bit for the dot to avoid transient overflow
+		rest := int64(c1)*int64(rx) + int64(c2)*int64(ry) + int64(c3)*int64(rz)
+		// cmsToFixedDomain expects int; ROUND_FIXED_TO_INT expects a fixed 16.16
+		// rest is a weighted delta in 16.16 space—bring to fixed, round, add
+		Tmp1[out] = uint16(c0 + ROUND_FIXED_TO_INT(cmsToFixedDomain(int(rest))))
 	}
 
 	// ----- Process K1 -----
-	baseK1 := LutTable[K1:]
+	for out := 0; out < totalOut; out++ {
+		c0 := int32(baseK1[idx000+out])
 
-	for outChan := uint32(0); outChan < uint32(TotalOut); outChan++ {
-		c0 := DENS(baseK1, X0, Y0, Z0, outChan)
-		var c1, c2, c3 cmsS15Fixed16Number
-
+		var c1, c2, c3 int32
 		if rx >= ry && ry >= rz {
-			c1 = cmsS15Fixed16Number(DENS(baseK1, X1, Y0, Z0, outChan) - c0)
-			c2 = cmsS15Fixed16Number(DENS(baseK1, X1, Y1, Z0, outChan) - DENS(baseK1, X1, Y0, Z0, outChan))
-			c3 = cmsS15Fixed16Number(DENS(baseK1, X1, Y1, Z1, outChan) - DENS(baseK1, X1, Y1, Z0, outChan))
+			c1 = int32(baseK1[idx100+out]) - c0
+			c2 = int32(baseK1[idx110+out]) - int32(baseK1[idx100+out])
+			c3 = int32(baseK1[idx111+out]) - int32(baseK1[idx110+out])
 		} else if rx >= rz && rz >= ry {
-			c1 = cmsS15Fixed16Number(DENS(baseK1, X1, Y0, Z0, outChan) - c0)
-			c2 = cmsS15Fixed16Number(DENS(baseK1, X1, Y1, Z1, outChan) - DENS(baseK1, X1, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(baseK1, X1, Y0, Z1, outChan) - DENS(baseK1, X1, Y0, Z0, outChan))
+			c1 = int32(baseK1[idx100+out]) - c0
+			c2 = int32(baseK1[idx111+out]) - int32(baseK1[idx101+out])
+			c3 = int32(baseK1[idx101+out]) - int32(baseK1[idx100+out])
 		} else if rz >= rx && rx >= ry {
-			c1 = cmsS15Fixed16Number(DENS(baseK1, X1, Y0, Z1, outChan) - DENS(baseK1, X0, Y0, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(baseK1, X1, Y1, Z1, outChan) - DENS(baseK1, X1, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(baseK1, X0, Y0, Z1, outChan) - c0)
+			c1 = int32(baseK1[idx101+out]) - int32(baseK1[idx001+out])
+			c2 = int32(baseK1[idx111+out]) - int32(baseK1[idx101+out])
+			c3 = int32(baseK1[idx001+out]) - c0
 		} else if ry >= rx && rx >= rz {
-			c1 = cmsS15Fixed16Number(DENS(baseK1, X1, Y1, Z0, outChan) - DENS(baseK1, X0, Y1, Z0, outChan))
-			c2 = cmsS15Fixed16Number(DENS(baseK1, X0, Y1, Z0, outChan) - c0)
-			c3 = cmsS15Fixed16Number(DENS(baseK1, X1, Y1, Z1, outChan) - DENS(baseK1, X1, Y1, Z0, outChan))
+			c1 = int32(baseK1[idx110+out]) - int32(baseK1[idx010+out])
+			c2 = int32(baseK1[idx010+out]) - c0
+			c3 = int32(baseK1[idx111+out]) - int32(baseK1[idx110+out])
 		} else if ry >= rz && rz >= rx {
-			c1 = cmsS15Fixed16Number(DENS(baseK1, X1, Y1, Z1, outChan) - DENS(baseK1, X0, Y1, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(baseK1, X0, Y1, Z0, outChan) - c0)
-			c3 = cmsS15Fixed16Number(DENS(baseK1, X0, Y1, Z1, outChan) - DENS(baseK1, X0, Y1, Z0, outChan))
+			c1 = int32(baseK1[idx111+out]) - int32(baseK1[idx011+out])
+			c2 = int32(baseK1[idx010+out]) - c0
+			c3 = int32(baseK1[idx011+out]) - int32(baseK1[idx010+out])
 		} else { // rz >= ry && ry >= rx
-			c1 = cmsS15Fixed16Number(DENS(baseK1, X1, Y1, Z1, outChan) - DENS(baseK1, X0, Y1, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(baseK1, X0, Y1, Z1, outChan) - DENS(baseK1, X0, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(baseK1, X0, Y0, Z1, outChan) - c0)
+			c1 = int32(baseK1[idx111+out]) - int32(baseK1[idx011+out])
+			c2 = int32(baseK1[idx011+out]) - int32(baseK1[idx001+out])
+			c3 = int32(baseK1[idx001+out]) - c0
 		}
 
-		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-		Tmp2[outChan] = uint16(c0 + ROUND_FIXED_TO_INT(cmsToFixedDomain(int(Rest))))
+		rest := int64(c1)*int64(rx) + int64(c2)*int64(ry) + int64(c3)*int64(rz)
+		Tmp2[out] = uint16(c0 + ROUND_FIXED_TO_INT(cmsToFixedDomain(int(rest))))
 	}
 
-	// final blend between K0/K1
-	for i := 0; i < TotalOut; i++ {
+	// ---- final blend ----
+	for i := 0; i < totalOut; i++ {
 		Output[i] = LinearInterp(rk, int32(Tmp1[i]), int32(Tmp2[i]))
 	}
 }*/
 
-func Eval4Inputs(mm mem.Manager, Input, Output []uint16, p *cmsInterpParams) {
+/*func Eval4Inputs(mm mem.Manager, Input, Output []uint16, p *cmsInterpParams) {
 	totalOut := int(p.nOutputs)
 
 	LutTable, ok := p.Table.([]uint16)
@@ -1376,384 +1380,6 @@ func Eval4Inputs(mm mem.Manager, Input, Output []uint16, p *cmsInterpParams) {
 
 		rest := c1*rx + c2*ry + c3*rz
 		Tmp2[out] = uint16(c0 + ROUND_FIXED_TO_INT(cmsToFixedDomain(int(rest))))
-	}
-
-	// ---- final blend ----
-	for i := 0; i < totalOut; i++ {
-		Output[i] = LinearInterp(rk, int32(Tmp1[i]), int32(Tmp2[i]))
-	}
-}
-
-// Eval4Inputs performs tetrahedral interpolation with 4 input channels for 16-bit values,
-// using preallocated scratch from mem.Manager and window-sliced LUTs to minimize bounds checks.
-/*func Eval4Inputs(mm mem.Manager, Input, Output []uint16, p *cmsInterpParams) {
-	totalOut := int(p.nOutputs)
-
-	LutTable, ok := p.Table.([]uint16)
-	if !ok {
-		panic("p.Table is not of type []uint16 in Eval4Inputs")
-	}
-
-	// --- fixed-point mapping of inputs to grid ---
-	fk := cmsToFixedDomain(int(Input[0]) * int(p.Domain[0]))
-	fx := cmsToFixedDomain(int(Input[1]) * int(p.Domain[1]))
-	fy := cmsToFixedDomain(int(Input[2]) * int(p.Domain[2]))
-	fz := cmsToFixedDomain(int(Input[3]) * int(p.Domain[3]))
-
-	k0 := FIXED_TO_INT(fk)
-	x0 := FIXED_TO_INT(fx)
-	y0 := FIXED_TO_INT(fy)
-	z0 := FIXED_TO_INT(fz)
-
-	rk := int32(FIXED_REST_TO_INT(fk))
-	rx := int32(FIXED_REST_TO_INT(fx))
-	ry := int32(FIXED_REST_TO_INT(fy))
-	rz := int32(FIXED_REST_TO_INT(fz))
-
-	K0 := int32(p.opta[3]) * k0
-	K1 := K0
-	if Input[0] != 0xFFFF {
-		K1 += int32(p.opta[3])
-	}
-
-	X0 := int32(p.opta[2]) * x0
-	X1 := X0
-	if Input[1] != 0xFFFF {
-		X1 += int32(p.opta[2])
-	}
-
-	Y0 := int32(p.opta[1]) * y0
-	Y1 := Y0
-	if Input[2] != 0xFFFF {
-		Y1 += int32(p.opta[1])
-	}
-
-	Z0 := int32(p.opta[0]) * z0
-	Z1 := Z0
-	if Input[3] != 0xFFFF {
-		Z1 += int32(p.opta[0])
-	}
-
-	// ---- scratch buffers (preallocated) ----
-	sc := mm.Scratch()
-	Tmp1 := sc.Tmp1U16[:totalOut]
-	Tmp2 := sc.Tmp2U16[:totalOut]
-
-	// ---- base slices once, guard to elide inner bounds checks ----
-	baseK0 := LutTable[int(K0):]
-	baseK1 := LutTable[int(K1):]
-	_ = baseK0[int(X1+Y1+Z1)+totalOut-1]
-	_ = baseK1[int(X1+Y1+Z1)+totalOut-1]
-
-	// ----- Process K0 -----
-	for out := 0; out < totalOut; out++ {
-		c0 := int32(baseK0[int(X0+Y0+Z0)+out])
-
-		var c1, c2, c3 cmsS15Fixed16Number
-		if rx >= ry && ry >= rz {
-			c1 = cmsS15Fixed16Number(int32(baseK0[int(X1+Y0+Z0)+out]) - c0)
-			c2 = cmsS15Fixed16Number(int32(baseK0[int(X1+Y1+Z0)+out]) -
-				int32(baseK0[int(X1+Y0+Z0)+out]))
-			c3 = cmsS15Fixed16Number(int32(baseK0[int(X1+Y1+Z1)+out]) -
-				int32(baseK0[int(X1+Y1+Z0)+out]))
-		} else if rx >= rz && rz >= ry {
-			c1 = cmsS15Fixed16Number(int32(baseK0[int(X1+Y0+Z0)+out]) - c0)
-			c2 = cmsS15Fixed16Number(int32(baseK0[int(X1+Y1+Z1)+out]) -
-				int32(baseK0[int(X1+Y0+Z1)+out]))
-			c3 = cmsS15Fixed16Number(int32(baseK0[int(X1+Y0+Z1)+out]) -
-				int32(baseK0[int(X1+Y0+Z0)+out]))
-		} else if rz >= rx && rx >= ry {
-			c1 = cmsS15Fixed16Number(int32(baseK0[int(X1+Y0+Z1)+out]) -
-				int32(baseK0[int(X0+Y0+Z1)+out]))
-			c2 = cmsS15Fixed16Number(int32(baseK0[int(X1+Y1+Z1)+out]) -
-				int32(baseK0[int(X1+Y0+Z1)+out]))
-			c3 = cmsS15Fixed16Number(int32(baseK0[int(X0+Y0+Z1)+out]) - c0)
-		} else if ry >= rx && rx >= rz {
-			c1 = cmsS15Fixed16Number(int32(baseK0[int(X1+Y1+Z0)+out]) -
-				int32(baseK0[int(X0+Y1+Z0)+out]))
-			c2 = cmsS15Fixed16Number(int32(baseK0[int(X0+Y1+Z0)+out]) - c0)
-			c3 = cmsS15Fixed16Number(int32(baseK0[int(X1+Y1+Z1)+out]) -
-				int32(baseK0[int(X1+Y1+Z0)+out]))
-		} else if ry >= rz && rz >= rx {
-			c1 = cmsS15Fixed16Number(int32(baseK0[int(X1+Y1+Z1)+out]) -
-				int32(baseK0[int(X0+Y1+Z1)+out]))
-			c2 = cmsS15Fixed16Number(int32(baseK0[int(X0+Y1+Z0)+out]) - c0)
-			c3 = cmsS15Fixed16Number(int32(baseK0[int(X0+Y1+Z1)+out]) -
-				int32(baseK0[int(X0+Y1+Z0)+out]))
-		} else { // rz >= ry && ry >= rx
-			c1 = cmsS15Fixed16Number(int32(baseK0[int(X1+Y1+Z1)+out]) -
-				int32(baseK0[int(X0+Y1+Z1)+out]))
-			c2 = cmsS15Fixed16Number(int32(baseK0[int(X0+Y1+Z1)+out]) -
-				int32(baseK0[int(X0+Y0+Z1)+out]))
-			c3 = cmsS15Fixed16Number(int32(baseK0[int(X0+Y0+Z1)+out]) - c0)
-		}
-
-		rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-		Tmp1[out] = uint16(c0 + ROUND_FIXED_TO_INT(cmsToFixedDomain(int(rest))))
-	}
-
-	// ----- Process K1 -----
-	for out := 0; out < totalOut; out++ {
-		c0 := int32(baseK1[int(X0+Y0+Z0)+out])
-
-		var c1, c2, c3 cmsS15Fixed16Number
-		if rx >= ry && ry >= rz {
-			c1 = cmsS15Fixed16Number(int32(baseK1[int(X1+Y0+Z0)+out]) - c0)
-			c2 = cmsS15Fixed16Number(int32(baseK1[int(X1+Y1+Z0)+out]) -
-				int32(baseK1[int(X1+Y0+Z0)+out]))
-			c3 = cmsS15Fixed16Number(int32(baseK1[int(X1+Y1+Z1)+out]) -
-				int32(baseK1[int(X1+Y1+Z0)+out]))
-		} else if rx >= rz && rz >= ry {
-			c1 = cmsS15Fixed16Number(int32(baseK1[int(X1+Y0+Z0)+out]) - c0)
-			c2 = cmsS15Fixed16Number(int32(baseK1[int(X1+Y1+Z1)+out]) -
-				int32(baseK1[int(X1+Y0+Z1)+out]))
-			c3 = cmsS15Fixed16Number(int32(baseK1[int(X1+Y0+Z1)+out]) -
-				int32(baseK1[int(X1+Y0+Z0)+out]))
-		} else if rz >= rx && rx >= ry {
-			c1 = cmsS15Fixed16Number(int32(baseK1[int(X1+Y0+Z1)+out]) -
-				int32(baseK1[int(X0+Y0+Z1)+out]))
-			c2 = cmsS15Fixed16Number(int32(baseK1[int(X1+Y1+Z1)+out]) -
-				int32(baseK1[int(X1+Y0+Z1)+out]))
-			c3 = cmsS15Fixed16Number(int32(baseK1[int(X0+Y0+Z1)+out]) - c0)
-		} else if ry >= rx && rx >= rz {
-			c1 = cmsS15Fixed16Number(int32(baseK1[int(X1+Y1+Z0)+out]) -
-				int32(baseK1[int(X0+Y1+Z0)+out]))
-			c2 = cmsS15Fixed16Number(int32(baseK1[int(X0+Y1+Z0)+out]) - c0)
-			c3 = cmsS15Fixed16Number(int32(baseK1[int(X1+Y1+Z1)+out]) -
-				int32(baseK1[int(X1+Y1+Z0)+out]))
-		} else if ry >= rz && rz >= rx {
-			c1 = cmsS15Fixed16Number(int32(baseK1[int(X1+Y1+Z1)+out]) -
-				int32(baseK1[int(X0+Y1+Z1)+out]))
-			c2 = cmsS15Fixed16Number(int32(baseK1[int(X0+Y1+Z0)+out]) - c0)
-			c3 = cmsS15Fixed16Number(int32(baseK1[int(X0+Y1+Z1)+out]) -
-				int32(baseK1[int(X0+Y1+Z0)+out]))
-		} else { // rz >= ry && ry >= rx
-			c1 = cmsS15Fixed16Number(int32(baseK1[int(X1+Y1+Z1)+out]) -
-				int32(baseK1[int(X0+Y1+Z1)+out]))
-			c2 = cmsS15Fixed16Number(int32(baseK1[int(X0+Y1+Z1)+out]) -
-				int32(baseK1[int(X0+Y0+Z1)+out]))
-			c3 = cmsS15Fixed16Number(int32(baseK1[int(X0+Y0+Z1)+out]) - c0)
-		}
-
-		rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-		Tmp2[out] = uint16(c0 + ROUND_FIXED_TO_INT(cmsToFixedDomain(int(rest))))
-	}
-
-	// ---- final blend ----
-	for i := 0; i < totalOut; i++ {
-		Output[i] = LinearInterp(rk, int32(Tmp1[i]), int32(Tmp2[i]))
-	}
-}*/
-
-/*func Eval4Inputs(mm mem.Manager, Input, Output []uint16, p *cmsInterpParams) {
-	totalOut := int(p.nOutputs)
-
-	LutTable, ok := p.Table.([]uint16)
-	if !ok {
-		panic("p.Table is not of type []uint16 in Eval4Inputs")
-	}
-
-	// --- fixed-point mapping of inputs to grid (inline cmsToFixedDomain) ---
-	// cmsToFixedDomain(a) == a + ((a + 0x7FFF) / 0xFFFF)
-	ak := int32(Input[0]) * int32(p.Domain[0])
-	ax := int32(Input[1]) * int32(p.Domain[1])
-	ay := int32(Input[2]) * int32(p.Domain[2])
-	az := int32(Input[3]) * int32(p.Domain[3])
-
-	fk := cmsS15Fixed16Number(ak + int32((uint32(ak)+0x7FFF)/0xFFFF))
-	fx := cmsS15Fixed16Number(ax + int32((uint32(ax)+0x7FFF)/0xFFFF))
-	fy := cmsS15Fixed16Number(ay + int32((uint32(ay)+0x7FFF)/0xFFFF))
-	fz := cmsS15Fixed16Number(az + int32((uint32(az)+0x7FFF)/0xFFFF))
-
-	k0 := FIXED_TO_INT(fk)
-	x0 := FIXED_TO_INT(fx)
-	y0 := FIXED_TO_INT(fy)
-	z0 := FIXED_TO_INT(fz)
-
-	rk := int32(FIXED_REST_TO_INT(fk))
-	rx := int32(FIXED_REST_TO_INT(fx))
-	ry := int32(FIXED_REST_TO_INT(fy))
-	rz := int32(FIXED_REST_TO_INT(fz))
-
-	K0 := int32(p.opta[3]) * k0
-	K1 := K0
-	if Input[0] != 0xFFFF {
-		K1 += int32(p.opta[3])
-	}
-
-	X0 := int32(p.opta[2]) * x0
-	X1 := X0
-	if Input[1] != 0xFFFF {
-		X1 += int32(p.opta[2])
-	}
-
-	Y0 := int32(p.opta[1]) * y0
-	Y1 := Y0
-	if Input[2] != 0xFFFF {
-		Y1 += int32(p.opta[1])
-	}
-
-	Z0 := int32(p.opta[0]) * z0
-	Z1 := Z0
-	if Input[3] != 0xFFFF {
-		Z1 += int32(p.opta[0])
-	}
-
-	// ---- scratch buffers (preallocated) ----
-	sc := mm.Scratch()
-	Tmp1 := sc.Tmp1U16[:totalOut]
-	Tmp2 := sc.Tmp2U16[:totalOut]
-
-	// ---- base slices once, guard to elide inner bounds checks ----
-	baseK0 := LutTable[int(K0):]
-	baseK1 := LutTable[int(K1):]
-	_ = baseK0[int(X1+Y1+Z1)+totalOut-1]
-	_ = baseK1[int(X1+Y1+Z1)+totalOut-1]
-
-	// ---- choose tetrahedron once (caseID in 0..5) ----
-	// mapping matches your original if/else chain:
-	// 0: rx>=ry && ry>=rz
-	// 1: rx>=rz && rz>=ry
-	// 2: rz>=rx && rx>=ry
-	// 3: ry>=rx && rx>=rz
-	// 4: ry>=rz && rz>=rx
-	// 5: rz>=ry && ry>=rx
-	caseID := 0
-	if rx >= ry {
-		if ry >= rz {
-			caseID = 0
-		} else if rx >= rz {
-			caseID = 1
-		} else {
-			caseID = 4 // rz > rx >= ry  ⇒ ry>=rz false, falls here as "ry>=rz && rz>=rx" equivalent branch in else-tree
-		}
-	} else { // ry > rx
-		if rx >= rz {
-			caseID = 3 // ry>=rx && rx>=rz
-		} else if ry >= rz {
-			caseID = 4 // ry>=rz && rz>=rx
-		} else {
-			caseID = 5 // rz>=ry && ry>=rx
-		}
-	}
-
-	// ===== Process K0 =====
-	// Precompute the eight corner base indices (without +out), then ++ each loop.
-	i000 := int(X0 + Y0 + Z0)
-	i100 := int(X1 + Y0 + Z0)
-	i110 := int(X1 + Y1 + Z0)
-	i111 := int(X1 + Y1 + Z1)
-	i101 := int(X1 + Y0 + Z1)
-	i001 := int(X0 + Y0 + Z1)
-	i010 := int(X0 + Y1 + Z0)
-	i011 := int(X0 + Y1 + Z1)
-
-	ii000, ii100, ii110, ii111 := i000, i100, i110, i111
-	ii101, ii001, ii010, ii011 := i101, i001, i010, i011
-
-	for out := 0; out < totalOut; out++ {
-		c0 := int32(baseK0[ii000])
-
-		var c1, c2, c3 cmsS15Fixed16Number
-		switch caseID {
-		case 0: // rx>=ry && ry>=rz
-			c1 = cmsS15Fixed16Number(int32(baseK0[ii100]) - c0)
-			c2 = cmsS15Fixed16Number(int32(baseK0[ii110]) - int32(baseK0[ii100]))
-			c3 = cmsS15Fixed16Number(int32(baseK0[ii111]) - int32(baseK0[ii110]))
-		case 1: // rx>=rz && rz>=ry
-			c1 = cmsS15Fixed16Number(int32(baseK0[ii100]) - c0)
-			c2 = cmsS15Fixed16Number(int32(baseK0[ii111]) - int32(baseK0[ii101]))
-			c3 = cmsS15Fixed16Number(int32(baseK0[ii101]) - int32(baseK0[ii100]))
-		case 2: // rz>=rx && rx>=ry
-			c1 = cmsS15Fixed16Number(int32(baseK0[ii101]) - int32(baseK0[ii001]))
-			c2 = cmsS15Fixed16Number(int32(baseK0[ii111]) - int32(baseK0[ii101]))
-			c3 = cmsS15Fixed16Number(int32(baseK0[ii001]) - c0)
-		case 3: // ry>=rx && rx>=rz
-			c1 = cmsS15Fixed16Number(int32(baseK0[ii110]) - int32(baseK0[ii010]))
-			c2 = cmsS15Fixed16Number(int32(baseK0[ii010]) - c0)
-			c3 = cmsS15Fixed16Number(int32(baseK0[ii111]) - int32(baseK0[ii110]))
-		case 4: // ry>=rz && rz>=rx
-			c1 = cmsS15Fixed16Number(int32(baseK0[ii111]) - int32(baseK0[ii011]))
-			c2 = cmsS15Fixed16Number(int32(baseK0[ii010]) - c0)
-			c3 = cmsS15Fixed16Number(int32(baseK0[ii011]) - int32(baseK0[ii010]))
-		default: // 5: rz>=ry && ry>=rx
-			c1 = cmsS15Fixed16Number(int32(baseK0[ii111]) - int32(baseK0[ii011]))
-			c2 = cmsS15Fixed16Number(int32(baseK0[ii011]) - int32(baseK0[ii001]))
-			c3 = cmsS15Fixed16Number(int32(baseK0[ii001]) - c0)
-		}
-
-		rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-		// inline cmsToFixedDomain(rest)
-		rf := cmsS15Fixed16Number(rest + int32((uint32(rest)+0x7FFF)/0xFFFF))
-		Tmp1[out] = uint16(c0 + ROUND_FIXED_TO_INT(rf))
-
-		// advance all corner indices for next output component
-		ii000++
-		ii100++
-		ii110++
-		ii111++
-		ii101++
-		ii001++
-		ii010++
-		ii011++
-	}
-
-	// ===== Process K1 =====
-	i000 = int(X0 + Y0 + Z0)
-	i100 = int(X1 + Y0 + Z0)
-	i110 = int(X1 + Y1 + Z0)
-	i111 = int(X1 + Y1 + Z1)
-	i101 = int(X1 + Y0 + Z1)
-	i001 = int(X0 + Y0 + Z1)
-	i010 = int(X0 + Y1 + Z0)
-	i011 = int(X0 + Y1 + Z1)
-
-	ii000, ii100, ii110, ii111 = i000, i100, i110, i111
-	ii101, ii001, ii010, ii011 = i101, i001, i010, i011
-
-	for out := 0; out < totalOut; out++ {
-		c0 := int32(baseK1[ii000])
-
-		var c1, c2, c3 cmsS15Fixed16Number
-		switch caseID {
-		case 0:
-			c1 = cmsS15Fixed16Number(int32(baseK1[ii100]) - c0)
-			c2 = cmsS15Fixed16Number(int32(baseK1[ii110]) - int32(baseK1[ii100]))
-			c3 = cmsS15Fixed16Number(int32(baseK1[ii111]) - int32(baseK1[ii110]))
-		case 1:
-			c1 = cmsS15Fixed16Number(int32(baseK1[ii100]) - c0)
-			c2 = cmsS15Fixed16Number(int32(baseK1[ii111]) - int32(baseK1[ii101]))
-			c3 = cmsS15Fixed16Number(int32(baseK1[ii101]) - int32(baseK1[ii100]))
-		case 2:
-			c1 = cmsS15Fixed16Number(int32(baseK1[ii101]) - int32(baseK1[ii001]))
-			c2 = cmsS15Fixed16Number(int32(baseK1[ii111]) - int32(baseK1[ii101]))
-			c3 = cmsS15Fixed16Number(int32(baseK1[ii001]) - c0)
-		case 3:
-			c1 = cmsS15Fixed16Number(int32(baseK1[ii110]) - int32(baseK1[ii010]))
-			c2 = cmsS15Fixed16Number(int32(baseK1[ii010]) - c0)
-			c3 = cmsS15Fixed16Number(int32(baseK1[ii111]) - int32(baseK1[ii110]))
-		case 4:
-			c1 = cmsS15Fixed16Number(int32(baseK1[ii111]) - int32(baseK1[ii011]))
-			c2 = cmsS15Fixed16Number(int32(baseK1[ii010]) - c0)
-			c3 = cmsS15Fixed16Number(int32(baseK1[ii011]) - int32(baseK1[ii010]))
-		default: // 5
-			c1 = cmsS15Fixed16Number(int32(baseK1[ii111]) - int32(baseK1[ii011]))
-			c2 = cmsS15Fixed16Number(int32(baseK1[ii011]) - int32(baseK1[ii001]))
-			c3 = cmsS15Fixed16Number(int32(baseK1[ii001]) - c0)
-		}
-
-		rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-		rf := cmsS15Fixed16Number(rest + int32((uint32(rest)+0x7FFF)/0xFFFF))
-		Tmp2[out] = uint16(c0 + ROUND_FIXED_TO_INT(rf))
-
-		ii000++
-		ii100++
-		ii110++
-		ii111++
-		ii101++
-		ii001++
-		ii010++
-		ii011++
 	}
 
 	// ---- final blend ----
