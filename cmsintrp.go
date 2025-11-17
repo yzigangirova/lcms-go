@@ -632,82 +632,125 @@ func TrilinearInterp16(mm mem.Manager, Input []uint16, Output []uint16, p *cmsIn
 
 }
 
-// TetrahedralInterpFloat performs tetrahedral interpolation for floating-point values.
-func TetrahedralInterpFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
-	TotalOut := int(p.nOutputs)
+// TetrahedralInterpFloat — 3D tetrahedral for float32 (no K split).
+func TetrahedralInterpFloat(mm mem.Manager, Input, Output []float32, p *cmsInterpParams) {
+	totalOut := int(p.nOutputs)
 
-	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		panic("p.Table is not of type []float32 in Eval1InputFloat")
-	}
-
-	// Inline function for LUT lookup
-	DENS := func(i, j, k, outChan int) float32 {
-		return LutTable[i+j+k+outChan]
+		panic("p.Table is not of type []float32 in TetrahedralInterpFloat")
 	}
 
 	px := fclamp(Input[0]) * float32(p.Domain[0])
 	py := fclamp(Input[1]) * float32(p.Domain[1])
 	pz := fclamp(Input[2]) * float32(p.Domain[2])
 
-	x0 := int(math.Floor(float64(px)))
+	x0 := int(px)
 	rx := px - float32(x0)
-	y0 := int(math.Floor(float64(py)))
+	y0 := int(py)
 	ry := py - float32(y0)
-	z0 := int(math.Floor(float64(pz)))
+	z0 := int(pz)
 	rz := pz - float32(z0)
 
-	X0 := int(p.opta[2]) * x0
-	Y0 := int(p.opta[1]) * y0
-	Z0 := int(p.opta[0]) * z0
-
+	opx := int(p.opta[2])
+	X0 := x0 * opx
 	X1 := X0
 	if Input[0] < 1.0 {
-		X1 += int(p.opta[2])
+		X1 += opx
 	}
+	opy := int(p.opta[1])
+	Y0 := y0 * opy
 	Y1 := Y0
 	if Input[1] < 1.0 {
-		Y1 += int(p.opta[1])
+		Y1 += opy
 	}
+	opz := int(p.opta[0])
+	Z0 := z0 * opz
 	Z1 := Z0
 	if Input[2] < 1.0 {
-		Z1 += int(p.opta[0])
+		Z1 += opz
 	}
 
-	for outChan := 0; outChan < TotalOut; outChan++ {
-		c0 := DENS(X0, Y0, Z0, outChan)
-		var c1, c2, c3 float32
+	// one-time guard
+	maxOff := X1 + Y1 + Z1 + (totalOut - 1)
+	_ = LutTable[maxOff]
 
-		// Tetrahedral interpolation order
-		if rx >= ry && ry >= rz {
-			c1 = DENS(X1, Y0, Z0, outChan) - c0
-			c2 = DENS(X1, Y1, Z0, outChan) - DENS(X1, Y0, Z0, outChan)
-			c3 = DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan)
-		} else if rx >= rz && rz >= ry {
-			c1 = DENS(X1, Y0, Z0, outChan) - c0
-			c2 = DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan)
-			c3 = DENS(X1, Y0, Z1, outChan) - DENS(X1, Y0, Z0, outChan)
-		} else if rz >= rx && rx >= ry {
-			c1 = DENS(X1, Y0, Z1, outChan) - DENS(X0, Y0, Z1, outChan)
-			c2 = DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan)
-			c3 = DENS(X0, Y0, Z1, outChan) - c0
-		} else if ry >= rx && rx >= rz {
-			c1 = DENS(X1, Y1, Z0, outChan) - DENS(X0, Y1, Z0, outChan)
-			c2 = DENS(X0, Y1, Z0, outChan) - c0
-			c3 = DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan)
-		} else if ry >= rz && rz >= rx {
-			c1 = DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan)
-			c2 = DENS(X0, Y1, Z0, outChan) - c0
-			c3 = DENS(X0, Y1, Z1, outChan) - DENS(X0, Y1, Z0, outChan)
-		} else {
-			c1 = DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan)
-			c2 = DENS(X0, Y1, Z1, outChan) - DENS(X0, Y0, Z1, outChan)
-			c3 = DENS(X0, Y0, Z1, outChan) - c0
+	// indices
+	idx000 := X0 + Y0 + Z0
+	idx100 := X1 + Y0 + Z0
+	idx110 := X1 + Y1 + Z0
+	idx111 := X1 + Y1 + Z1
+	idx101 := X1 + Y0 + Z1
+	idx001 := X0 + Y0 + Z1
+	idx011 := X0 + Y1 + Z1
+	idx010 := X0 + Y1 + Z0
+
+	// case once
+	var caseID int
+	switch {
+	case rx >= ry && ry >= rz:
+		caseID = 0
+	case rx >= rz && rz >= ry:
+		caseID = 1
+	case rz >= rx && rx >= ry:
+		caseID = 2
+	case ry >= rx && rx >= rz:
+		caseID = 3
+	case ry >= rz && rz >= rx:
+		caseID = 4
+	default:
+		caseID = 5
+	}
+
+	switch caseID {
+	case 0:
+		for out := 0; out < totalOut; out++ {
+			c0 := LutTable[idx000+out]
+			c1 := LutTable[idx100+out] - c0
+			c2 := LutTable[idx110+out] - LutTable[idx100+out]
+			c3 := LutTable[idx111+out] - LutTable[idx110+out]
+			Output[out] = c0 + c1*rx + c2*ry + c3*rz
 		}
-
-		// Compute final interpolated value
-		Output[outChan] = c0 + c1*rx + c2*ry + c3*rz
+	case 1:
+		for out := 0; out < totalOut; out++ {
+			c0 := LutTable[idx000+out]
+			c1 := LutTable[idx100+out] - c0
+			c2 := LutTable[idx111+out] - LutTable[idx101+out]
+			c3 := LutTable[idx101+out] - LutTable[idx100+out]
+			Output[out] = c0 + c1*rx + c2*ry + c3*rz
+		}
+	case 2:
+		for out := 0; out < totalOut; out++ {
+			c0 := LutTable[idx000+out]
+			c1 := LutTable[idx101+out] - LutTable[idx001+out]
+			c2 := LutTable[idx111+out] - LutTable[idx101+out]
+			c3 := LutTable[idx001+out] - c0
+			Output[out] = c0 + c1*rx + c2*ry + c3*rz
+		}
+	case 3:
+		for out := 0; out < totalOut; out++ {
+			c0 := LutTable[idx000+out]
+			c1 := LutTable[idx110+out] - LutTable[idx010+out]
+			c2 := LutTable[idx010+out] - c0
+			c3 := LutTable[idx111+out] - LutTable[idx110+out]
+			Output[out] = c0 + c1*rx + c2*ry + c3*rz
+		}
+	case 4:
+		for out := 0; out < totalOut; out++ {
+			c0 := LutTable[idx000+out]
+			c1 := LutTable[idx111+out] - LutTable[idx011+out]
+			c2 := LutTable[idx010+out] - c0
+			c3 := LutTable[idx011+out] - LutTable[idx010+out]
+			Output[out] = c0 + c1*rx + c2*ry + c3*rz
+		}
+	default:
+		for out := 0; out < totalOut; out++ {
+			c0 := LutTable[idx000+out]
+			c1 := LutTable[idx111+out] - LutTable[idx011+out]
+			c2 := LutTable[idx011+out] - LutTable[idx001+out]
+			c3 := LutTable[idx001+out] - c0
+			Output[out] = c0 + c1*rx + c2*ry + c3*rz
+		}
 	}
 }
 
@@ -860,7 +903,6 @@ func TetrahedralInterp16(mm mem.Manager, Input []uint16, Output []uint16, p *cms
 		}
 	}
 }
-
 
 // Eval4Inputs — optimized, WASM-safe, no unsafe pointers.
 // Key changes explained after the code.
@@ -1389,48 +1431,190 @@ func Eval4Inputs(mm mem.Manager, Input, Output []uint16, p *cmsInterpParams) {
 }*/
 
 // Eval4InputsFloat performs tetrahedral interpolation with 4 input channels for floating-point values.
-func Eval4InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
-	TotalOut := int(p.nOutputs)
+// Eval4InputsFloat — tetrahedral interp with 4 inputs (float32), K split + 3D tetra.
+// WASM-safe, no unsafe. Mirrors the structure you now use in Eval4Inputs (U16).
+func Eval4InputsFloat(mm mem.Manager, Input, Output []float32, p *cmsInterpParams) {
+	totalOut := int(p.nOutputs)
 
-	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
 		panic("p.Table is not of type []float32 in Eval4InputsFloat")
-
 	}
 
-	// Normalize the first input channel
+	// ----- K axis (1st input) -----
 	pk := fclamp(Input[0]) * float32(p.Domain[0])
-	k0 := int(math.Floor(float64(pk)))
-	rest := pk - float32(k0)
-
-	K0 := int(p.opta[3]) * k0
+	k0 := int(pk)             // floor
+	restK := pk - float32(k0) // [0..1)
+	opk := int(p.opta[3])
+	K0 := k0 * opk
 	K1 := K0
-	if Input[0] < 1.0 {
-		K1 += int(p.opta[3])
+	if Input[0] < 1.0 { // top-cell clamp
+		K1 += opk
 	}
 
-	// Create a modified interpolation parameter structure
-	p1 := *p
-	copy(p1.Domain[:3], p.Domain[1:4]) // Shift domains left
+	// ----- X/Y/Z axes (inputs 1..3) -----
+	px := fclamp(Input[1]) * float32(p.Domain[1])
+	py := fclamp(Input[2]) * float32(p.Domain[2])
+	pz := fclamp(Input[3]) * float32(p.Domain[3])
 
-	// Temporary storage for interpolation results
-	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	x0 := int(px)
+	rx := px - float32(x0)
+	y0 := int(py)
+	ry := py - float32(y0)
+	z0 := int(pz)
+	rz := pz - float32(z0)
+
+	opx := int(p.opta[2])
+	opy := int(p.opta[1])
+	opz := int(p.opta[0])
+
+	X0 := x0 * opx
+	Y0 := y0 * opy
+	Z0 := z0 * opz
+
+	X1 := X0
+	if Input[1] < 1.0 {
+		X1 += opx
+	}
+	Y1 := Y0
+	if Input[2] < 1.0 {
+		Y1 += opy
+	}
+	Z1 := Z0
+	if Input[3] < 1.0 {
+		Z1 += opz
+	}
+
+	// ---- scratch buffers ----
 	sc := mm.Scratch()
-	Tmp1 := sc.Tmp1F32[:TotalOut]
-	Tmp2 := sc.Tmp2F32[:TotalOut]
+	Tmp1 := sc.Tmp1F32[:totalOut]
+	Tmp2 := sc.Tmp2F32[:totalOut]
 
-	// Process K0
-	p1.Table = LutTable[K0:] // Access LUT at K0 position
-	TetrahedralInterpFloat(mm, Input[1:], Tmp1[:], &p1)
+	// ---- base slices + single bounds guard ----
+	baseK0 := LutTable[K0:]
+	baseK1 := LutTable[K1:]
+	maxOff := X1 + Y1 + Z1 + (totalOut - 1)
+	_ = baseK0[maxOff]
+	_ = baseK1[maxOff]
 
-	// Process K1
-	p1.Table = LutTable[K1:] // Access LUT at K1 position
-	TetrahedralInterpFloat(mm, Input[1:], Tmp2[:], &p1)
+	// Corner linear indices (independent of channel)
+	idx000 := X0 + Y0 + Z0
+	idx100 := X1 + Y0 + Z0
+	idx110 := X1 + Y1 + Z0
+	idx111 := X1 + Y1 + Z1
+	idx101 := X1 + Y0 + Z1
+	idx001 := X0 + Y0 + Z1
+	idx011 := X0 + Y1 + Z1
+	idx010 := X0 + Y1 + Z0
 
-	// Final interpolation
-	for i := 0; i < TotalOut; i++ {
-		Output[i] = Tmp1[i] + (Tmp2[i]-Tmp1[i])*rest
+	// Order selection once (same cases as U16 path)
+	var caseID int
+	switch {
+	case rx >= ry && ry >= rz:
+		caseID = 0
+	case rx >= rz && rz >= ry:
+		caseID = 1
+	case rz >= rx && rx >= ry:
+		caseID = 2
+	case ry >= rx && rx >= rz:
+		caseID = 3
+	case ry >= rz && rz >= rx:
+		caseID = 4
+	default: // rz >= ry && ry >= rx
+		caseID = 5
+	}
+
+	// ----- plane worker: inlined tetrahedral on floats -----
+	doPlane := func(base []float32, tmp []float32) {
+		switch caseID {
+		case 0: // rx >= ry >= rz
+			for out := 0; out < totalOut; out++ {
+				c0 := base[idx000+out]
+				p100 := base[idx100+out]
+				p110 := base[idx110+out]
+				p111 := base[idx111+out]
+
+				c1 := p100 - c0
+				c2 := p110 - p100
+				c3 := p111 - p110
+
+				tmp[out] = c0 + c1*rx + c2*ry + c3*rz
+			}
+		case 1: // rx >= rz >= ry
+			for out := 0; out < totalOut; out++ {
+				c0 := base[idx000+out]
+				p100 := base[idx100+out]
+				p101 := base[idx101+out]
+				p111 := base[idx111+out]
+
+				c1 := p100 - c0
+				c2 := p111 - p101
+				c3 := p101 - p100
+
+				tmp[out] = c0 + c1*rx + c2*ry + c3*rz
+			}
+		case 2: // rz >= rx >= ry
+			for out := 0; out < totalOut; out++ {
+				c0 := base[idx000+out]
+				p001 := base[idx001+out]
+				p101 := base[idx101+out]
+				p111 := base[idx111+out]
+
+				c1 := p101 - p001
+				c2 := p111 - p101
+				c3 := p001 - c0
+
+				tmp[out] = c0 + c1*rx + c2*ry + c3*rz
+			}
+		case 3: // ry >= rx >= rz
+			for out := 0; out < totalOut; out++ {
+				c0 := base[idx000+out]
+				p010 := base[idx010+out]
+				p110 := base[idx110+out]
+				p111 := base[idx111+out]
+
+				c1 := p110 - p010
+				c2 := p010 - c0
+				c3 := p111 - p110
+
+				tmp[out] = c0 + c1*rx + c2*ry + c3*rz
+			}
+		case 4: // ry >= rz >= rx
+			for out := 0; out < totalOut; out++ {
+				c0 := base[idx000+out]
+				p010 := base[idx010+out]
+				p011 := base[idx011+out]
+				p111 := base[idx111+out]
+
+				c1 := p111 - p011
+				c2 := p010 - c0
+				c3 := p011 - p010
+
+				tmp[out] = c0 + c1*rx + c2*ry + c3*rz
+			}
+		default: // 5: rz >= ry >= rx
+			for out := 0; out < totalOut; out++ {
+				c0 := base[idx000+out]
+				p001 := base[idx001+out]
+				p011 := base[idx011+out]
+				p111 := base[idx111+out]
+
+				c1 := p111 - p011
+				c2 := p011 - p001
+				c3 := p001 - c0
+
+				tmp[out] = c0 + c1*rx + c2*ry + c3*rz
+			}
+		}
+	}
+
+	// Evaluate both K-planes
+	doPlane(baseK0, Tmp1)
+	doPlane(baseK1, Tmp2)
+
+	// Final blend along K
+	for i := 0; i < totalOut; i++ {
+		Output[i] = Tmp1[i] + (Tmp2[i]-Tmp1[i])*restK
 	}
 }
 
