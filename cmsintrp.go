@@ -157,7 +157,7 @@ func LinearInterp(a, l, h int32) uint16 {
 }
 
 // Linear interpolation (Fixed-point optimized)
-func LinLerp1D(mm mem.Manager, Value, Output []uint16, p *cmsInterpParams) {
+/*func LinLerp1D(mm mem.Manager, Value, Output []uint16, p *cmsInterpParams) {
 	var y1, y0 uint16
 	var val3, cell0, rest int32
 
@@ -185,6 +185,35 @@ func LinLerp1D(mm mem.Manager, Value, Output []uint16, p *cmsInterpParams) {
 		y1 = LutTable[cell0+1]
 
 		Output[0] = LinearInterp(rest, int32(y0), int32(y1))
+	}
+}*/
+
+// Linear interpolation (fixed-point optimized)
+func LinLerp1D(mm mem.Manager, Value, Output []uint16, p *cmsInterpParams) {
+	// Ensure `p.Table` is a `[]uint16`
+	LutTable, ok := p.Table.([]uint16)
+	if !ok {
+		panic("p.Table is not of type []uint16 in LinLerp1D")
+	}
+	// Fast path for last value or degenerate table.
+	if Value[0] == 0xFFFF || p.Domain[0] == 0 {
+		Output[0] = LutTable[p.Domain[0]]
+	} else {
+		// val3 = Domain * Value in integer space, then convert to 15.16 fixed.
+		val3 := int(p.Domain[0]) * int(Value[0])
+		fx := cmsToFixedDomain(val3) // cmsS15Fixed16Number
+
+		cell0 := FIXED_TO_INT(fx)     // integer part
+		rest := FIXED_REST_TO_INT(fx) // fractional part (0..0xFFFF)
+
+		i := int(cell0)
+		// Prove to the compiler that i+1 is in range for both accesses below.
+		_ = LutTable[i+1]
+
+		y0 := LutTable[i]
+		y1 := LutTable[i+1]
+
+		Output[0] = LinearInterp(int32(rest), int32(y0), int32(y1))
 	}
 }
 
@@ -1656,13 +1685,17 @@ func Eval5Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterp
 	p1 := *p16
 	copy(p1.Domain[:4], p16.Domain[1:5])
 
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
+
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval4Inputs(mm, Input[1:], Tmp1[:], &p1)
+	Eval4Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval4Inputs(mm, Input[1:], Tmp2[:], &p1)
+	Eval4Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1710,11 +1743,14 @@ func Eval5InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsI
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Use `LutTable` directly with correct slicing
-	Eval4InputsFloat(mm, Input[1:], Tmp1[:], &p1)
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
+	Eval4InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Use `LutTable` directly with correct slicing
-	Eval4InputsFloat(mm, Input[1:], Tmp2[:], &p1)
+	Eval4InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1761,13 +1797,16 @@ func Eval6Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterp
 	p1 := *p16
 	copy(p1.Domain[:5], p16.Domain[1:6])
 
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval5Inputs(mm, Input[1:], Tmp1[:], &p1)
+	Eval5Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval5Inputs(mm, Input[1:], Tmp2[:], &p1)
+	Eval5Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1812,14 +1851,17 @@ func Eval6InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsI
 	// Create a modified interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:5], p.Domain[1:6])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Use correct slicing
-	Eval5InputsFloat(mm, Input[1:], Tmp1[:], &p1)
+	Eval5InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Use correct slicing
-	Eval5InputsFloat(mm, Input[1:], Tmp2[:], &p1)
+	Eval5InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1865,14 +1907,17 @@ func Eval7Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterp
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:6], p16.Domain[1:7])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval6Inputs(mm, Input[1:], Tmp1[:], &p1)
+	Eval6Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval6Inputs(mm, Input[1:], Tmp2[:], &p1)
+	Eval6Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1916,14 +1961,17 @@ func Eval7InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsI
 	// Create a modified interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:6], p.Domain[1:7])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval6InputsFloat(mm, Input[1:], Tmp1[:], &p1)
+	Eval6InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval6InputsFloat(mm, Input[1:], Tmp2[:], &p1)
+	Eval6InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1968,14 +2016,17 @@ func Eval8Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterp
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:7], p16.Domain[1:8])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval7Inputs(mm, Input[1:], Tmp1[:], &p1)
+	Eval7Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval7Inputs(mm, Input[1:], Tmp2[:], &p1)
+	Eval7Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2021,14 +2072,17 @@ func Eval8InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsI
 	// Create a modified interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:7], p.Domain[1:8])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval7InputsFloat(mm, Input[1:], Tmp1[:], &p1)
+	Eval7InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval7InputsFloat(mm, Input[1:], Tmp2[:], &p1)
+	Eval7InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2074,14 +2128,17 @@ func Eval9Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterp
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:8], p16.Domain[1:9])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval8Inputs(mm, Input[1:], Tmp1[:], &p1)
+	Eval8Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval8Inputs(mm, Input[1:], Tmp2[:], &p1)
+	Eval8Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2127,14 +2184,17 @@ func Eval9InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsI
 	// Create a modified interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:8], p.Domain[1:9])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval8InputsFloat(mm, Input[1:], Tmp1[:], &p1)
+	Eval8InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval8InputsFloat(mm, Input[1:], Tmp2[:], &p1)
+	Eval8InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2179,14 +2239,17 @@ func Eval10Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInter
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:9], p16.Domain[1:10])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval9Inputs(mm, Input[1:], Tmp1[:], &p1)
+	Eval9Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval9Inputs(mm, Input[1:], Tmp2[:], &p1)
+	Eval9Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2232,14 +2295,17 @@ func Eval10InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cms
 	// Create a modified interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:9], p.Domain[1:10])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval9InputsFloat(mm, Input[1:], Tmp1[:], &p1)
+	Eval9InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval9InputsFloat(mm, Input[1:], Tmp2[:], &p1)
+	Eval9InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2285,14 +2351,17 @@ func Eval11Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInter
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:10], p16.Domain[1:11])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval10Inputs(mm, Input[1:], Tmp1[:], &p1)
+	Eval10Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval10Inputs(mm, Input[1:], Tmp2[:], &p1)
+	Eval10Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2338,14 +2407,17 @@ func Eval11InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cms
 	// Create a new interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:10], p.Domain[1:11])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval10InputsFloat(mm, Input[1:], Tmp1[:], &p1)
+	Eval10InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval10InputsFloat(mm, Input[1:], Tmp2[:], &p1)
+	Eval10InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2391,14 +2463,17 @@ func Eval12Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInter
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:11], p16.Domain[1:12])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval11Inputs(mm, Input[1:], Tmp1[:], &p1)
+	Eval11Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval11Inputs(mm, Input[1:], Tmp2[:], &p1)
+	Eval11Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2443,14 +2518,17 @@ func Eval12InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cms
 	// Create a new interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:11], p.Domain[1:12])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval11InputsFloat(mm, Input[1:], Tmp1[:], &p1)
+	Eval11InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval11InputsFloat(mm, Input[1:], Tmp2[:], &p1)
+	Eval11InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2495,14 +2573,17 @@ func Eval13Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInter
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:12], p16.Domain[1:13])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval12Inputs(mm, Input[1:], Tmp1[:], &p1)
+	Eval12Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval12Inputs(mm, Input[1:], Tmp2[:], &p1)
+	Eval12Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2548,14 +2629,17 @@ func Eval13InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cms
 	// Create a new interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:12], p.Domain[1:13])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval12InputsFloat(mm, Input[1:], Tmp1[:], &p1)
+	Eval12InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval12InputsFloat(mm, Input[1:], Tmp2[:], &p1)
+	Eval12InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2600,14 +2684,17 @@ func Eval14Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInter
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:13], p16.Domain[1:14])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval13Inputs(mm, Input[1:], Tmp1[:], &p1)
+	Eval13Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval13Inputs(mm, Input[1:], Tmp2[:], &p1)
+	Eval13Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2652,14 +2739,17 @@ func Eval14InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cms
 	// Create a new interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:13], p.Domain[1:14])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval13InputsFloat(mm, Input[1:], Tmp1[:], &p1)
+	Eval13InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval13InputsFloat(mm, Input[1:], Tmp2[:], &p1)
+	Eval13InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2704,14 +2794,17 @@ func Eval15Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInter
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:14], p16.Domain[1:15])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval14Inputs(mm, Input[1:], Tmp1[:], &p1)
+	Eval14Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval14Inputs(mm, Input[1:], Tmp2[:], &p1)
+	Eval14Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2756,14 +2849,17 @@ func Eval15InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cms
 	// Create a new interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:14], p.Domain[1:15])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval14InputsFloat(mm, Input[1:], Tmp1[:], &p1)
+	Eval14InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval14InputsFloat(mm, Input[1:], Tmp2[:], &p1)
+	Eval14InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {

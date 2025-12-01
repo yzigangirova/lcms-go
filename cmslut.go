@@ -61,12 +61,31 @@ func FromFloatTo16(In []float32, Out []uint16, n uint32) {
 
 // From16ToFloat converts a slice of uint16 values to a slice of float32 values
 // From16ToFloat converts a slice of uint16 values to a slice of float32 values using unsafe pointer arithmetic.
-func From16ToFloat(In []uint16, Out []float32, n uint32) {
+/*func From16ToFloat(In []uint16, Out []float32, n uint32) {
 	for i := uint32(0); i < n; i++ {
 		// Perform the conversion
 		Out[i] = float32(In[i]) / 65535.0
 	}
+}*/
+
+const inv65535 = 1.0 / 65535.0
+
+// From16ToFloat converts n uint16 values in In to float32 in Out, in [0, 1].
+func From16ToFloat(In []uint16, Out []float32, n uint32) {
+	ni := int(n)
+
+	// Trim slices to exactly n elements so the compiler can eliminate
+	// bounds checks inside the loop.
+	In = In[:ni]
+	Out = Out[:ni]
+
+	c := float32(inv65535)
+
+	for i := 0; i < ni; i++ {
+		Out[i] = float32(In[i]) * c
+	}
 }
+
 
 func cmsPipelineCheckAndRetrieveStages(lut *cmsPipeline, n uint32, expectedTypes []cmsStageSignature, retrievedStages ...**cmsStage) bool {
 	//	fmt.Println("cmsPipelineCheckAndRetrieveStages")
@@ -1060,6 +1079,43 @@ func cmsPipelineCat(mm mem.Manager, l1 *cmsPipeline, l2 *cmsPipeline) bool {
 
 	return BlessLUT(l1)
 }
+
+// cmsPipelineCatSteal concatenates l2 into l1 by *stealing* l2's stages,
+// instead of duplicating them. After this call, l2.Elements is nil and
+// its stages belong to l1.
+//
+// Only safe to use when l2 is going to be discarded immediately after.
+func cmsPipelineCatSteal(mm mem.Manager, l1, l2 *cmsPipeline) bool {
+	if l2 == nil || l2.Elements == nil {
+		// Nothing to append, just bless what we have.
+		return BlessLUT(l1)
+	}
+
+	// If l1 is still "empty", inherit channel counts from l2.
+	if l1.Elements == nil {
+		l1.InputChannels = l2.InputChannels
+		l1.OutputChannels = l2.OutputChannels
+	}
+
+	// If l1 has no elements yet, just take l2's list as-is.
+	if l1.Elements == nil {
+		l1.Elements = l2.Elements
+	} else {
+		// Find last stage of l1 and connect l2's list.
+		last := l1.Elements
+		for last.Next != nil {
+			last = last.Next
+		}
+		last.Next = l2.Elements
+	}
+
+	// We have stolen l2's stages; make sure l2's free function won't touch them.
+	l2.Elements = nil
+
+	// Recompute eval functions etc. (same as cmsPipelineCat)
+	return BlessLUT(l1)
+}
+
 
 // cmsPipelineSetSaveAs8bitsFlag sets the SaveAs8Bits flag and returns its previous value.
 func cmsPipelineSetSaveAs8bitsFlag(lut *cmsPipeline, on bool) bool {

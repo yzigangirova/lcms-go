@@ -2,8 +2,9 @@ package golcms
 
 import (
 	//"errors"
+	"runtime"
+	"sync"
 	"unsafe"
-	//"sync"
 
 	//"bytes"
 	//"encoding/binary"
@@ -207,6 +208,185 @@ func PixelSize(Format uint32) uint32 {
 	// Otherwise, it is already correct for all formats
 	return fmtBytes
 }
+
+// BytesPerPixel returns how many bytes a single *pixel* occupies
+// in memory for a given LCMS packed format. This is different from
+// PixelSize, which is bytes per *sample* (channel).
+func BytesPerPixel(fmt uint32) int {
+    // Number of color channels (RGB=3, CMYK=4, Gray=1, etc.)
+    nChan := int(T_CHANNELS(fmt))
+    if nChan == 0 {
+        nChan = 1
+    }
+
+    // Extra channels (alpha, spot, etc.)
+    extra := int(T_EXTRA(fmt))
+    total := nChan + extra
+    if total <= 0 {
+        total = 1
+    }
+
+    // Bytes per sample (per channel)
+    b := int(T_BYTES(fmt))
+    switch b {
+    case 0:
+        // LCMS uses 0 for "double" formats – 8 bytes per sample.
+        // (You can refine this later if you support floats explicitly.)
+        b = 8
+    }
+
+    // For now, only support chunky formats in the parallel path.
+    if T_PLANAR(fmt) != 0 {
+        panic("BytesPerPixel: planar formats not supported in parallel path yet")
+    }
+
+    return total * b
+}
+
+func CmsDoTransformParallel(
+	_ mem.Manager,
+	xform CmsHTRANSFORM,
+	in, out []byte,
+	pixels int,
+	workers int,
+) {
+	if pixels <= 0 {
+		return
+	}
+	if workers <= 0 {
+		workers = runtime.NumCPU()
+	}
+	if workers <= 1 || pixels == 1 {
+		// Fallback: single-threaded batch
+		// Use a local Manager for scratch:
+		m := mem.NewManager()
+		defer m.FreeAll()
+		CmsDoTransform(m, xform, in, out, uint32(pixels))
+		return
+	}
+	if workers > pixels {
+		workers = pixels
+	}
+
+	p := xform.(*cmsTRANSFORM)
+	inPixSize := int(BytesPerPixel(p.InputFormat))
+	outPixSize := int(BytesPerPixel(p.OutputFormat))
+
+	if len(in) < pixels*inPixSize || len(out) < pixels*outPixSize {
+		panic("CmsDoTransformParallel: buffers too small for given pixel count")
+	}
+
+	chunk := (pixels + workers - 1) / workers
+
+	var wg sync.WaitGroup
+	wg.Add(workers)
+
+	for w := 0; w < workers; w++ {
+		startPx := w * chunk
+		if startPx >= pixels {
+			wg.Done()
+			continue
+		}
+		endPx := startPx + chunk
+		if endPx > pixels {
+			endPx = pixels
+		}
+		nPix := endPx - startPx
+
+		inOff := startPx * inPixSize
+		outOff := startPx * outPixSize
+
+		inSlice := in[inOff : inOff+nPix*inPixSize]
+		outSlice := out[outOff : outOff+nPix*outPixSize]
+
+		wgPtr := &wg
+		go func(inBuf, outBuf []byte, n uint32) {
+			defer wgPtr.Done()
+
+			// Each goroutine gets its *own* Manager with its own Scratch.
+			m := mem.NewManager()
+			defer m.FreeAll()
+
+			CmsDoTransform(m, xform, inBuf, outBuf, n)
+		}(inSlice, outSlice, uint32(nPix))
+	}
+
+	wg.Wait()
+}
+
+// CmsDoTransformParallel runs CmsDoTransform on one big buffer in parallel,
+// splitting the work into chunks across multiple goroutines.
+//
+//   - mm:      parent Manager (we only use mm.WithFrame inside goroutines)
+//   - xform:   transform created by CmsCreateTransform
+//   - in/out:  flat []byte buffers, tightly packed pixels
+//   - pixels:  number of pixels in the buffers
+//   - workers: desired number of goroutines; if <= 0, uses runtime.NumCPU()
+/*func CmsDoTransformParallel(
+	mm mem.Manager,
+	xform CmsHTRANSFORM,
+	in, out []byte,
+	pixels int,
+	workers int,
+) {
+	if pixels <= 0 {
+		return
+	}
+	if workers <= 0 {
+		workers = runtime.NumCPU()
+	}
+	if workers <= 1 || pixels == 1 {
+		// Just fall back to single-thread batch.
+		CmsDoTransform(mm, xform, in, out, uint32(pixels))
+		return
+	}
+	if workers > pixels {
+		workers = pixels
+	}
+
+	p := xform.(*cmsTRANSFORM)
+	inPixSize := int(PixelSize(p.InputFormat))
+	outPixSize := int(PixelSize(p.OutputFormat))
+
+	if len(in) < pixels*inPixSize || len(out) < pixels*outPixSize {
+		panic("CmsDoTransformParallel: buffers too small for given pixel count")
+	}
+
+	chunk := (pixels + workers - 1) / workers
+
+	var wg sync.WaitGroup
+	wg.Add(workers)
+
+	for w := 0; w < workers; w++ {
+		startPx := w * chunk
+		if startPx >= pixels {
+			wg.Done()
+			continue
+		}
+		endPx := startPx + chunk
+		if endPx > pixels {
+			endPx = pixels
+		}
+		nPix := endPx - startPx
+
+		inOff := startPx * inPixSize
+		outOff := startPx * outPixSize
+
+		inSlice := in[inOff : inOff+nPix*inPixSize]
+		outSlice := out[outOff : outOff+nPix*outPixSize]
+
+		wgPtr := &wg
+		go func(inBuf, outBuf []byte, n uint32) {
+			defer wgPtr.Done()
+			// Each goroutine gets its own Scratch via a frame:
+			mm.WithFrame(func(child mem.Manager) {
+				CmsDoTransform(child, xform, inBuf, outBuf, n)
+			})
+		}(inSlice, outSlice, uint32(nPix))
+	}
+
+	wg.Wait()
+}*/
 
 // cmsDoTransform applies a transformation to the input buffer and writes the result to the output buffer.
 func CmsDoTransform(mm mem.Manager, Transform CmsHTRANSFORM, InputBuffer, OutputBuffer any, Size uint32) {
@@ -997,7 +1177,7 @@ func CachedXFORM(
 		panic("CachedXFORM: unsupported output type")
 	}
 
-	// --- Handle extra channels once 
+	// --- Handle extra channels once
 	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
 
 	// --- Local copies / aliases to avoid repeated indirections

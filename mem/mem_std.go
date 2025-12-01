@@ -3,7 +3,10 @@
 // SPDX-License-Identifier: MIT
 package mem
 
-const MaxScratchChannels = 128 //== MAX_STAGE_CHANNELS in lcms
+import "sync"
+
+const MaxScratchChannels = 128     // == MAX_STAGE_CHANNELS in lcms
+const MaxScratchChannelsShort = 16 // cmsMAXCHANNELS
 
 // Scratch holds reusable working buffers for hot paths.
 // Preallocated once when the Manager is created.
@@ -15,7 +18,12 @@ type Scratch struct {
 	WOutU16 []uint16     // len == MaxScratchChannelsShort
 	WInF32  []float32    // len == MaxScratchChannelsShort
 	WOutF32 []float32    // len == MaxScratchChannelsShort
-	// new: tiny, tone-curve-only buffers, never used elsewhere
+	Tmp1U16 []uint16     // len == MaxScratchChannels
+	Tmp2U16 []uint16     // len == MaxScratchChannels
+	Tmp1F32 []float32    // len == MaxScratchChannels
+	Tmp2F32 []float32    // len == MaxScratchChannels
+
+	// tiny, tone-curve-only buffers, never used elsewhere
 	ToneInU16  [1]uint16
 	ToneOutU16 [1]uint16
 	ToneInF32  [1]float32
@@ -28,26 +36,36 @@ type Manager struct {
 	Sc *Scratch
 }
 
-// NewManager returns a heap-backed Manager with preallocated scratch.
-func NewManager() Manager {
-	s := &Scratch{
+// ---------- internal helpers ----------
+
+var heapScratchPool = sync.Pool{
+	New: func() any { return newHeapScratch() },
+}
+
+func newHeapScratch() *Scratch {
+	return &Scratch{
 		LUT: [2][]float32{
 			make([]float32, MaxScratchChannels),
 			make([]float32, MaxScratchChannels),
 		},
 		In16:    make([]uint16, MaxScratchChannels),
 		Out16:   make([]uint16, MaxScratchChannels),
-		wInU16:  make([]uint16, MaxScratchChannelsShort),
-		wOutU16: make([]uint16, MaxScratchChannelsShort),
-		wInF32:  make([]float32, MaxScratchChannelsShort),
-		wOutF32: make([]float32, MaxScratchChannelsShort),
-		Tmp1U16: make([]uint16, MaxScratchChannels),  // len == MaxScratchChannels
-		Tmp2U16: make([]uint16, MaxScratchChannels),  // len == MaxScratchChannels
-		Tmp1F32: make([]float32, MaxScratchChannels), // len == MaxScratchChannels
-		Tmp2F32: make([]float32, MaxScratchChannels), // len == MaxScratchChannels
-
+		WInU16:  make([]uint16, MaxScratchChannelsShort),
+		WOutU16: make([]uint16, MaxScratchChannelsShort),
+		WInF32:  make([]float32, MaxScratchChannelsShort),
+		WOutF32: make([]float32, MaxScratchChannelsShort),
+		Tmp1U16: make([]uint16, MaxScratchChannels),
+		Tmp2U16: make([]uint16, MaxScratchChannels),
+		Tmp1F32: make([]float32, MaxScratchChannels),
+		Tmp2F32: make([]float32, MaxScratchChannels),
 	}
-	return Manager{Sc: s}
+}
+
+// ---------- public API (existing) ----------
+
+// NewManager returns a heap-backed Manager with preallocated scratch.
+func NewManager() Manager {
+	return Manager{Sc: newHeapScratch()}
 }
 
 // NewArena keeps API parity in non-arena builds (same as NewManager).
@@ -69,3 +87,26 @@ func (Manager) GerArenaPtr() any { return nil }
 // IsZero reports whether the Manager has no backing state.
 // Passing a zero Manager means "please use the transform's manager".
 func (m Manager) IsZero() bool { return m.Scratch() == nil || m.Sc == nil }
+
+// ---------- new: frames ----------
+
+// NewFrame returns a child Manager with its own Scratch bundle.
+// Heap-backed: Scratch objects are taken from a pool (cheap, no per-pixel allocs).
+func (m Manager) NewFrame() Manager {
+	return Manager{Sc: heapScratchPool.Get().(*Scratch)}
+}
+
+// Close returns the Scratch to the pool in this build.
+func (m Manager) Close() {
+	if m.Sc != nil {
+		// (optional) zero small pieces if you want, but not required
+		heapScratchPool.Put(m.Sc)
+	}
+}
+
+// WithFrame runs fn with a child Manager and closes it on return.
+func (m Manager) WithFrame(fn func(Manager)) {
+	child := m.NewFrame()
+	defer child.Close()
+	fn(child)
+}

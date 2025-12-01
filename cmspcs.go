@@ -87,7 +87,33 @@ func cmsxyY2XYZ(dest *cmsCIEXYZ, source *CmsCIExyY) {
    automobile will often be below this value.  But the Z does not
    contribute to the perceived color directly.
 */
-// f(t) function used in Lab/XYZ conversions
+// Precomputed constants for Lab/XYZ conversion.
+// 6/29 = 24/116
+const (
+	labBreak      = (24.0 / 116.0) * (24.0 / 116.0) * (24.0 / 116.0) // (6/29)^3
+	labInvBreak   = 24.0 / 116.0                                     // 6/29
+	labLinearK    = 841.0 / 108.0
+	labLinearBias = 16.0 / 116.0
+)
+
+// f(t) used in XYZ -> Lab
+func f(t float64) float64 {
+	if t <= labBreak {
+		return labLinearK*t + labLinearBias
+	}
+	return math.Cbrt(t)
+}
+
+// f⁻¹(t) used in Lab -> XYZ
+func f_1(t float64) float64 {
+	if t <= labInvBreak {
+		return (108.0 / 841.0) * (t - labLinearBias)
+	}
+	// t^3 is cheaper than math.Pow(t, 3)
+	return t * t * t
+}
+
+/*// f(t) function used in Lab/XYZ conversions
 func f(t float64) float64 {
 	limit := math.Pow(24.0/116.0, 3)
 	if t <= limit {
@@ -103,7 +129,7 @@ func f_1(t float64) float64 {
 		return (108.0 / 841.0) * (t - (16.0 / 116.0))
 	}
 	return math.Pow(t, 3)
-}
+}*/
 
 // Standard XYZ to Lab. it can handle negative XZY numbers in some cases
 func cmsXYZ2Lab(whitePoint *cmsCIEXYZ, lab *cmsCIELab, xyz *cmsCIEXYZ) {
@@ -136,10 +162,12 @@ func cmsLab2XYZ(whitePoint *cmsCIEXYZ, xyz *cmsCIEXYZ, lab *cmsCIELab) {
 }
 
 // Helper functions to convert Lab values to float and back
+//
 //lint:ignore U1000 kept for parity with lcms; used in future ports
 func L2float2(v uint16) float64 {
 	return float64(v) / 652.800
 }
+
 //lint:ignore U1000 kept for parity with lcms; used in future ports
 func ab2float2(v uint16) float64 {
 	return float64(v)/256.0 - 128.0

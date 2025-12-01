@@ -353,8 +353,8 @@ func DefaultICCintents(mm mem.Manager,
 			}
 		}
 
-		// Concatenate LUT
-		if !cmsPipelineCat(mm, Result, Lut) {
+		// Concatenate LUT //trying a hack with steal to improve speed
+		if !cmsPipelineCatSteal(mm, Result, Lut) {
 			goto Error
 		}
 
@@ -703,11 +703,6 @@ func BlackPreservingKOnlyIntents(mm mem.Manager,
 		goto Error
 	}
 
-	// Sample the CLUT
-	if !cmsStageSampleCLut16bit(mm, CLUT, BlackPreservingGrayOnlySampler, &bp, 0) {
-		goto Error
-	}
-
 	// Insert possible devicelinks at the end
 	for i := lastProfilePos + 1; i < nProfiles; i++ {
 		devlink := cmsReadDevicelinkLUT(mm, hProfiles[i], ICCIntents[i])
@@ -715,9 +710,14 @@ func BlackPreservingKOnlyIntents(mm mem.Manager,
 			goto Error
 		}
 
-		if !cmsPipelineCat(mm, Result, devlink) {
+		// Steal stages instead of duplicating them
+		if !cmsPipelineCatSteal(mm, Result, devlink) {
+			cmsPipelineFree(mm, devlink) // free empty header
 			goto Error
 		}
+
+		// devlink.Elements is now nil, so this only frees the header
+		cmsPipelineFree(mm, devlink)
 	}
 
 	// Free resources
@@ -934,13 +934,20 @@ func BlackPreservingKPlaneIntents(mm mem.Manager,
 	if !cmsPipelineInsertStage(Result, CmsAT_BEGIN, CLUT) || !cmsStageSampleCLut16bit(mm, CLUT, BlackPreservingSampler, &bp, 0) {
 		goto Cleanup
 	}
-
 	// Insert devicelinks
 	for i := lastProfilePos + 1; i < nProfiles; i++ {
 		devlink := cmsReadDevicelinkLUT(mm, hProfiles[i], ICCIntents[i])
-		if devlink == nil || !cmsPipelineCat(mm, Result, devlink) {
+		if devlink == nil {
 			goto Cleanup
 		}
+
+		if !cmsPipelineCatSteal(mm, Result, devlink) {
+			cmsPipelineFree(mm, devlink) // free empty header
+			goto Cleanup
+		}
+
+		// devlink.Elements is now nil, so freeing just cleans up the header
+		cmsPipelineFree(mm, devlink)
 	}
 
 Cleanup:
