@@ -1,41 +1,44 @@
-This is a port of LittleCMS to the Go programming language.
+# lcms-go
 
-The port is incomplete.
+This is a port of [LittleCMS](https://www.littlecms.com/) (lcms2) to the Go programming language.
 
-    Endianness
-    Big-endian platforms are not currently supported. The code is structured so big-endian support can be added later, 
-    but it is non-functional for now.
+LittleCMS is a small, open-source color management engine that implements ICC color management. 
+It uses ICC profiles to convert colors between device-dependent spaces (such as RGB and CMYK) 
+and device-independent spaces (such as Lab and XYZ), providing consistent color reproduction 
+across imaging and printing workflows.
 
-    Scope
-    This Go port focuses on ICC-based color interpretation for common spaces—Gray, RGB, CMYK, Lab, XYZ 
-    using existing profiles and standard PCS conversions. To keep it lean, it omits features not required 
-    to use profiles: profile-building and measurement I/O (e.g., CGATS/IT8, spectral data), 
-    advanced appearance models (e.g., CIECAM02), profile authoring utilities (profile writing/ID calculation), 
-    and advanced gamut analysis/mapping tools.
+The Go port is **incomplete** and still evolving.
 
-    Memory management (work in progress)
-    I’m exploring Go arena usage for better memory behavior; some parameters/hooks exist,
-    but this is not developed yet. Some C-style free functions are intentionally left in place 
-    for possible future use—they are no-ops for now.
+## Endianness
 
-I’ve tried to stay close to the LittleCMS style (both out of respect and for easier debugging), so some code looks “ungoish” (e.g., more goto than typical Go). That may change over time.
+Big-endian platforms are not currently supported.  
+The code is structured so big-endian support can be added later, but it is non-functional for now.
 
-The port is still early; testing and issue reports are very welcome.
+## Scope
 
-## Installation
+This Go port focuses on ICC-based color interpretation for common spaces — Gray, RGB, CMYK, Lab, XYZ 
+— using existing profiles and standard PCS conversions.
 
-Requires Go 1.22+.
+To keep it lean, it omits features not required to *use* profiles, including:
 
-go get github.com/yzigangirova/lcms-go
+- Profile-building and measurement I/O (e.g. CGATS/IT8, spectral data)
+- Advanced appearance models (e.g. CIECAM02)
+- Profile authoring utilities (profile writing / ID calculation)
+- Advanced gamut analysis / mapping tools
 
+## Multithreading / concurrency
 
+Some multithreading-related elements from the original C code (flags, hooks, and structs) 
+have been kept in the API for legacy compatibility and possible future use, but they are 
+not active in the current Go port.
 
-License & attribution
+Actual parallelism is implemented using Go’s own goroutines and synchronization primitives, 
+not the old C threading infrastructure.
 
-    License: MIT. See LICENSE.
+## Memory management (work in progress)
 
-    Copyright (this port): © 2025 Yuliana Zigangirova
+I am exploring Go arena usage for better memory behavior; some parameters and hooks exist, 
+but this is not developed yet.
 
-    Upstream attribution: Portions derived from LittleCMS (lcms).
-    © 1998–2023 Marti Maria Saguer — used under the MIT License.
-
+Some C-style free functions are intentionally left in place 
+for possible future use — they are no-ops for now.
