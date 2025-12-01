@@ -52,20 +52,21 @@ const (
 
 // Maximum input dimensions for interpolation
 const MAX_INPUT_DIMENSIONS = 15
+// Existing:
+type cmsInterpFn16   func(mm mem.Manager, input []uint16, output []uint16, params *cmsInterpParams)
+type cmsInterpFnFloat func(mm mem.Manager, input []float32, output []float32, params *cmsInterpParams)
 
-// _cmsInterpFn16 is a function type for 16-bit interpolation functions.
-// Performs precision-limited linear interpolation (e.g., tetrahedral or trilinear).
-type cmsInterpFn16 func(input []uint16, output []uint16, params *cmsInterpParams)
+// NEW: single-sample fast paths (no slices)
+type cmsInterpFn16Scalar   func(v uint16,  params *cmsInterpParams) uint16
+type cmsInterpFnFloatScalar func(v float32, params *cmsInterpParams) float32
 
-// _cmsInterpFnFloat is a function type for floating-point interpolation functions.
-// Performs full-precision interpolation (e.g., tetrahedral or trilinear).
-type cmsInterpFnFloat func(input []float32, output []float32, params *cmsInterpParams)
-
-// cmsInterpFunction holds either a 16-bit or floating-point interpolation function.
 type cmsInterpFunction struct {
-	Lerp16    cmsInterpFn16
-	LerpFloat cmsInterpFnFloat
+    Lerp16           cmsInterpFn16
+    LerpFloat        cmsInterpFnFloat
+    // Optional fast paths — present only when the mapping is 1→1 (tone curves).
+    Lerp16Scalar     cmsInterpFn16Scalar
 }
+
 
 // cmsInterpParams represents the parameters for interpolation.
 type cmsInterpParams struct {
@@ -243,8 +244,8 @@ type cmsPluginTransform struct {
 // Shared callbacks for user data //YULIANA: i can not find implemenation for this functions, only declarations!  investigate further
 type cmsFreeUserDataFn func(ContextID CmsContext, Data any)
 type cmsDupUserDataFn func(ContextID CmsContext, Data any) any
-type cmsFormatter16 func(CMMcargo *cmsTRANSFORM, Values []uint16, Buffer []uint8, Stride uint32) []uint8
-type cmsFormatterFloat func(CMMcargo *cmsTRANSFORM, Values []float32, Buffer []uint8, Stride uint32) []uint8
+type cmsFormatter16 func(mm mem.Manager, CMMcargo *cmsTRANSFORM, Values []uint16, Buffer []uint8, Stride uint32) []uint8
+type cmsFormatterFloat func(mm mem.Manager,CMMcargo *cmsTRANSFORM, Values []float32, Buffer []uint8, Stride uint32) []uint8
 type cmsTransformFn func(CMMcargo *cmsTRANSFORM, InputBuffer,
 	OutputBuffer any, Size uint32, Stride uint32)
 

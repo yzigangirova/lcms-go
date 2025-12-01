@@ -156,37 +156,33 @@ func LinearInterp(a, l, h int32) uint16 {
 	return uint16(dif)
 }
 
-// Linear interpolation (Fixed-point optimized)
 
-// Linear interpolation (Fixed-point optimized)
-func LinLerp1D(Value, Output []uint16, p *cmsInterpParams) {
-	var y1, y0 uint16
-	var val3, cell0, rest int32
-
+// Linear interpolation (fixed-point optimized)
+func LinLerp1D(mm mem.Manager, Value, Output []uint16, p *cmsInterpParams) {
 	// Ensure `p.Table` is a `[]uint16`
 	LutTable, ok := p.Table.([]uint16)
 	if !ok {
 		panic("p.Table is not of type []uint16 in LinLerp1D")
 	}
-
-	// If last value or just one point
-	if Value[0] == 0xffff || p.Domain[0] == 0 {
+	// Fast path for last value or degenerate table.
+	if Value[0] == 0xFFFF || p.Domain[0] == 0 {
 		Output[0] = LutTable[p.Domain[0]]
 	} else {
-		val3 = int32(p.Domain[0] * uint32(Value[0]))
-		val3 = int32(cmsToFixedDomain(int(val3))) // To fixed 15.16 format
+		// val3 = Domain * Value in integer space, then convert to 15.16 fixed.
+		val3 := int(p.Domain[0]) * int(Value[0])
+		fx := cmsToFixedDomain(val3) // cmsS15Fixed16Number
 
-		cell0 = FIXED_TO_INT(cmsS15Fixed16Number(val3))            // Extract integer part (MSB)
-		rest = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(val3))) // Extract fractional part (LSB)
+		cell0 := FIXED_TO_INT(fx)     // integer part
+		rest := FIXED_REST_TO_INT(fx) // fractional part (0..0xFFFF)
 
-		if cell0 < 0 || cell0+1 >= int32(len(LutTable)) {
-			panic("Interpolation index out of range in LinLerp1D")
-		}
+		i := int(cell0)
+		// Prove to the compiler that i+1 is in range for both accesses below.
+		_ = LutTable[i+1]
 
-		y0 = LutTable[cell0]
-		y1 = LutTable[cell0+1]
+		y0 := LutTable[i]
+		y1 := LutTable[i+1]
 
-		Output[0] = LinearInterp(rest, int32(y0), int32(y1))
+		Output[0] = LinearInterp(int32(rest), int32(y0), int32(y1))
 	}
 }
 
@@ -201,7 +197,7 @@ func fclamp(v float32) float32 {
 }
 
 // LinLerp1Dfloat performs 1D linear interpolation on floating-point values.
-func LinLerp1Dfloat(Value []float32, Output []float32, p *cmsInterpParams) {
+func LinLerp1Dfloat(mm mem.Manager, Value []float32, Output []float32, p *cmsInterpParams) {
 	var y1, y0, val2, rest float32
 	var cell0, cell1 int
 
@@ -232,8 +228,43 @@ func LinLerp1Dfloat(Value []float32, Output []float32, p *cmsInterpParams) {
 	}
 }
 
+// Scalar, fixed-point path (uint16 -> uint16)
+func LinLerp1DScalar16(v uint16, p *cmsInterpParams) uint16 {
+	// Table is []uint16, domain is number of intervals (so last node is Domain[0])
+	LutTable, ok := p.Table.([]uint16)
+	if !ok {
+		panic("p.Table is not of type []uint16 in LinLerp1DScalar16")
+	}
+
+	// If last value or degenerate domain => return last node
+	if v == 0xFFFF || p.Domain[0] == 0 {
+		idx := int(p.Domain[0])
+		if idx < 0 || idx >= len(LutTable) {
+			panic("LinLerp1DScalar16: last index out of range")
+		}
+		return LutTable[idx]
+	}
+
+	// Scale to table domain and convert to 15.16 fixed
+	val := uint32(p.Domain[0]) * uint32(v)     // up to ~65535*65535, fits in uint32
+	fixed := int32(cmsToFixedDomain(int(val))) // 15.16 fixed
+
+	cell0 := int32(FIXED_TO_INT(cmsS15Fixed16Number(fixed)))     // integer part
+	rest := int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fixed))) // fractional (0..65535)
+
+	// Bounds: we need cell0 and cell0+1 valid
+	if cell0 < 0 || int(cell0)+1 >= len(LutTable) {
+		panic("LinLerp1DScalar16: interpolation index out of range")
+	}
+
+	y0 := int32(LutTable[cell0])
+	y1 := int32(LutTable[cell0+1])
+
+	return LinearInterp(rest, y0, y1)
+}
+
 // Eval1Input performs 1D interpolation for a single input.
-func Eval1Input(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
+func Eval1Input(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	var fk, k0, k1, rk, K0, K1 cmsS15Fixed16Number
 	var v int
 	var OutChan uint32
@@ -280,7 +311,7 @@ func Eval1Input(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 }
 
 // Eval1InputFloat evaluates a gray LUT having only one input channel (float version).
-func Eval1InputFloat(Value []float32, Output []float32, p *cmsInterpParams) {
+func Eval1InputFloat(mm mem.Manager, Value []float32, Output []float32, p *cmsInterpParams) {
 	var y1, y0, val2, rest float32
 	var cell0, cell1 int
 
@@ -339,7 +370,7 @@ func Eval1InputFloat(Value []float32, Output []float32, p *cmsInterpParams) {
 }
 
 // BilinearInterpFloat performs bilinear interpolation for floating-point values.
-func BilinearInterpFloat(Input []float32, Output []float32, p *cmsInterpParams) {
+func BilinearInterpFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input and Output have enough elements
@@ -398,7 +429,7 @@ func BilinearInterpFloat(Input []float32, Output []float32, p *cmsInterpParams) 
 }
 
 // BilinearInterp16 performs bilinear interpolation for 16-bit values.
-func BilinearInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
+func BilinearInterp16(mm mem.Manager, Input []uint16, Output []uint16, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure Input and Output have enough elements
@@ -457,7 +488,7 @@ func BilinearInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 }
 
 // TrilinearInterpFloat performs trilinear interpolation for floating-point values.
-func TrilinearInterpFloat(Input []float32, Output []float32, p *cmsInterpParams) {
+func TrilinearInterpFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
@@ -526,7 +557,7 @@ func TrilinearInterpFloat(Input []float32, Output []float32, p *cmsInterpParams)
 }
 
 // TrilinearInterp16 performs trilinear interpolation for 16-bit values.
-func TrilinearInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
+func TrilinearInterp16(mm mem.Manager, Input []uint16, Output []uint16, p *cmsInterpParams) {
 	//fmt.Println("start TrilinearInterp16")
 	TotalOut := int(p.nOutputs)
 
@@ -599,93 +630,135 @@ func TrilinearInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 
 }
 
-// TetrahedralInterpFloat performs tetrahedral interpolation for floating-point values.
-func TetrahedralInterpFloat(Input []float32, Output []float32, p *cmsInterpParams) {
-	TotalOut := int(p.nOutputs)
+// TetrahedralInterpFloat — 3D tetrahedral for float32 (no K split).
+func TetrahedralInterpFloat(mm mem.Manager, Input, Output []float32, p *cmsInterpParams) {
+	totalOut := int(p.nOutputs)
 
-	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
-		panic("p.Table is not of type []float32 in Eval1InputFloat")
-	}
-
-	// Inline function for LUT lookup
-	DENS := func(i, j, k, outChan int) float32 {
-		return LutTable[i+j+k+outChan]
+		panic("p.Table is not of type []float32 in TetrahedralInterpFloat")
 	}
 
 	px := fclamp(Input[0]) * float32(p.Domain[0])
 	py := fclamp(Input[1]) * float32(p.Domain[1])
 	pz := fclamp(Input[2]) * float32(p.Domain[2])
 
-	x0 := int(math.Floor(float64(px)))
+	x0 := int(px)
 	rx := px - float32(x0)
-	y0 := int(math.Floor(float64(py)))
+	y0 := int(py)
 	ry := py - float32(y0)
-	z0 := int(math.Floor(float64(pz)))
+	z0 := int(pz)
 	rz := pz - float32(z0)
 
-	X0 := int(p.opta[2]) * x0
-	Y0 := int(p.opta[1]) * y0
-	Z0 := int(p.opta[0]) * z0
-
+	opx := int(p.opta[2])
+	X0 := x0 * opx
 	X1 := X0
 	if Input[0] < 1.0 {
-		X1 += int(p.opta[2])
+		X1 += opx
 	}
+	opy := int(p.opta[1])
+	Y0 := y0 * opy
 	Y1 := Y0
 	if Input[1] < 1.0 {
-		Y1 += int(p.opta[1])
+		Y1 += opy
 	}
+	opz := int(p.opta[0])
+	Z0 := z0 * opz
 	Z1 := Z0
 	if Input[2] < 1.0 {
-		Z1 += int(p.opta[0])
+		Z1 += opz
 	}
 
-	for outChan := 0; outChan < TotalOut; outChan++ {
-		c0 := DENS(X0, Y0, Z0, outChan)
-		var c1, c2, c3 float32
+	// one-time guard
+	maxOff := X1 + Y1 + Z1 + (totalOut - 1)
+	_ = LutTable[maxOff]
 
-		// Tetrahedral interpolation order
-		if rx >= ry && ry >= rz {
-			c1 = DENS(X1, Y0, Z0, outChan) - c0
-			c2 = DENS(X1, Y1, Z0, outChan) - DENS(X1, Y0, Z0, outChan)
-			c3 = DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan)
-		} else if rx >= rz && rz >= ry {
-			c1 = DENS(X1, Y0, Z0, outChan) - c0
-			c2 = DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan)
-			c3 = DENS(X1, Y0, Z1, outChan) - DENS(X1, Y0, Z0, outChan)
-		} else if rz >= rx && rx >= ry {
-			c1 = DENS(X1, Y0, Z1, outChan) - DENS(X0, Y0, Z1, outChan)
-			c2 = DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan)
-			c3 = DENS(X0, Y0, Z1, outChan) - c0
-		} else if ry >= rx && rx >= rz {
-			c1 = DENS(X1, Y1, Z0, outChan) - DENS(X0, Y1, Z0, outChan)
-			c2 = DENS(X0, Y1, Z0, outChan) - c0
-			c3 = DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan)
-		} else if ry >= rz && rz >= rx {
-			c1 = DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan)
-			c2 = DENS(X0, Y1, Z0, outChan) - c0
-			c3 = DENS(X0, Y1, Z1, outChan) - DENS(X0, Y1, Z0, outChan)
-		} else {
-			c1 = DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan)
-			c2 = DENS(X0, Y1, Z1, outChan) - DENS(X0, Y0, Z1, outChan)
-			c3 = DENS(X0, Y0, Z1, outChan) - c0
+	// indices
+	idx000 := X0 + Y0 + Z0
+	idx100 := X1 + Y0 + Z0
+	idx110 := X1 + Y1 + Z0
+	idx111 := X1 + Y1 + Z1
+	idx101 := X1 + Y0 + Z1
+	idx001 := X0 + Y0 + Z1
+	idx011 := X0 + Y1 + Z1
+	idx010 := X0 + Y1 + Z0
+
+	// case once
+	var caseID int
+	switch {
+	case rx >= ry && ry >= rz:
+		caseID = 0
+	case rx >= rz && rz >= ry:
+		caseID = 1
+	case rz >= rx && rx >= ry:
+		caseID = 2
+	case ry >= rx && rx >= rz:
+		caseID = 3
+	case ry >= rz && rz >= rx:
+		caseID = 4
+	default:
+		caseID = 5
+	}
+
+	switch caseID {
+	case 0:
+		for out := 0; out < totalOut; out++ {
+			c0 := LutTable[idx000+out]
+			c1 := LutTable[idx100+out] - c0
+			c2 := LutTable[idx110+out] - LutTable[idx100+out]
+			c3 := LutTable[idx111+out] - LutTable[idx110+out]
+			Output[out] = c0 + c1*rx + c2*ry + c3*rz
 		}
-
-		// Compute final interpolated value
-		Output[outChan] = c0 + c1*rx + c2*ry + c3*rz
+	case 1:
+		for out := 0; out < totalOut; out++ {
+			c0 := LutTable[idx000+out]
+			c1 := LutTable[idx100+out] - c0
+			c2 := LutTable[idx111+out] - LutTable[idx101+out]
+			c3 := LutTable[idx101+out] - LutTable[idx100+out]
+			Output[out] = c0 + c1*rx + c2*ry + c3*rz
+		}
+	case 2:
+		for out := 0; out < totalOut; out++ {
+			c0 := LutTable[idx000+out]
+			c1 := LutTable[idx101+out] - LutTable[idx001+out]
+			c2 := LutTable[idx111+out] - LutTable[idx101+out]
+			c3 := LutTable[idx001+out] - c0
+			Output[out] = c0 + c1*rx + c2*ry + c3*rz
+		}
+	case 3:
+		for out := 0; out < totalOut; out++ {
+			c0 := LutTable[idx000+out]
+			c1 := LutTable[idx110+out] - LutTable[idx010+out]
+			c2 := LutTable[idx010+out] - c0
+			c3 := LutTable[idx111+out] - LutTable[idx110+out]
+			Output[out] = c0 + c1*rx + c2*ry + c3*rz
+		}
+	case 4:
+		for out := 0; out < totalOut; out++ {
+			c0 := LutTable[idx000+out]
+			c1 := LutTable[idx111+out] - LutTable[idx011+out]
+			c2 := LutTable[idx010+out] - c0
+			c3 := LutTable[idx011+out] - LutTable[idx010+out]
+			Output[out] = c0 + c1*rx + c2*ry + c3*rz
+		}
+	default:
+		for out := 0; out < totalOut; out++ {
+			c0 := LutTable[idx000+out]
+			c1 := LutTable[idx111+out] - LutTable[idx011+out]
+			c2 := LutTable[idx011+out] - LutTable[idx001+out]
+			c3 := LutTable[idx001+out] - c0
+			Output[out] = c0 + c1*rx + c2*ry + c3*rz
+		}
 	}
 }
 
-func TetrahedralInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
+func TetrahedralInterp16(mm mem.Manager, Input []uint16, Output []uint16, p *cmsInterpParams) {
 	//fmt.Println("TetrahedralInterp16")
 
 	// Variables
 	LutTable, ok := p.Table.([]uint16)
 	if !ok {
 		panic("p.Table is not []uint16\n")
-		return
 	}
 
 	var fx, fy, fz cmsS15Fixed16Number
@@ -829,268 +902,401 @@ func TetrahedralInterp16(Input []uint16, Output []uint16, p *cmsInterpParams) {
 	}
 }
 
-// Eval4Inputs performs tetrahedral interpolation with 4 input channels for 16-bit values.
-func Eval4Inputs(Input []uint16, Output []uint16, p *cmsInterpParams) {
-	//fmt.Println("Start Eval4Inputs Input", Input[0], Input[1], Input[2], Input[3])
-	var fk int32
-	var k0, rk int32
-	var K0, K1 int32
-	var fx, fy, fz int32
-	var rx, ry, rz int32
-	var x0, y0, z0 int32
-	var X0, X1, Y0, Y1, Z0, Z1 int32
+// Eval4Inputs — optimized, WASM-safe, no unsafe pointers.
+// Key changes explained after the code.
+func Eval4Inputs(mm mem.Manager, Input, Output []uint16, p *cmsInterpParams) {
+	totalOut := int(p.nOutputs)
 
-	TotalOut := int(p.nOutputs)
-
-	// Ensure p.Table is a []uint16
 	LutTable, ok := p.Table.([]uint16)
 	if !ok {
-		panic("p.Table is not of type []uint16 in Eval4Inputs\n")
-
+		panic("p.Table is not of type []uint16 in Eval4Inputs")
 	}
 
-	// Inline function for LUT lookup
-	DENS := func(i, j, k int32, outChan uint32) int32 {
-		return int32(LutTable[i+j+k+int32(outChan)])
-	}
+	// --- fixed-point mapping of inputs to grid (keep your original helpers here) ---
+	fk := cmsToFixedDomain(int(Input[0]) * int(p.Domain[0]))
+	fx := cmsToFixedDomain(int(Input[1]) * int(p.Domain[1]))
+	fy := cmsToFixedDomain(int(Input[2]) * int(p.Domain[2]))
+	fz := cmsToFixedDomain(int(Input[3]) * int(p.Domain[3]))
 
-	// Convert input values to fixed-point representation
-	fk = int32(cmsToFixedDomain(int(Input[0]) * int(p.Domain[0])))
-	fx = int32(cmsToFixedDomain(int(Input[1]) * int(p.Domain[1])))
-	fy = int32(cmsToFixedDomain(int(Input[2]) * int(p.Domain[2])))
-	fz = int32(cmsToFixedDomain(int(Input[3]) * int(p.Domain[3])))
+	// integer parts (grid indices)
+	k0 := FIXED_TO_INT(fk)
+	x0 := FIXED_TO_INT(fx)
+	y0 := FIXED_TO_INT(fy)
+	z0 := FIXED_TO_INT(fz)
 
-	// Compute integer indices and fractional parts
-	k0 = FIXED_TO_INT(cmsS15Fixed16Number(fk))
-	x0 = FIXED_TO_INT(cmsS15Fixed16Number(fx))
-	y0 = FIXED_TO_INT(cmsS15Fixed16Number(fy))
-	z0 = FIXED_TO_INT(cmsS15Fixed16Number(fz))
+	// fractional parts [0..65535]
+	rk := int32(FIXED_REST_TO_INT(fk))
+	rx := int32(FIXED_REST_TO_INT(fx))
+	ry := int32(FIXED_REST_TO_INT(fy))
+	rz := int32(FIXED_REST_TO_INT(fz))
 
-	rk = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fk)))
-	rx = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fx)))
-	ry = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fy)))
-	rz = int32(FIXED_REST_TO_INT(cmsS15Fixed16Number(fz)))
+	// Convert stride multipliers once
+	opk := int(p.opta[3])
+	opx := int(p.opta[2])
+	opy := int(p.opta[1])
+	opz := int(p.opta[0])
 
-	// Compute LUT table indices
-	K0 = int32(p.opta[3]) * int32(k0)
-	K1 = K0
+	// Base offsets for K planes
+	K0 := int(k0) * opk
+	K1 := K0
 	if Input[0] != 0xFFFF {
-		K1 += int32(p.opta[3])
+		K1 += opk
 	}
 
-	X0 = int32(p.opta[2]) * int32(x0)
-	X1 = X0
+	// Base offsets for X/Y/Z planes
+	X0 := int(x0) * opx
+	X1 := X0
 	if Input[1] != 0xFFFF {
-		X1 += int32(p.opta[2])
+		X1 += opx
 	}
-
-	Y0 = int32(p.opta[1]) * int32(y0)
-	Y1 = Y0
+	Y0 := int(y0) * opy
+	Y1 := Y0
 	if Input[2] != 0xFFFF {
-		Y1 += int32(p.opta[1])
+		Y1 += opy
 	}
-
-	Z0 = int32(p.opta[0]) * int32(z0)
-	Z1 = Z0
+	Z0 := int(z0) * opz
+	Z1 := Z0
 	if Input[3] != 0xFFFF {
-		Z1 += int32(p.opta[0])
+		Z1 += opz
 	}
 
-	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
+	// ---- scratch buffers (preallocated) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1U16[:totalOut]
+	Tmp2 := sc.Tmp2U16[:totalOut]
 
-	// Process K0
+	// ---- slice bases and a single bounds-guard to elide inner checks ----
+	baseK0 := LutTable[K0:]
+	baseK1 := LutTable[K1:]
+	maxOff := X1 + Y1 + Z1 + (totalOut - 1)
+	_ = baseK0[maxOff]
+	_ = baseK1[maxOff]
 
-	/*fmt.Println("got K0", K0)
-	fmt.Println("got X0", X0)
-	fmt.Println("got Y0", Y0)
-	fmt.Println("got Z0", Z0)
-	fmt.Println("got X1", X1)
-	fmt.Println("got Y1", Y1)
-	fmt.Println("got Z1", Z1)*/
+	// Corner indices once (independent of channel)
+	idx000 := X0 + Y0 + Z0
+	idx100 := X1 + Y0 + Z0
+	idx110 := X1 + Y1 + Z0
+	idx111 := X1 + Y1 + Z1
+	idx101 := X1 + Y0 + Z1
+	idx001 := X0 + Y0 + Z1
+	idx011 := X0 + Y1 + Z1
+	idx010 := X0 + Y1 + Z0
 
-	LutTable, _ = p.Table.([]uint16) // Reset to original LUT
+	// Decide permutation order ONCE (don’t redo per channel)
+	var caseID int
+	switch {
+	case rx >= ry && ry >= rz:
+		caseID = 0
+	case rx >= rz && rz >= ry:
+		caseID = 1
+	case rz >= rx && rx >= ry:
+		caseID = 2
+	case ry >= rx && rx >= rz:
+		caseID = 3
+	case ry >= rz && rz >= rx:
+		caseID = 4
+	default: // rz >= ry && ry >= rx
+		caseID = 5
+	}
 
-	LutTable = LutTable[K0:] // Shift by K0
+	// Pre-widen fractions once
+	rx64, ry64, rz64 := int64(rx), int64(ry), int64(rz)
 
-	for outChan := uint32(0); outChan < uint32(TotalOut); outChan++ {
-		c0 := DENS(X0, Y0, Z0, outChan)
-		//	fmt.Printf("X0+Y0+Z0+int32(outChan) %d\n", X0+Y0+Z0+int32(outChan))
-		//	fmt.Printf("returning LutTable[X0+Y0+Z0+int32(outChan)] %d\n", LutTable[X0+Y0+Z0+int32(outChan)])
-		var c1, c2, c3 cmsS15Fixed16Number
+	// Plane runner: identical math as before, but we (1) avoid cmsToFixedDomain+ROUND inside,
+	// and (2) avoid re-evaluating the branchy order selection per channel.
+	doPlane := func(base []uint16, tmp []uint16) {
+		switch caseID {
+		case 0: // rx >= ry >= rz
+			for out := 0; out < totalOut; out++ {
+				c0 := int32(base[idx000+out])
+				p100 := int32(base[idx100+out])
+				p110 := int32(base[idx110+out])
+				p111 := int32(base[idx111+out])
 
-		if rx >= ry && ry >= rz {
-			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z0, outChan) - c0)
-			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z0, outChan) - DENS(X1, Y0, Z0, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan))
-		} else if rx >= rz && rz >= ry {
+				c1 := p100 - c0
+				c2 := p110 - p100
+				c3 := p111 - p110
 
-			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z0, outChan) - c0)
-			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X1, Y0, Z1, outChan) - DENS(X1, Y0, Z0, outChan))
+				rest := int64(c1)*rx64 + int64(c2)*ry64 + int64(c3)*rz64 // 16.16
+				tmp[out] = uint16(c0 + int32((rest+0x8000)>>16))         // round >> 16
+			}
+		case 1: // rx >= rz >= ry
+			for out := 0; out < totalOut; out++ {
+				c0 := int32(base[idx000+out])
+				p100 := int32(base[idx100+out])
+				p101 := int32(base[idx101+out])
+				p111 := int32(base[idx111+out])
 
-		} else if rz >= rx && rx >= ry {
+				c1 := p100 - c0
+				c2 := p111 - p101
+				c3 := p101 - p100
 
-			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z1, outChan) - DENS(X0, Y0, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X0, Y0, Z1, outChan) - c0)
+				rest := int64(c1)*rx64 + int64(c2)*ry64 + int64(c3)*rz64
+				tmp[out] = uint16(c0 + int32((rest+0x8000)>>16))
+			}
+		case 2: // rz >= rx >= ry
+			for out := 0; out < totalOut; out++ {
+				c0 := int32(base[idx000+out])
+				p001 := int32(base[idx001+out])
+				p101 := int32(base[idx101+out])
+				p111 := int32(base[idx111+out])
 
-		} else if ry >= rx && rx >= rz {
+				c1 := p101 - p001
+				c2 := p111 - p101
+				c3 := p001 - c0
 
-			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z0, outChan) - DENS(X0, Y1, Z0, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z0, outChan) - c0)
-			c3 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan))
+				rest := int64(c1)*rx64 + int64(c2)*ry64 + int64(c3)*rz64
+				tmp[out] = uint16(c0 + int32((rest+0x8000)>>16))
+			}
+		case 3: // ry >= rx >= rz
+			for out := 0; out < totalOut; out++ {
+				c0 := int32(base[idx000+out])
+				p010 := int32(base[idx010+out])
+				p110 := int32(base[idx110+out])
+				p111 := int32(base[idx111+out])
 
-		} else if ry >= rz && rz >= rx {
+				c1 := p110 - p010
+				c2 := p010 - c0
+				c3 := p111 - p110
 
-			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z0, outChan) - c0)
-			c3 = cmsS15Fixed16Number(DENS(X0, Y1, Z1, outChan) - DENS(X0, Y1, Z0, outChan))
+				rest := int64(c1)*rx64 + int64(c2)*ry64 + int64(c3)*rz64
+				tmp[out] = uint16(c0 + int32((rest+0x8000)>>16))
+			}
+		case 4: // ry >= rz >= rx
+			for out := 0; out < totalOut; out++ {
+				c0 := int32(base[idx000+out])
+				p010 := int32(base[idx010+out])
+				p011 := int32(base[idx011+out])
+				p111 := int32(base[idx111+out])
 
-		} else if rz >= ry && ry >= rx {
+				c1 := p111 - p011
+				c2 := p010 - c0
+				c3 := p011 - p010
 
-			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z1, outChan) - DENS(X0, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X0, Y0, Z1, outChan) - c0)
+				rest := int64(c1)*rx64 + int64(c2)*ry64 + int64(c3)*rz64
+				tmp[out] = uint16(c0 + int32((rest+0x8000)>>16))
+			}
+		default: // 5: rz >= ry >= rx
+			for out := 0; out < totalOut; out++ {
+				c0 := int32(base[idx000+out])
+				p001 := int32(base[idx001+out])
+				p011 := int32(base[idx011+out])
+				p111 := int32(base[idx111+out])
 
-		} else {
-			c1, c2, c3 = 0, 0, 0
+				c1 := p111 - p011
+				c2 := p011 - p001
+				c3 := p001 - c0
+
+				rest := int64(c1)*rx64 + int64(c2)*ry64 + int64(c3)*rz64
+				tmp[out] = uint16(c0 + int32((rest+0x8000)>>16))
+			}
 		}
-
-		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-		/*	fmt.Printf("c0 %d\n", c0)
-			fmt.Printf("c1 %d\n", c1)
-			fmt.Printf("c2 %d\n", c2)
-			fmt.Printf("c3 %d\n", c3)
-			fmt.Printf("rx %d\n", rx)
-			fmt.Printf("ry %d\n", ry)
-			fmt.Printf("rz %d\n", rz)
-			fmt.Printf("Rest %d\n", Rest)*/
-
-		Tmp1[outChan] = uint16(c0 + ROUND_FIXED_TO_INT(cmsToFixedDomain(int(Rest))))
-
-		//fmt.Printf("Tmp1[outChan] %d\n", Tmp1[outChan])
-
 	}
 
-	// Process K1
-	LutTable, _ = p.Table.([]uint16) // Reset to original LUT
-	LutTable = LutTable[K1:]         // Shift by K1
+	// Process both planes
+	doPlane(baseK0, Tmp1)
+	doPlane(baseK1, Tmp2)
 
-	for outChan := uint32(0); outChan < uint32(TotalOut); outChan++ {
-		c0 := DENS(X0, Y0, Z0, outChan)
-		var c1, c2, c3 cmsS15Fixed16Number
-
-		if rx >= ry && ry >= rz {
-			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z0, outChan) - c0)
-			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z0, outChan) - DENS(X1, Y0, Z0, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan))
-		} else if rx >= rz && rz >= ry {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z0, outChan) - c0)
-			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X1, Y0, Z1, outChan) - DENS(X1, Y0, Z0, outChan))
-
-		} else if rz >= rx && rx >= ry {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y0, Z1, outChan) - DENS(X0, Y0, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X0, Y0, Z1, outChan) - c0)
-
-		} else if ry >= rx && rx >= rz {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z0, outChan) - DENS(X0, Y1, Z0, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z0, outChan) - c0)
-			c3 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X1, Y1, Z0, outChan))
-
-		} else if ry >= rz && rz >= rx {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z0, outChan) - c0)
-			c3 = cmsS15Fixed16Number(DENS(X0, Y1, Z1, outChan) - DENS(X0, Y1, Z0, outChan))
-
-		} else if rz >= ry && ry >= rx {
-
-			c1 = cmsS15Fixed16Number(DENS(X1, Y1, Z1, outChan) - DENS(X0, Y1, Z1, outChan))
-			c2 = cmsS15Fixed16Number(DENS(X0, Y1, Z1, outChan) - DENS(X0, Y0, Z1, outChan))
-			c3 = cmsS15Fixed16Number(DENS(X0, Y0, Z1, outChan) - c0)
-
-		} else {
-			c1, c2, c3 = 0, 0, 0
-		}
-
-		Rest := int32(c1)*rx + int32(c2)*ry + int32(c3)*rz
-		/*fmt.Printf("c0 %d\n", c0)
-		fmt.Printf("c1 %d\n", c1)
-		fmt.Printf("c2 %d\n", c2)
-		fmt.Printf("c3 %d\n", c3)
-		fmt.Printf("rx %d\n", rx)
-		fmt.Printf("ry %d\n", ry)
-		fmt.Printf("rz %d\n", rz)
-		fmt.Printf("Rest %d\n", Rest)*/
-
-		Tmp2[outChan] = uint16(c0 + (ROUND_FIXED_TO_INT(cmsToFixedDomain(int(Rest)))))
-
-		//fmt.Printf("Tmp2[outChan] %d\n", Tmp2[outChan])
+	// ---- final blend (inline LinearInterp) ----
+	rk64 := int64(rk)
+	for i := 0; i < totalOut; i++ {
+		lo := int32(Tmp1[i])
+		hi := int32(Tmp2[i])
+		// lo + ((hi-lo)*rk + 0x8000)>>16
+		Output[i] = uint16(lo + int32(((int64(hi-lo)*rk64 + 0x8000) >> 16)))
 	}
-
-	// Final interpolation
-	for i := 0; i < TotalOut; i++ {
-		/*	fmt.Println("rk", rk)
-			fmt.Println("Tmp1[i]", Tmp1[i])
-			fmt.Println("Tmp2[i]", Tmp2[i])*/
-		Output[i] = LinearInterp(rk, int32(Tmp1[i]), int32(Tmp2[i]))
-		//fmt.Printf("Output[i] %d\n", Output[i])
-	}
-	//fmt.Println("End Eval4Inputs")
-
 }
 
 // Eval4InputsFloat performs tetrahedral interpolation with 4 input channels for floating-point values.
-func Eval4InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
-	TotalOut := int(p.nOutputs)
+// Eval4InputsFloat — tetrahedral interp with 4 inputs (float32), K split + 3D tetra.
+// WASM-safe, no unsafe. Mirrors the structure you now use in Eval4Inputs (U16).
+func Eval4InputsFloat(mm mem.Manager, Input, Output []float32, p *cmsInterpParams) {
+	totalOut := int(p.nOutputs)
 
-	// Ensure p.Table is of type []float32
 	LutTable, ok := p.Table.([]float32)
 	if !ok {
 		panic("p.Table is not of type []float32 in Eval4InputsFloat")
-
 	}
 
-	// Normalize the first input channel
+	// ----- K axis (1st input) -----
 	pk := fclamp(Input[0]) * float32(p.Domain[0])
-	k0 := int(math.Floor(float64(pk)))
-	rest := pk - float32(k0)
-
-	K0 := int(p.opta[3]) * k0
+	k0 := int(pk)             // floor
+	restK := pk - float32(k0) // [0..1)
+	opk := int(p.opta[3])
+	K0 := k0 * opk
 	K1 := K0
-	if Input[0] < 1.0 {
-		K1 += int(p.opta[3])
+	if Input[0] < 1.0 { // top-cell clamp
+		K1 += opk
 	}
 
-	// Create a modified interpolation parameter structure
-	p1 := *p
-	copy(p1.Domain[:3], p.Domain[1:4]) // Shift domains left
+	// ----- X/Y/Z axes (inputs 1..3) -----
+	px := fclamp(Input[1]) * float32(p.Domain[1])
+	py := fclamp(Input[2]) * float32(p.Domain[2])
+	pz := fclamp(Input[3]) * float32(p.Domain[3])
 
-	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
+	x0 := int(px)
+	rx := px - float32(x0)
+	y0 := int(py)
+	ry := py - float32(y0)
+	z0 := int(pz)
+	rz := pz - float32(z0)
 
-	// Process K0
-	p1.Table = LutTable[K0:] // Access LUT at K0 position
-	TetrahedralInterpFloat(Input[1:], Tmp1[:], &p1)
+	opx := int(p.opta[2])
+	opy := int(p.opta[1])
+	opz := int(p.opta[0])
 
-	// Process K1
-	p1.Table = LutTable[K1:] // Access LUT at K1 position
-	TetrahedralInterpFloat(Input[1:], Tmp2[:], &p1)
+	X0 := x0 * opx
+	Y0 := y0 * opy
+	Z0 := z0 * opz
 
-	// Final interpolation
-	for i := 0; i < TotalOut; i++ {
-		Output[i] = Tmp1[i] + (Tmp2[i]-Tmp1[i])*rest
+	X1 := X0
+	if Input[1] < 1.0 {
+		X1 += opx
+	}
+	Y1 := Y0
+	if Input[2] < 1.0 {
+		Y1 += opy
+	}
+	Z1 := Z0
+	if Input[3] < 1.0 {
+		Z1 += opz
+	}
+
+	// ---- scratch buffers ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1F32[:totalOut]
+	Tmp2 := sc.Tmp2F32[:totalOut]
+
+	// ---- base slices + single bounds guard ----
+	baseK0 := LutTable[K0:]
+	baseK1 := LutTable[K1:]
+	maxOff := X1 + Y1 + Z1 + (totalOut - 1)
+	_ = baseK0[maxOff]
+	_ = baseK1[maxOff]
+
+	// Corner linear indices (independent of channel)
+	idx000 := X0 + Y0 + Z0
+	idx100 := X1 + Y0 + Z0
+	idx110 := X1 + Y1 + Z0
+	idx111 := X1 + Y1 + Z1
+	idx101 := X1 + Y0 + Z1
+	idx001 := X0 + Y0 + Z1
+	idx011 := X0 + Y1 + Z1
+	idx010 := X0 + Y1 + Z0
+
+	// Order selection once (same cases as U16 path)
+	var caseID int
+	switch {
+	case rx >= ry && ry >= rz:
+		caseID = 0
+	case rx >= rz && rz >= ry:
+		caseID = 1
+	case rz >= rx && rx >= ry:
+		caseID = 2
+	case ry >= rx && rx >= rz:
+		caseID = 3
+	case ry >= rz && rz >= rx:
+		caseID = 4
+	default: // rz >= ry && ry >= rx
+		caseID = 5
+	}
+
+	// ----- plane worker: inlined tetrahedral on floats -----
+	doPlane := func(base []float32, tmp []float32) {
+		switch caseID {
+		case 0: // rx >= ry >= rz
+			for out := 0; out < totalOut; out++ {
+				c0 := base[idx000+out]
+				p100 := base[idx100+out]
+				p110 := base[idx110+out]
+				p111 := base[idx111+out]
+
+				c1 := p100 - c0
+				c2 := p110 - p100
+				c3 := p111 - p110
+
+				tmp[out] = c0 + c1*rx + c2*ry + c3*rz
+			}
+		case 1: // rx >= rz >= ry
+			for out := 0; out < totalOut; out++ {
+				c0 := base[idx000+out]
+				p100 := base[idx100+out]
+				p101 := base[idx101+out]
+				p111 := base[idx111+out]
+
+				c1 := p100 - c0
+				c2 := p111 - p101
+				c3 := p101 - p100
+
+				tmp[out] = c0 + c1*rx + c2*ry + c3*rz
+			}
+		case 2: // rz >= rx >= ry
+			for out := 0; out < totalOut; out++ {
+				c0 := base[idx000+out]
+				p001 := base[idx001+out]
+				p101 := base[idx101+out]
+				p111 := base[idx111+out]
+
+				c1 := p101 - p001
+				c2 := p111 - p101
+				c3 := p001 - c0
+
+				tmp[out] = c0 + c1*rx + c2*ry + c3*rz
+			}
+		case 3: // ry >= rx >= rz
+			for out := 0; out < totalOut; out++ {
+				c0 := base[idx000+out]
+				p010 := base[idx010+out]
+				p110 := base[idx110+out]
+				p111 := base[idx111+out]
+
+				c1 := p110 - p010
+				c2 := p010 - c0
+				c3 := p111 - p110
+
+				tmp[out] = c0 + c1*rx + c2*ry + c3*rz
+			}
+		case 4: // ry >= rz >= rx
+			for out := 0; out < totalOut; out++ {
+				c0 := base[idx000+out]
+				p010 := base[idx010+out]
+				p011 := base[idx011+out]
+				p111 := base[idx111+out]
+
+				c1 := p111 - p011
+				c2 := p010 - c0
+				c3 := p011 - p010
+
+				tmp[out] = c0 + c1*rx + c2*ry + c3*rz
+			}
+		default: // 5: rz >= ry >= rx
+			for out := 0; out < totalOut; out++ {
+				c0 := base[idx000+out]
+				p001 := base[idx001+out]
+				p011 := base[idx011+out]
+				p111 := base[idx111+out]
+
+				c1 := p111 - p011
+				c2 := p011 - p001
+				c3 := p001 - c0
+
+				tmp[out] = c0 + c1*rx + c2*ry + c3*rz
+			}
+		}
+	}
+
+	// Evaluate both K-planes
+	doPlane(baseK0, Tmp1)
+	doPlane(baseK1, Tmp2)
+
+	// Final blend along K
+	for i := 0; i < totalOut; i++ {
+		Output[i] = Tmp1[i] + (Tmp2[i]-Tmp1[i])*restK
 	}
 }
 
 // Eval5Inputs evaluates a 5-input LUT.
-func Eval5Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
+func Eval5Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure p16.Table is of type []uint16
@@ -1119,19 +1325,25 @@ func Eval5Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
-
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1U16[:TotalOut]
+	Tmp2 := sc.Tmp2U16[:TotalOut]
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:4], p16.Domain[1:5])
 
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
+
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval4Inputs(Input[1:], Tmp1[:], &p1)
+	Eval4Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval4Inputs(Input[1:], Tmp2[:], &p1)
+	Eval4Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1140,7 +1352,7 @@ func Eval5Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 }
 
 // Eval5InputsFloat evaluates a 5-input LUT using floating-point interpolation.
-func Eval5InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
+func Eval5InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure p.Table is of type []float32
@@ -1169,19 +1381,24 @@ func Eval5InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
-
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1F32[:TotalOut]
+	Tmp2 := sc.Tmp2F32[:TotalOut]
 	// Create a modified interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:4], p.Domain[1:5])
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Use `LutTable` directly with correct slicing
-	Eval4InputsFloat(Input[1:], Tmp1[:], &p1)
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
+	Eval4InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Use `LutTable` directly with correct slicing
-	Eval4InputsFloat(Input[1:], Tmp2[:], &p1)
+	Eval4InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1190,7 +1407,7 @@ func Eval5InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 }
 
 // Eval6Inputs evaluates a 6-input LUT with `[]uint16` table.
-func Eval6Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
+func Eval6Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure p.Table is of type []uint16
@@ -1219,19 +1436,25 @@ func Eval6Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1U16[:TotalOut]
+	Tmp2 := sc.Tmp2U16[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:5], p16.Domain[1:6])
 
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval5Inputs(Input[1:], Tmp1[:], &p1)
+	Eval5Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval5Inputs(Input[1:], Tmp2[:], &p1)
+	Eval5Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1240,7 +1463,7 @@ func Eval6Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 }
 
 // Eval6InputsFloat evaluates a 6-input LUT with `[]float32` table.
-func Eval6InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
+func Eval6InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure p.Table is of type []float32
@@ -1269,19 +1492,24 @@ func Eval6InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
-
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1F32[:TotalOut]
+	Tmp2 := sc.Tmp2F32[:TotalOut]
 	// Create a modified interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:5], p.Domain[1:6])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Use correct slicing
-	Eval5InputsFloat(Input[1:], Tmp1[:], &p1)
+	Eval5InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Use correct slicing
-	Eval5InputsFloat(Input[1:], Tmp2[:], &p1)
+	Eval5InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1290,7 +1518,7 @@ func Eval6InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 }
 
 // Eval7Inputs evaluates a 7-input LUT with `[]uint16` table.
-func Eval7Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
+func Eval7Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure p.Table is of type []uint16
@@ -1319,19 +1547,25 @@ func Eval7Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1U16[:TotalOut]
+	Tmp2 := sc.Tmp2U16[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:6], p16.Domain[1:7])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval6Inputs(Input[1:], Tmp1[:], &p1)
+	Eval6Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval6Inputs(Input[1:], Tmp2[:], &p1)
+	Eval6Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1340,7 +1574,7 @@ func Eval7Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 }
 
 // Eval7InputsFloat evaluates a 7-input LUT with `[]float32` table.
-func Eval7InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
+func Eval7InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure p.Table is of type []float32
@@ -1368,19 +1602,24 @@ func Eval7InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
-
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1F32[:TotalOut]
+	Tmp2 := sc.Tmp2F32[:TotalOut]
 	// Create a modified interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:6], p.Domain[1:7])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval6InputsFloat(Input[1:], Tmp1[:], &p1)
+	Eval6InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval6InputsFloat(Input[1:], Tmp2[:], &p1)
+	Eval6InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1389,7 +1628,7 @@ func Eval7InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 }
 
 // Eval8Inputs evaluates an 8-input LUT with `[]uint16` table.
-func Eval8Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
+func Eval8Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure p.Table is of type []uint16
@@ -1417,19 +1656,25 @@ func Eval8Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1U16[:TotalOut]
+	Tmp2 := sc.Tmp2U16[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:7], p16.Domain[1:8])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval7Inputs(Input[1:], Tmp1[:], &p1)
+	Eval7Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval7Inputs(Input[1:], Tmp2[:], &p1)
+	Eval7Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1438,7 +1683,7 @@ func Eval8Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 }
 
 // Eval8InputsFloat evaluates an 8-input LUT with `[]float32` table.
-func Eval8InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
+func Eval8InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure p.Table is of type []float32
@@ -1467,19 +1712,25 @@ func Eval8InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1F32[:TotalOut]
+	Tmp2 := sc.Tmp2F32[:TotalOut]
 
 	// Create a modified interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:7], p.Domain[1:8])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval7InputsFloat(Input[1:], Tmp1[:], &p1)
+	Eval7InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval7InputsFloat(Input[1:], Tmp2[:], &p1)
+	Eval7InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1488,7 +1739,7 @@ func Eval8InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 }
 
 // Eval9Inputs evaluates a 9-input LUT with `[]uint16` table.
-func Eval9Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
+func Eval9Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure p.Table is of type []uint16
@@ -1517,19 +1768,25 @@ func Eval9Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1U16[:TotalOut]
+	Tmp2 := sc.Tmp2U16[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:8], p16.Domain[1:9])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval8Inputs(Input[1:], Tmp1[:], &p1)
+	Eval8Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval8Inputs(Input[1:], Tmp2[:], &p1)
+	Eval8Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1538,7 +1795,7 @@ func Eval9Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 }
 
 // Eval9InputsFloat evaluates a 9-input LUT with `[]float32` table.
-func Eval9InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
+func Eval9InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure p.Table is of type []float32
@@ -1567,19 +1824,25 @@ func Eval9InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1F32[:TotalOut]
+	Tmp2 := sc.Tmp2F32[:TotalOut]
 
 	// Create a modified interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:8], p.Domain[1:9])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval8InputsFloat(Input[1:], Tmp1[:], &p1)
+	Eval8InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval8InputsFloat(Input[1:], Tmp2[:], &p1)
+	Eval8InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1588,7 +1851,7 @@ func Eval9InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 }
 
 // Eval10Inputs evaluates a 10-input LUT with `[]uint16` table.
-func Eval10Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
+func Eval10Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure p.Table is of type []uint16
@@ -1616,19 +1879,25 @@ func Eval10Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1U16[:TotalOut]
+	Tmp2 := sc.Tmp2U16[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:9], p16.Domain[1:10])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval9Inputs(Input[1:], Tmp1[:], &p1)
+	Eval9Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval9Inputs(Input[1:], Tmp2[:], &p1)
+	Eval9Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1637,7 +1906,7 @@ func Eval10Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 }
 
 // Eval10InputsFloat evaluates a 10-input LUT with `[]float32` table.
-func Eval10InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
+func Eval10InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure p.Table is of type []float32
@@ -1666,19 +1935,25 @@ func Eval10InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1F32[:TotalOut]
+	Tmp2 := sc.Tmp2F32[:TotalOut]
 
 	// Create a modified interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:9], p.Domain[1:10])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval9InputsFloat(Input[1:], Tmp1[:], &p1)
+	Eval9InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval9InputsFloat(Input[1:], Tmp2[:], &p1)
+	Eval9InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1687,7 +1962,7 @@ func Eval10InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 }
 
 // Eval11Inputs evaluates an 11-input LUT with `[]uint16` table.
-func Eval11Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
+func Eval11Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure p.Table is of type []uint16
@@ -1716,19 +1991,25 @@ func Eval11Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1U16[:TotalOut]
+	Tmp2 := sc.Tmp2U16[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:10], p16.Domain[1:11])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval10Inputs(Input[1:], Tmp1[:], &p1)
+	Eval10Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval10Inputs(Input[1:], Tmp2[:], &p1)
+	Eval10Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1737,7 +2018,7 @@ func Eval11Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 }
 
 // Eval11InputsFloat evaluates an 11-input LUT with `[]float32` table.
-func Eval11InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
+func Eval11InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure p.Table is of type []float32
@@ -1766,19 +2047,25 @@ func Eval11InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1F32[:TotalOut]
+	Tmp2 := sc.Tmp2F32[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:10], p.Domain[1:11])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval10InputsFloat(Input[1:], Tmp1[:], &p1)
+	Eval10InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval10InputsFloat(Input[1:], Tmp2[:], &p1)
+	Eval10InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1787,7 +2074,7 @@ func Eval11InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 }
 
 // Eval12Inputs evaluates a 12-input LUT with `[]uint16` table.
-func Eval12Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
+func Eval12Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure p.Table is of type []uint16
@@ -1816,19 +2103,25 @@ func Eval12Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1U16[:TotalOut]
+	Tmp2 := sc.Tmp2U16[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:11], p16.Domain[1:12])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval11Inputs(Input[1:], Tmp1[:], &p1)
+	Eval11Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval11Inputs(Input[1:], Tmp2[:], &p1)
+	Eval11Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1837,7 +2130,7 @@ func Eval12Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 }
 
 // Eval12InputsFloat evaluates a 12-input LUT with `[]float32` table.
-func Eval12InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
+func Eval12InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure p.Table is of type []float32
@@ -1865,19 +2158,25 @@ func Eval12InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1F32[:TotalOut]
+	Tmp2 := sc.Tmp2F32[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:11], p.Domain[1:12])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval11InputsFloat(Input[1:], Tmp1[:], &p1)
+	Eval11InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval11InputsFloat(Input[1:], Tmp2[:], &p1)
+	Eval11InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1886,7 +2185,7 @@ func Eval12InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 }
 
 // Eval13Inputs evaluates a 13-input LUT with `[]uint16` table.
-func Eval13Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
+func Eval13Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure p.Table is of type []uint16
@@ -1914,19 +2213,25 @@ func Eval13Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1U16[:TotalOut]
+	Tmp2 := sc.Tmp2U16[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:12], p16.Domain[1:13])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval12Inputs(Input[1:], Tmp1[:], &p1)
+	Eval12Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval12Inputs(Input[1:], Tmp2[:], &p1)
+	Eval12Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1935,7 +2240,7 @@ func Eval13Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 }
 
 // Eval13InputsFloat evaluates a 13-input LUT with `[]float32` table.
-func Eval13InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
+func Eval13InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure p.Table is of type []float32
@@ -1964,19 +2269,25 @@ func Eval13InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1F32[:TotalOut]
+	Tmp2 := sc.Tmp2F32[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:12], p.Domain[1:13])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval12InputsFloat(Input[1:], Tmp1[:], &p1)
+	Eval12InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval12InputsFloat(Input[1:], Tmp2[:], &p1)
+	Eval12InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -1985,7 +2296,7 @@ func Eval13InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 }
 
 // Eval14Inputs evaluates a 14-input LUT with `[]uint16` table.
-func Eval14Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
+func Eval14Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure p.Table is of type []uint16
@@ -2013,19 +2324,25 @@ func Eval14Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1U16[:TotalOut]
+	Tmp2 := sc.Tmp2U16[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:13], p16.Domain[1:14])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval13Inputs(Input[1:], Tmp1[:], &p1)
+	Eval13Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval13Inputs(Input[1:], Tmp2[:], &p1)
+	Eval13Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2034,7 +2351,7 @@ func Eval14Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 }
 
 // Eval14InputsFloat evaluates a 14-input LUT with `[]float32` table.
-func Eval14InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
+func Eval14InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure p.Table is of type []float32
@@ -2062,19 +2379,25 @@ func Eval14InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1F32[:TotalOut]
+	Tmp2 := sc.Tmp2F32[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:13], p.Domain[1:14])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval13InputsFloat(Input[1:], Tmp1[:], &p1)
+	Eval13InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval13InputsFloat(Input[1:], Tmp2[:], &p1)
+	Eval13InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2083,7 +2406,7 @@ func Eval14InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 }
 
 // Eval15Inputs evaluates a 15-input LUT with `[]uint16` table.
-func Eval15Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
+func Eval15Inputs(mm mem.Manager, Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	TotalOut := int(p16.nOutputs)
 
 	// Ensure p.Table is of type []uint16
@@ -2111,19 +2434,25 @@ func Eval15Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]uint16
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1U16[:TotalOut]
+	Tmp2 := sc.Tmp2U16[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p16
 	copy(p1.Domain[:14], p16.Domain[1:15])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval14Inputs(Input[1:], Tmp1[:], &p1)
+	Eval14Inputs(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval14Inputs(Input[1:], Tmp2[:], &p1)
+	Eval14Inputs(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2132,7 +2461,7 @@ func Eval15Inputs(Input []uint16, Output []uint16, p16 *cmsInterpParams) {
 }
 
 // Eval15InputsFloat evaluates a 15-input LUT with `[]float32` table.
-func Eval15InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
+func Eval15InputsFloat(mm mem.Manager, Input []float32, Output []float32, p *cmsInterpParams) {
 	TotalOut := int(p.nOutputs)
 
 	// Ensure p.Table is of type []float32
@@ -2160,19 +2489,25 @@ func Eval15InputsFloat(Input []float32, Output []float32, p *cmsInterpParams) {
 	}
 
 	// Temporary storage for interpolation results
-	var Tmp1, Tmp2 [MAX_STAGE_CHANNELS]float32
+	// ---- scratch buffers (replace local Tmp1/Tmp2) ----
+	sc := mm.Scratch()
+	Tmp1 := sc.Tmp1F32[:TotalOut]
+	Tmp2 := sc.Tmp2F32[:TotalOut]
 
 	// Create a new interpolation parameter structure
 	p1 := *p
 	copy(p1.Domain[:14], p.Domain[1:15])
+	// Use a CHILD FRAME for the nested  calls
+	mmInner := mm.NewFrame()
+	defer mmInner.Close()
 
 	// Process K0
 	p1.Table = LutTable[K0:] // Adjust LUT slice for K0
-	Eval14InputsFloat(Input[1:], Tmp1[:], &p1)
+	Eval14InputsFloat(mmInner, Input[1:], Tmp1[:], &p1)
 
 	// Process K1
 	p1.Table = LutTable[K1:] // Adjust LUT slice for K1
-	Eval14InputsFloat(Input[1:], Tmp2[:], &p1)
+	Eval14InputsFloat(mmInner, Input[1:], Tmp2[:], &p1)
 
 	// Final interpolation
 	for i := 0; i < TotalOut; i++ {
@@ -2202,11 +2537,11 @@ func DefaultInterpolatorsFactory(nInputChannels, nOutputChannels, dwFlags uint32
 	case 1: // Gray LUT / linear
 
 		if nOutputChannels == 1 {
-
 			if IsFloat {
 				Interpolation.LerpFloat = LinLerp1Dfloat
 			} else {
 				Interpolation.Lerp16 = LinLerp1D
+				Interpolation.Lerp16Scalar = LinLerp1DScalar16 // NEW
 			}
 		} else {
 			if IsFloat {

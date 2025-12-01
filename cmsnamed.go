@@ -271,7 +271,7 @@ func _cmsMLUgetWide(
 				if entry.StrW+entry.Len > mlu.PoolSize {
 					return nil
 				}
-				return bytesToUint16Slice(memPool[entry.StrW : entry.StrW+entry.Len])
+				return BytesToUint16sLE(memPool[entry.StrW : entry.StrW+entry.Len])
 			}
 		}
 	}
@@ -294,7 +294,7 @@ func _cmsMLUgetWide(
 	if entry.StrW+entry.Len > mlu.PoolSize {
 		return nil
 	}
-	return bytesToUint16Slice(memPool[entry.StrW : entry.StrW+entry.Len])
+	return BytesToUint16sLE(memPool[entry.StrW : entry.StrW+entry.Len])
 }
 func cmsMLUgetWide(
 	mlu *cmsMLU,
@@ -431,7 +431,7 @@ func cmsMLUtranslationsCodes(mlu *cmsMLU, idx uint32, LanguageCode, CountryCode 
 
 // GrowNamedColorList grows the list to accommodate at least NumElements.
 // GrowNamedColorList expands the capacity of the named color list dynamically.
-func GrowNamedColorList(v *cmsNAMEDCOLORLIST) bool {
+func GrowNamedColorList(mm mem.Manager,v *cmsNAMEDCOLORLIST) bool {
 	if v == nil {
 		return false
 	}
@@ -451,7 +451,7 @@ func GrowNamedColorList(v *cmsNAMEDCOLORLIST) bool {
 
 	// Extend the slice to the new size
 	if len(v.List) < int(newSize) {
-		newList := mem.MakeSlice[cmsNAMEDCOLOR](mem.Manager{}, int(newSize))
+		newList := mem.MakeSlice[cmsNAMEDCOLOR](mm, int(newSize))
 		copy(newList, v.List) // Preserve existing elements
 		v.List = newList
 	}
@@ -477,7 +477,7 @@ func cmsAllocNamedColorList(mm mem.Manager, ContextID CmsContext, n, ColorantCou
 
 	// Grow the list to fit the required number of elements
 	for v.Allocated < n {
-		if !GrowNamedColorList(v) {
+		if !GrowNamedColorList(mm,v) {
 			cmsFreeNamedColorList(v)
 			return nil
 		}
@@ -515,7 +515,7 @@ func cmsDupNamedColorList(mm mem.Manager, v *cmsNAMEDCOLORLIST) *cmsNAMEDCOLORLI
 
 	// Ensure the allocated size matches
 	for newNC.Allocated < v.Allocated {
-		if !GrowNamedColorList(newNC) {
+		if !GrowNamedColorList(mm,newNC) {
 			cmsFreeNamedColorList(newNC)
 			return nil
 		}
@@ -631,14 +631,14 @@ func cmsStageAllocNamedColor(mm mem.Manager, namedColorList *cmsNAMEDCOLORLIST, 
 	)
 }
 
-func cmsAppendNamedColor(namedColorList *cmsNAMEDCOLORLIST, name string, PCS *[3]uint16, Colorant *[cmsMAXCHANNELS]uint16) bool {
+func cmsAppendNamedColor(mm mem.Manager, namedColorList *cmsNAMEDCOLORLIST, name string, PCS *[3]uint16, Colorant *[cmsMAXCHANNELS]uint16) bool {
 	if namedColorList == nil {
 		return false
 	}
 
 	// Grow the list if necessary
 	if namedColorList.nColors+1 > namedColorList.Allocated {
-		if !GrowNamedColorList(namedColorList) {
+		if !GrowNamedColorList(mm,namedColorList) {
 			return false
 		}
 	}

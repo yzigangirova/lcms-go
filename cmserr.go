@@ -2,8 +2,8 @@ package golcms
 
 //import "C"
 import (
-	"bytes"
-	"encoding/binary"
+	//"bytes"
+	//"encoding/binary"
 	"fmt"
 	"math"
 	"os"
@@ -621,7 +621,7 @@ func cmsstrcasecmp(s1, s2 *byte) int {
 
 // Convert []float32 to []byte
 
-func float32SliceToBytes(floats []float32) []byte {
+/*func float32SliceToBytes(floats []float32) []byte {
 	buf := new(bytes.Buffer)
 	for _, f := range floats {
 		binary.Write(buf, binary.LittleEndian, f)
@@ -662,5 +662,162 @@ func bytesToLab(b []byte) cmsCIELab {
 	binary.Read(buf, binary.LittleEndian, &lab.L)
 	binary.Read(buf, binary.LittleEndian, &lab.a)
 	binary.Read(buf, binary.LittleEndian, &lab.b)
+	return lab
+}*/
+// Fill dst from b (little-endian). Returns number of elements written.
+func writeIntoUint16Slice(dst []uint16, b []byte) int {
+	n := len(b) / 2
+	if n > len(dst) {
+		n = len(dst)
+	}
+	off := 0
+	for i := 0; i < n; i++ {
+		dst[i] = uint16(b[off]) | uint16(b[off+1])<<8
+		off += 2
+	}
+	return n
+}
+
+func writeIntoFloat32Slice(dst []float32, b []byte) int {
+	n := len(b) / 4
+	if n > len(dst) {
+		n = len(dst)
+	}
+	off := 0
+	for i := 0; i < n; i++ {
+		u := uint32(b[off]) |
+			uint32(b[off+1])<<8 |
+			uint32(b[off+2])<<16 |
+			uint32(b[off+3])<<24
+		dst[i] = math.Float32frombits(u)
+		off += 4
+	}
+	return n
+}
+
+func writeIntoFloat64Slice(dst []float64, b []byte) int {
+	n := len(b) / 8
+	if n > len(dst) {
+		n = len(dst)
+	}
+	off := 0
+	for i := 0; i < n; i++ {
+		u := uint64(b[off]) |
+			uint64(b[off+1])<<8 |
+			uint64(b[off+2])<<16 |
+			uint64(b[off+3])<<24 |
+			uint64(b[off+4])<<32 |
+			uint64(b[off+5])<<40 |
+			uint64(b[off+6])<<48 |
+			uint64(b[off+7])<<56
+		dst[i] = math.Float64frombits(u)
+		off += 8
+	}
+	return n
+}
+
+// -------- bytes -> slices (allocate-return) --------
+
+func BytesToUint16sLE(b []byte) []uint16 {
+	n := len(b) >> 1
+	out := make([]uint16, n)
+	off := 0
+	for i := 0; i < n; i++ {
+		out[i] = uint16(b[off]) | uint16(b[off+1])<<8
+		off += 2
+	}
+	return out
+}
+
+func BytesToFloat32sLE(b []byte) []float32 {
+	n := len(b) >> 2
+	out := make([]float32, n)
+	off := 0
+	for i := 0; i < n; i++ {
+		u := uint32(b[off]) |
+			uint32(b[off+1])<<8 |
+			uint32(b[off+2])<<16 |
+			uint32(b[off+3])<<24
+		out[i] = math.Float32frombits(u)
+		off += 4
+	}
+	return out
+}
+
+func BytesToFloat64sLE(b []byte) []float64 {
+	n := len(b) >> 3
+	out := make([]float64, n)
+	off := 0
+	for i := 0; i < n; i++ {
+		u := uint64(b[off]) |
+			uint64(b[off+1])<<8 | uint64(b[off+2])<<16 | uint64(b[off+3])<<24 |
+			uint64(b[off+4])<<32 | uint64(b[off+5])<<40 | uint64(b[off+6])<<48 | uint64(b[off+7])<<56
+		out[i] = math.Float64frombits(u)
+		off += 8
+	}
+	return out
+}
+
+// -------- slices -> bytes (allocate-return) --------
+
+func Uint16sToBytesLE(src []uint16) []byte {
+	out := make([]byte, len(src)*2)
+	off := 0
+	for _, v := range src {
+		out[off] = byte(v)
+		out[off+1] = byte(v >> 8)
+		off += 2
+	}
+	return out
+}
+
+func Float32sToBytesLE(src []float32) []byte {
+	out := make([]byte, len(src)*4)
+	off := 0
+	for _, f := range src {
+		u := math.Float32bits(f)
+		out[off] = byte(u)
+		out[off+1] = byte(u >> 8)
+		out[off+2] = byte(u >> 16)
+		out[off+3] = byte(u >> 24)
+		off += 4
+	}
+	return out
+}
+
+func Float64sToBytesLE(src []float64) []byte {
+	out := make([]byte, len(src)*8)
+	off := 0
+	for _, f := range src {
+		u := math.Float64bits(f)
+		out[off] = byte(u)
+		out[off+1] = byte(u >> 8)
+		out[off+2] = byte(u >> 16)
+		out[off+3] = byte(u >> 24)
+		out[off+4] = byte(u >> 32)
+		out[off+5] = byte(u >> 40)
+		out[off+6] = byte(u >> 48)
+		out[off+7] = byte(u >> 56)
+		off += 8
+	}
+	return out
+}
+
+func bytesToLab(b []byte) cmsCIELab {
+	// assumes len(b) >= 24 (3 * float64)
+	var lab cmsCIELab
+	// L
+	u0 := uint64(b[0]) | uint64(b[1])<<8 | uint64(b[2])<<16 | uint64(b[3])<<24 |
+		uint64(b[4])<<32 | uint64(b[5])<<40 | uint64(b[6])<<48 | uint64(b[7])<<56
+	// a
+	u1 := uint64(b[8]) | uint64(b[9])<<8 | uint64(b[10])<<16 | uint64(b[11])<<24 |
+		uint64(b[12])<<32 | uint64(b[13])<<40 | uint64(b[14])<<48 | uint64(b[15])<<56
+	// b
+	u2 := uint64(b[16]) | uint64(b[17])<<8 | uint64(b[18])<<16 | uint64(b[19])<<24 |
+		uint64(b[20])<<32 | uint64(b[21])<<40 | uint64(b[22])<<48 | uint64(b[23])<<56
+
+	lab.L = math.Float64frombits(u0)
+	lab.a = math.Float64frombits(u1)
+	lab.b = math.Float64frombits(u2)
 	return lab
 }

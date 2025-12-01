@@ -2,18 +2,10 @@ package golcms
 
 import (
 	"math"
-	"sync"
 	"unsafe"
 
 	"github.com/yzigangirova/lcms-go/mem"
 )
-
-var xformFloatPool = sync.Pool{
-	New: func() any {
-		// Pair of input/output float slices
-		return new([2][cmsMAXCHANNELS]float32)
-	},
-}
 
 type Prelin8Data struct {
 	ContextID CmsContext
@@ -231,7 +223,7 @@ func PreOptimize(mm mem.Manager, Lut *cmsPipeline) bool {
 	return anyOpt
 }
 
-func Eval16nop1D(Input []uint16, Output []uint16, params *cmsInterpParams) {
+func Eval16nop1D(mm mem.Manager, Input []uint16, Output []uint16, params *cmsInterpParams) {
 	Output[0] = Input[0]
 }
 
@@ -248,15 +240,15 @@ func PrelinEval16(mm mem.Manager, Input []uint16, Output []uint16, D any) {
 	// Handle input curves
 	for i := uint32(0); i < p16.NInputs; i++ {
 		// Call the interpolation function
-		p16.EvalCurveIn16[i](Input[i:], StageABC[i:], p16.ParamsCurveIn16[i])
+		p16.EvalCurveIn16[i](mm, Input[i:], StageABC[i:], p16.ParamsCurveIn16[i])
 	}
 
 	// Evaluate the CLUT
-	p16.EvalCLUT(StageABC[:], StageDEF[:], p16.CLUTParams)
+	p16.EvalCLUT(mm, StageABC[:], StageDEF[:], p16.CLUTParams)
 
 	// Handle output curves
 	for i := uint32(0); i < p16.NOutputs; i++ {
-		p16.EvalCurveOut16[i](StageDEF[i:], Output[i:], p16.ParamsCurveOut16[i])
+		p16.EvalCurveOut16[i](mm, StageDEF[i:], Output[i:], p16.ParamsCurveOut16[i])
 	}
 }
 
@@ -350,37 +342,38 @@ func PrelinOpt16alloc(mm mem.Manager, ContextID CmsContext, ColorMap *cmsInterpP
 
 const PRELINEARIZATION_POINTS = 4096
 
-func XFormSampler16(mm mem.Manager, In []uint16, Out []uint16, cargo any) int32 {
+func XFormSampler16(mm mem.Manager, In, Out []uint16, cargo any) int32 {
 	Lut, ok := cargo.(*cmsPipeline)
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsPipeline\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "XFormSampler16: cargo not *cmsPipeline")
 		return 0
 	}
 
-	// Get reusable buffer
-	buf := xformFloatPool.Get().(*[2][cmsMAXCHANNELS]float32)
-	defer xformFloatPool.Put(buf)
+	sc := mm.Scratch()
+	inF := sc.LUT[0]
+	outF := sc.LUT[1]
 
-	InFloat := buf[0][:]
-	OutFloat := buf[1][:]
+	nIn := int(Lut.InputChannels)
+	nOut := int(Lut.OutputChannels)
 
-	cmsAssert(Lut.InputChannels < cmsMAXCHANNELS, "")
-	cmsAssert(Lut.OutputChannels < cmsMAXCHANNELS, "")
-
-	// Convert input from uint16 to float32
-	for i := uint32(0); i < Lut.InputChannels; i++ {
-		InFloat[i] = float32(In[i]) / 65535.0
+	// optional guards in debug builds
+	if nIn > len(inF) || nOut > len(outF) {
+		cmsSignalError(nil, cmsERROR_RANGE, "channels exceed scratch capacity")
+		return 0
 	}
 
-	// Evaluate the pipeline
-	cmsPipelineEvalFloat(mm, InFloat[:], OutFloat[:], Lut)
-
-	// Convert output from float32 back to uint16
-	for i := uint32(0); i < Lut.OutputChannels; i++ {
-		Out[i] = cmsQuickSaturateWord(float64(OutFloat[i] * 65535.0))
+	const inv65535 = 1.0 / 65535.0
+	for i := 0; i < nIn; i++ {
+		inF[i] = float32(In[i]) * inv65535
 	}
 
-	return 1 // TRUE
+	cmsPipelineEvalFloat(mm, inF[:nIn], outF[:nOut], Lut)
+
+	const scale = 65535.0
+	for i := 0; i < nOut; i++ {
+		Out[i] = cmsQuickSaturateWord(float64(outF[i]) * scale)
+	}
+	return 1
 }
 
 func AllCurvesAreLinear(mpe *cmsStage) bool {
@@ -532,7 +525,7 @@ func FixWhiteMisalignment(mm mem.Manager, Lut *cmsPipeline, EntryColorSpace, Exi
 	if PreLin != nil {
 		Curves := cmsStageGetPtrToCurveSet(PreLin)
 		for i := uint32(0); i < nIns; i++ {
-			WhiteIn[i] = cmsEvalToneCurve16(Curves[i], WhitePointIn[i])
+			WhiteIn[i] = cmsEvalToneCurve16(mm, Curves[i], WhitePointIn[i])
 		}
 	} else {
 		for i := uint32(0); i < nIns; i++ {
@@ -548,7 +541,7 @@ func FixWhiteMisalignment(mm mem.Manager, Lut *cmsPipeline, EntryColorSpace, Exi
 			if InversePostLin == nil {
 				WhiteOut[i] = WhitePointOut[i]
 			} else {
-				WhiteOut[i] = cmsEvalToneCurve16(InversePostLin, WhitePointOut[i])
+				WhiteOut[i] = cmsEvalToneCurve16(mm, InversePostLin, WhitePointOut[i])
 				CmsFreeToneCurve(InversePostLin)
 			}
 		}
@@ -685,11 +678,16 @@ func OptimizeByResampling(mm mem.Manager, Lut **cmsPipeline, Intent uint32, Inpu
 	}
 
 	if DataSetIn == nil && DataSetOut == nil {
-		cmsPipelineSetOptimizationParameters(Dest,
-			func(mm mem.Manager, In, Out []uint16, Data any) {
-				Data.(*cmsInterpParams).Interpolation.Lerp16(In, Out, Data.(*cmsInterpParams))
-			},
-			DataCLUT.Params, nil, nil)
+		/*cmsPipelineSetOptimizationParameters(Dest,
+		func(mm mem.Manager, In, Out []uint16, Data any) {
+			Data.(*cmsInterpParams).Interpolation.Lerp16(mm, In, Out, Data.(*cmsInterpParams))
+		},
+		DataCLUT.Params, nil, nil)*/
+		cmsPipelineSetFastOptimization(
+			Dest,
+			DataCLUT.Params.Interpolation.Lerp16, // e.g., Eval4Inputs
+			DataCLUT.Params,
+		)
 
 	} else {
 
@@ -774,9 +772,9 @@ func PrelinOpt8alloc(mm mem.Manager, ContextID CmsContext, p *cmsInterpParams, G
 		var Input [3]uint16
 
 		if G[0] != nil {
-			Input[0] = cmsEvalToneCurve16(G[0], FROM_8_TO_16(uint8(i)))
-			Input[1] = cmsEvalToneCurve16(G[1], FROM_8_TO_16(uint8(i)))
-			Input[2] = cmsEvalToneCurve16(G[2], FROM_8_TO_16(uint8(i)))
+			Input[0] = cmsEvalToneCurve16(mm, G[0], FROM_8_TO_16(uint8(i)))
+			Input[1] = cmsEvalToneCurve16(mm, G[1], FROM_8_TO_16(uint8(i)))
+			Input[2] = cmsEvalToneCurve16(mm, G[2], FROM_8_TO_16(uint8(i)))
 		} else {
 			Input[0] = FROM_8_TO_16(uint8(i))
 			Input[1] = FROM_8_TO_16(uint8(i))
@@ -1172,7 +1170,7 @@ func CurvesDup(ContextID CmsContext, ptr any) any {
 	return data
 }
 
-func CurvesAlloc(ContextID CmsContext, nCurves, nElements uint32, G []*CmsToneCurve) *Curves16Data {
+func CurvesAlloc(mm mem.Manager, ContextID CmsContext, nCurves, nElements uint32, G []*CmsToneCurve) *Curves16Data {
 	// Step 1: Allocate the main structure
 	c16 := &Curves16Data{
 		NCurves:   nCurves,
@@ -1187,9 +1185,9 @@ func CurvesAlloc(ContextID CmsContext, nCurves, nElements uint32, G []*CmsToneCu
 		// Step 3: Fill the curve with evaluated values
 		for j := uint32(0); j < nElements; j++ {
 			if nElements == 256 {
-				c16.Curves[i][j] = cmsEvalToneCurve16(G[i], FROM_8_TO_16(uint8(j)))
+				c16.Curves[i][j] = cmsEvalToneCurve16(mm, G[i], FROM_8_TO_16(uint8(j)))
 			} else {
-				c16.Curves[i][j] = cmsEvalToneCurve16(G[i], uint16(j))
+				c16.Curves[i][j] = cmsEvalToneCurve16(mm, G[i], uint16(j))
 			}
 		}
 	}
@@ -1359,14 +1357,14 @@ func OptimizeByJoiningCurves(mm mem.Manager,
 		ObtainedCurves = nil
 
 		if cmsFormatterIs8bit(*InputFormat) {
-			c16 := CurvesAlloc(Dest.ContextID, Data.NCurves, 256, Data.TheCurves)
+			c16 := CurvesAlloc(mm, Dest.ContextID, Data.NCurves, 256, Data.TheCurves)
 			if c16 == nil {
 				goto Error
 			}
 			*dwFlags |= CmsFLAGS_NOCACHE
 			cmsPipelineSetOptimizationParameters(Dest, FastEvaluateCurves8, c16, CurvesFree, CurvesDup)
 		} else {
-			c16 := CurvesAlloc(Dest.ContextID, Data.NCurves, 65536, Data.TheCurves)
+			c16 := CurvesAlloc(mm, Dest.ContextID, Data.NCurves, 65536, Data.TheCurves)
 			if c16 == nil {
 				goto Error
 			}
@@ -1463,10 +1461,10 @@ func clipToRange(value cmsS1Fixed14Number, min, max cmsS1Fixed14Number) uint32 {
 	}
 	return uint32(value)
 }
-func FillFirstShaper(Table []cmsS1Fixed14Number, Curve *CmsToneCurve) {
+func FillFirstShaper(mm mem.Manager, Table []cmsS1Fixed14Number, Curve *CmsToneCurve) {
 	for i := 0; i < 256; i++ {
 		R := float32(i) / 255.0
-		y := cmsEvalToneCurveFloat(Curve, R)
+		y := cmsEvalToneCurveFloat(mm, Curve, R)
 
 		if y < 131072.0 {
 			Table[i] = DOUBLE_TO_1FIXED14(float64(y))
@@ -1475,7 +1473,7 @@ func FillFirstShaper(Table []cmsS1Fixed14Number, Curve *CmsToneCurve) {
 		}
 	}
 }
-func FillSecondShaper(Table []uint16, Curve *CmsToneCurve, Is8BitsOutput bool) {
+func FillSecondShaper(mm mem.Manager, Table []uint16, Curve *CmsToneCurve, Is8BitsOutput bool) {
 	//  Ensure Table has enough elements to prevent out-of-bounds errors
 	if len(Table) < 16385 {
 		return
@@ -1483,7 +1481,7 @@ func FillSecondShaper(Table []uint16, Curve *CmsToneCurve, Is8BitsOutput bool) {
 
 	for i := 0; i < 16385; i++ {
 		R := float32(i) / 16384.0
-		Val := cmsEvalToneCurveFloat(Curve, R)
+		Val := cmsEvalToneCurveFloat(mm, Curve, R)
 
 		//  Clip value to range [0, 1]
 		if Val < 0 {
@@ -1513,13 +1511,13 @@ func SetMatShaper(mm mem.Manager, Dest *cmsPipeline, Curve1 [3]*CmsToneCurve, Ma
 	p.ContextID = Dest.ContextID
 
 	// Fill the first and second shapers
-	FillFirstShaper(p.Shaper1R[:], Curve1[0])
-	FillFirstShaper(p.Shaper1G[:], Curve1[1])
-	FillFirstShaper(p.Shaper1B[:], Curve1[2])
+	FillFirstShaper(mm, p.Shaper1R[:], Curve1[0])
+	FillFirstShaper(mm, p.Shaper1G[:], Curve1[1])
+	FillFirstShaper(mm, p.Shaper1B[:], Curve1[2])
 
-	FillSecondShaper(p.Shaper2R[:], Curve2[0], cmsFormatterIs8bit(*OutputFormat))
-	FillSecondShaper(p.Shaper2G[:], Curve2[1], cmsFormatterIs8bit(*OutputFormat))
-	FillSecondShaper(p.Shaper2B[:], Curve2[2], cmsFormatterIs8bit(*OutputFormat))
+	FillSecondShaper(mm, p.Shaper2R[:], Curve2[0], cmsFormatterIs8bit(*OutputFormat))
+	FillSecondShaper(mm, p.Shaper2G[:], Curve2[1], cmsFormatterIs8bit(*OutputFormat))
+	FillSecondShaper(mm, p.Shaper2B[:], Curve2[2], cmsFormatterIs8bit(*OutputFormat))
 
 	// Convert the matrix to fixed-point representation
 	for i := 0; i < 3; i++ {

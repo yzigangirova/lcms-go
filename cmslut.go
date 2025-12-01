@@ -3,29 +3,9 @@ package golcms
 import (
 	//"fmt"
 	"math"
-	"sync"
 
 	"github.com/yzigangirova/lcms-go/mem"
 )
-
-var lutBufferPool = sync.Pool{
-	New: func() any {
-		// Allocate once
-		return new([2][MAX_STAGE_CHANNELS]float32)
-	},
-}
-
-var in16Pool = sync.Pool{
-	New: func() any {
-		return new([MAX_STAGE_CHANNELS]uint16)
-	},
-}
-
-var out16Pool = sync.Pool{
-	New: func() any {
-		return new([MAX_STAGE_CHANNELS]uint16)
-	},
-}
 
 func cmsStageAllocPlaceholder(mm mem.Manager,
 	ContextID CmsContext,
@@ -81,12 +61,31 @@ func FromFloatTo16(In []float32, Out []uint16, n uint32) {
 
 // From16ToFloat converts a slice of uint16 values to a slice of float32 values
 // From16ToFloat converts a slice of uint16 values to a slice of float32 values using unsafe pointer arithmetic.
-func From16ToFloat(In []uint16, Out []float32, n uint32) {
+/*func From16ToFloat(In []uint16, Out []float32, n uint32) {
 	for i := uint32(0); i < n; i++ {
 		// Perform the conversion
 		Out[i] = float32(In[i]) / 65535.0
 	}
+}*/
+
+const inv65535 = 1.0 / 65535.0
+
+// From16ToFloat converts n uint16 values in In to float32 in Out, in [0, 1].
+func From16ToFloat(In []uint16, Out []float32, n uint32) {
+	ni := int(n)
+
+	// Trim slices to exactly n elements so the compiler can eliminate
+	// bounds checks inside the loop.
+	In = In[:ni]
+	Out = Out[:ni]
+
+	c := float32(inv65535)
+
+	for i := 0; i < ni; i++ {
+		Out[i] = float32(In[i]) * c
+	}
 }
+
 
 func cmsPipelineCheckAndRetrieveStages(lut *cmsPipeline, n uint32, expectedTypes []cmsStageSignature, retrievedStages ...**cmsStage) bool {
 	//	fmt.Println("cmsPipelineCheckAndRetrieveStages")
@@ -186,7 +185,7 @@ func EvaluateCurves(mm mem.Manager, In []float32, Out []float32, mpe *cmsStage) 
 
 	for i := uint32(0); i < data.NCurves; i++ {
 		//patchedValue := patchInput(In[i])
-		Out[i] = cmsEvalToneCurveFloat(data.TheCurves[i], In[i])
+		Out[i] = cmsEvalToneCurveFloat(mm, data.TheCurves[i], In[i])
 	}
 
 	// Debug: Print final output values
@@ -835,49 +834,44 @@ func BlessLUT(lut *cmsPipeline) bool {
 	return true
 }
 
-// _LUTeval16 evaluates the LUT on a 16-bit basis
-func LUTeval16(mm mem.Manager, In []uint16, Out []uint16, D any) {
+func LUTeval16(mm mem.Manager, In, Out []uint16, D any) {
 	lut, ok := D.(*cmsPipeline)
 	if !ok {
-		panic(" D  must be of type *cmsPipeline")
+		panic("D must be *cmsPipeline")
 	}
-	var Storage [2][MAX_STAGE_CHANNELS]float32
-	var Phase, NextPhase int
+	sc := mm.Scratch()
 
-	// Convert input from 16-bit to float
-	From16ToFloat(In, Storage[Phase][:], lut.InputChannels)
+	nIn := int(lut.InputChannels)
+	nOut := int(lut.OutputChannels)
 
-	// Process each stage in the pipeline
+	phase := 0
+	From16ToFloat(In[:nIn], sc.LUT[phase][:nIn], lut.InputChannels)
+
 	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
-		NextPhase = Phase ^ 1
-		mpe.EvalPtr(mm, Storage[Phase][:], Storage[NextPhase][:], mpe)
-		Phase = NextPhase
+		next := phase ^ 1
+		mpe.EvalPtr(mm, sc.LUT[phase][:nIn], sc.LUT[next][:nOut], mpe)
+		phase = next
 	}
-
-	// Convert output from float to 16-bit
-	FromFloatTo16(Storage[Phase][:], Out, lut.OutputChannels)
+	FromFloatTo16(sc.LUT[phase][:nOut], Out[:nOut], lut.OutputChannels)
 }
 
-func LUTevalFloat(mm mem.Manager, In []float32, Out []float32, D any) {
+func LUTevalFloat(mm mem.Manager, In, Out []float32, D any) {
 	lut, ok := D.(*cmsPipeline)
 	if !ok {
-		panic(" D must be of type *cmsPipeline")
+		panic("D must be *cmsPipeline")
 	}
 
-	storagePtr := lutBufferPool.Get().(*[2][MAX_STAGE_CHANNELS]float32)
-	defer lutBufferPool.Put(storagePtr) // reuse for next call
-
-	// Work with pointer directly, no copying
-	var Phase, NextPhase int
-	MemmoveSlice(storagePtr[Phase][:], In, int(lut.InputChannels))
+	sc := mm.Scratch()
+	phase := 0
+	copy(sc.LUT[phase][:], In[:lut.InputChannels])
 
 	for mpe := lut.Elements; mpe != nil; mpe = mpe.Next {
-		NextPhase = Phase ^ 1
-		mpe.EvalPtr(mm, storagePtr[Phase][:], storagePtr[NextPhase][:], mpe)
-		Phase = NextPhase
+		next := phase ^ 1
+		mpe.EvalPtr(mm, sc.LUT[phase][:], sc.LUT[next][:], mpe)
+		phase = next
 	}
 
-	MemmoveSlice(Out, storagePtr[Phase][:], int(lut.OutputChannels))
+	copy(Out[:lut.OutputChannels], sc.LUT[phase][:])
 }
 
 // cmsPipelineAlloc allocates and initializes a new LUT pipeline
@@ -1086,6 +1080,43 @@ func cmsPipelineCat(mm mem.Manager, l1 *cmsPipeline, l2 *cmsPipeline) bool {
 	return BlessLUT(l1)
 }
 
+// cmsPipelineCatSteal concatenates l2 into l1 by *stealing* l2's stages,
+// instead of duplicating them. After this call, l2.Elements is nil and
+// its stages belong to l1.
+//
+// Only safe to use when l2 is going to be discarded immediately after.
+func cmsPipelineCatSteal(mm mem.Manager, l1, l2 *cmsPipeline) bool {
+	if l2 == nil || l2.Elements == nil {
+		// Nothing to append, just bless what we have.
+		return BlessLUT(l1)
+	}
+
+	// If l1 is still "empty", inherit channel counts from l2.
+	if l1.Elements == nil {
+		l1.InputChannels = l2.InputChannels
+		l1.OutputChannels = l2.OutputChannels
+	}
+
+	// If l1 has no elements yet, just take l2's list as-is.
+	if l1.Elements == nil {
+		l1.Elements = l2.Elements
+	} else {
+		// Find last stage of l1 and connect l2's list.
+		last := l1.Elements
+		for last.Next != nil {
+			last = last.Next
+		}
+		last.Next = l2.Elements
+	}
+
+	// We have stolen l2's stages; make sure l2's free function won't touch them.
+	l2.Elements = nil
+
+	// Recompute eval functions etc. (same as cmsPipelineCat)
+	return BlessLUT(l1)
+}
+
+
 // cmsPipelineSetSaveAs8bitsFlag sets the SaveAs8Bits flag and returns its previous value.
 func cmsPipelineSetSaveAs8bitsFlag(lut *cmsPipeline, on bool) bool {
 	previous := lut.SaveAs8Bits
@@ -1105,6 +1136,10 @@ func cmsPipelineGetPtrToLastStage(lut *cmsPipeline) *cmsStage {
 		prev = stage
 	}
 	return prev
+}
+func cmsPipelineSetFastOptimization(dst *cmsPipeline, eval Lerp16Fn, params *cmsInterpParams) {
+	dst.fastEval16 = eval
+	dst.fastParams = params
 }
 
 // This function may be used to set the optional evaluator and a block of private data. If private data is being used, an optional
@@ -1288,29 +1323,26 @@ func EvaluateCLUTfloat(mm mem.Manager, In []float32, Out []float32, mpe *cmsStag
 		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageClutData\n")
 		return
 	}
-	data.Params.Interpolation.LerpFloat(In, Out, data.Params)
+	data.Params.Interpolation.LerpFloat(mm, In, Out, data.Params)
 }
 
-func EvaluateCLUTfloatIn16(mm mem.Manager, In []float32, Out []float32, mpe *cmsStage) {
-	in16 := in16Pool.Get().(*[MAX_STAGE_CHANNELS]uint16)
-	out16 := out16Pool.Get().(*[MAX_STAGE_CHANNELS]uint16)
-	defer func() {
-		in16Pool.Put(in16)
-		out16Pool.Put(out16)
-	}()
+func EvaluateCLUTfloatIn16(mm mem.Manager, In, Out []float32, mpe *cmsStage) {
+	sc := mm.Scratch()
 
 	data, ok := mpe.Data.(*cmsStageCLutData)
 	if !ok {
-		cmsSignalError(nil, cmsERROR_UNDEFINED, "Interface data assertion error, not *cmsStageClutData\n")
+		cmsSignalError(nil, cmsERROR_UNDEFINED, "not *cmsStageCLutData")
 		return
 	}
-	if mpe.InputChannels > MAX_STAGE_CHANNELS || mpe.OutputChannels > MAX_STAGE_CHANNELS {
-		panic("Number of channels exceeds MAX_STAGE_CHANNELS")
+	inCh := int(mpe.InputChannels)
+	outCh := int(mpe.OutputChannels)
+	if inCh > MAX_STAGE_CHANNELS || outCh > MAX_STAGE_CHANNELS {
+		panic("channels exceed MAX_STAGE_CHANNELS")
 	}
 
-	FromFloatTo16(In, in16[:], mpe.InputChannels)
-	data.Params.Interpolation.Lerp16(in16[:], out16[:], data.Params)
-	From16ToFloat(out16[:], Out, mpe.OutputChannels)
+	FromFloatTo16(In[:inCh], sc.In16[:inCh], mpe.InputChannels)
+	data.Params.Interpolation.Lerp16(mm, sc.In16[:inCh], sc.Out16[:outCh], data.Params)
+	From16ToFloat(sc.Out16[:outCh], Out[:outCh], mpe.OutputChannels)
 }
 
 // CubeSize calculates the total number of nodes in a hypercube.

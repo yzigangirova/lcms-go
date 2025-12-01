@@ -8,7 +8,6 @@ import (
 
 	//"fmt"
 	"math"
-	"unsafe"
 
 	"github.com/yzigangirova/lcms-go/mem"
 )
@@ -357,7 +356,8 @@ func cmsReadAlignment(io *cmsIOHANDLER) bool {
 		return false
 	}
 
-	return io.Read((*cms_io_handler)(io), &buffer, uint32(unsafe.Sizeof(buffer)), 1) == 1
+	b := buffer[:bytesToNextAlignedPos]
+	return io.Read((*cms_io_handler)(io), b, uint32(bytesToNextAlignedPos), 1) == 1
 }
 
 func cmsWriteAlignment(io *cmsIOHANDLER) bool {

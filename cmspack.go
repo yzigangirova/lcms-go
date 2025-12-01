@@ -87,7 +87,7 @@ func getF64(accum []uint8, offset int) float64 {
 }
 
 // Unpacking routines (16 bits) ----------------------------------------------------------------------------------------
-func UnrollChunkyBytes(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func UnrollChunkyBytes(mm mem.Manager, info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollChunkyBytes")
 	nChan := T_CHANNELS(info.InputFormat)
 	doSwap := T_DOSWAP(info.InputFormat)
@@ -146,7 +146,7 @@ func UnrollChunkyBytes(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride u
 
 	return accum
 }
-func UnrollPlanarBytes(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func UnrollPlanarBytes(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollPlanarBytes")
 	nChan := T_CHANNELS(info.InputFormat)
 	doSwap := T_DOSWAP(info.InputFormat)
@@ -198,7 +198,7 @@ func UnrollPlanarBytes(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride u
 }
 
 // Unroll4Bytes processes 4 bytes in sequence.
-func Unroll4Bytes(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll4Bytes(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	wIn[0] = FROM_8_TO_16(accum[0]) // C
 	wIn[1] = FROM_8_TO_16(accum[1]) // M
 	wIn[2] = FROM_8_TO_16(accum[2]) // Y
@@ -207,7 +207,7 @@ func Unroll4Bytes(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32
 }
 
 // Unroll4BytesReverse processes 4 bytes with reverse flavor applied.
-func Unroll4BytesReverse(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll4BytesReverse(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	wIn[0] = FROM_8_TO_16(REVERSE_FLAVOR_8(accum[0])) // C
 	wIn[1] = FROM_8_TO_16(REVERSE_FLAVOR_8(accum[1])) // M
 	wIn[2] = FROM_8_TO_16(REVERSE_FLAVOR_8(accum[2])) // Y
@@ -216,7 +216,7 @@ func Unroll4BytesReverse(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride
 }
 
 // Unroll4BytesSwapFirst processes 4 bytes with the first byte swapped to the last position.
-func Unroll4BytesSwapFirst(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll4BytesSwapFirst(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	wIn[3] = FROM_8_TO_16(accum[0]) // K
 	wIn[0] = FROM_8_TO_16(accum[1]) // C
 	wIn[1] = FROM_8_TO_16(accum[2]) // M
@@ -225,7 +225,7 @@ func Unroll4BytesSwapFirst(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stri
 }
 
 // Unroll4BytesSwap processes 4 bytes in KYMC order.
-func Unroll4BytesSwap(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll4BytesSwap(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	wIn[3] = FROM_8_TO_16(accum[0]) // K
 	wIn[2] = FROM_8_TO_16(accum[1]) // Y
 	wIn[1] = FROM_8_TO_16(accum[2]) // M
@@ -234,7 +234,7 @@ func Unroll4BytesSwap(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride ui
 }
 
 // Unroll4BytesSwapSwapFirst processes 4 bytes in swapped order with the first byte swapped.
-func Unroll4BytesSwapSwapFirst(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll4BytesSwapSwapFirst(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	wIn[2] = FROM_8_TO_16(accum[0]) // K
 	wIn[1] = FROM_8_TO_16(accum[1]) // Y
 	wIn[0] = FROM_8_TO_16(accum[2]) // M
@@ -243,7 +243,7 @@ func Unroll4BytesSwapSwapFirst(info *cmsTRANSFORM, wIn []uint16, accum []uint8, 
 }
 
 // Unroll3Bytes processes 3 bytes in RGB order.
-func Unroll3Bytes(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll3Bytes(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	wIn[0] = FROM_8_TO_16(accum[0]) // R
 	wIn[1] = FROM_8_TO_16(accum[1]) // G
 	wIn[2] = FROM_8_TO_16(accum[2]) // B
@@ -251,7 +251,7 @@ func Unroll3Bytes(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32
 }
 
 // Unroll3BytesSkip1Swap processes 3 bytes, skips 1 (A), and swaps to BRG order.
-func Unroll3BytesSkip1Swap(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll3BytesSkip1Swap(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	accum = accum[1:]               // Skip A
 	wIn[2] = FROM_8_TO_16(accum[0]) // B
 	wIn[1] = FROM_8_TO_16(accum[1]) // G
@@ -260,7 +260,7 @@ func Unroll3BytesSkip1Swap(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stri
 }
 
 // Unroll3BytesSkip1SwapSwapFirst processes 3 bytes, skips 1 (A), and swaps to BRG order with the first byte swapped.
-func Unroll3BytesSkip1SwapSwapFirst(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll3BytesSkip1SwapSwapFirst(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	wIn[2] = FROM_8_TO_16(accum[0]) // B
 	wIn[1] = FROM_8_TO_16(accum[1]) // G
 	wIn[0] = FROM_8_TO_16(accum[2]) // R
@@ -269,7 +269,7 @@ func Unroll3BytesSkip1SwapSwapFirst(info *cmsTRANSFORM, wIn []uint16, accum []ui
 }
 
 // Unroll3BytesSkip1SwapFirst processes 3 bytes, skips 1 (A), and places R first.
-func Unroll3BytesSkip1SwapFirst(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll3BytesSkip1SwapFirst(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	accum = accum[1:]               // Skip A
 	wIn[0] = FROM_8_TO_16(accum[0]) // R
 	wIn[1] = FROM_8_TO_16(accum[1]) // G
@@ -278,7 +278,7 @@ func Unroll3BytesSkip1SwapFirst(info *cmsTRANSFORM, wIn []uint16, accum []uint8,
 }
 
 // Unroll3BytesSwap processes 3 bytes in BRG order.
-func Unroll3BytesSwap(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll3BytesSwap(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	wIn[2] = FROM_8_TO_16(accum[0]) // B
 	wIn[1] = FROM_8_TO_16(accum[1]) // G
 	wIn[0] = FROM_8_TO_16(accum[2]) // R
@@ -286,7 +286,7 @@ func Unroll3BytesSwap(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride ui
 }
 
 // UnrollLabV2_8 processes Lab values from 8-bit input and converts them to 16-bit.
-func UnrollLabV2_8(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func UnrollLabV2_8(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollLabV2_8")
 	wIn[0] = FromLabV2ToLabV4(FROM_8_TO_16(accum[0])) // L
 	wIn[1] = FromLabV2ToLabV4(FROM_8_TO_16(accum[1])) // a
@@ -295,7 +295,7 @@ func UnrollLabV2_8(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint3
 }
 
 // UnrollALabV2_8 processes ALab values from 8-bit input, skipping the alpha channel.
-func UnrollALabV2_8(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func UnrollALabV2_8(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollALabV2_8")
 	accum = accum[1:]                                 // Skip alpha
 	wIn[0] = FromLabV2ToLabV4(FROM_8_TO_16(accum[0])) // L
@@ -305,7 +305,7 @@ func UnrollALabV2_8(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint
 }
 
 // UnrollLabV2_16 processes Lab values from 16-bit input.
-func UnrollLabV2_16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func UnrollLabV2_16(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollLabV2_16")
 	wIn[0] = FromLabV2ToLabV4(uint16(accum[0]) | uint16(accum[1])<<8) // L
 	accum = accum[2:]
@@ -316,7 +316,7 @@ func UnrollLabV2_16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint
 }
 
 // Unroll2Bytes processes duplex values from 8-bit input.
-func Unroll2Bytes(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll2Bytes(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll2Bytes")
 	wIn[0] = FROM_8_TO_16(accum[0]) // ch1
 	wIn[1] = FROM_8_TO_16(accum[1]) // ch2
@@ -324,7 +324,7 @@ func Unroll2Bytes(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32
 }
 
 // Unroll1Byte duplicates L into RGB channels for monochrome data.
-func Unroll1Byte(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll1Byte(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll1Byte")
 	l := FROM_8_TO_16(accum[0])
 	wIn[0], wIn[1], wIn[2] = l, l, l // L
@@ -332,7 +332,7 @@ func Unroll1Byte(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32)
 }
 
 // Unroll1ByteSkip1 processes monochrome data, skipping one channel.
-func Unroll1ByteSkip1(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll1ByteSkip1(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll1ByteSkip1")
 	l := FROM_8_TO_16(accum[0])
 	wIn[0], wIn[1], wIn[2] = l, l, l // L
@@ -340,7 +340,7 @@ func Unroll1ByteSkip1(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride ui
 }
 
 // Unroll1ByteSkip2 processes monochrome data, skipping two channels.
-func Unroll1ByteSkip2(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll1ByteSkip2(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll1ByteSkip2")
 	l := FROM_8_TO_16(accum[0])
 	wIn[0], wIn[1], wIn[2] = l, l, l // L
@@ -348,14 +348,14 @@ func Unroll1ByteSkip2(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride ui
 }
 
 // Unroll1ByteReversed processes monochrome data with reversed flavor.
-func Unroll1ByteReversed(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll1ByteReversed(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll1ByteReversed")
 	l := REVERSE_FLAVOR_16(FROM_8_TO_16(accum[0]))
 	wIn[0], wIn[1], wIn[2] = l, l, l // L
 	return accum[1:]
 }
 
-func UnrollAnyWords(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func UnrollAnyWords(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollAnyWords")
 	nChan := T_CHANNELS(info.InputFormat)
 	swapEndian := T_ENDIAN16(info.InputFormat)
@@ -402,7 +402,7 @@ func UnrollAnyWords(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint
 	return accum
 }
 
-func UnrollAnyWordsPremul(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func UnrollAnyWordsPremul(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollAnyWordsPremul")
 	nChan := T_CHANNELS(info.InputFormat)
 	swapEndian := T_ENDIAN16(info.InputFormat)
@@ -451,7 +451,7 @@ func UnrollAnyWordsPremul(info *cmsTRANSFORM, wIn []uint16, accum []uint8, strid
 	return accum
 }
 
-func UnrollPlanarWords(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func UnrollPlanarWords(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollPlanarWords")
 	nChan := T_CHANNELS(info.InputFormat)
 	doSwap := T_DOSWAP(info.InputFormat)
@@ -485,7 +485,7 @@ func UnrollPlanarWords(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride u
 	return accum[:]
 }
 
-func UnrollPlanarWordsPremul(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func UnrollPlanarWordsPremul(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollPlanarWordsPremul")
 	nChan := T_CHANNELS(info.InputFormat)
 	doSwap := T_DOSWAP(info.InputFormat)
@@ -533,7 +533,7 @@ func UnrollPlanarWordsPremul(info *cmsTRANSFORM, wIn []uint16, accum []uint8, st
 
 	return accum[:]
 }
-func Unroll4Words(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll4Words(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll4Words")
 	wIn[0] = uint16(accum[0]) | (uint16(accum[1]) << 8) // C
 	accum = accum[2:]
@@ -546,7 +546,7 @@ func Unroll4Words(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32
 	return accum
 }
 
-func Unroll4WordsReverse(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll4WordsReverse(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll4WordsReverse")
 	wIn[0] = REVERSE_FLAVOR_16(uint16(accum[0]) | (uint16(accum[1]) << 8)) // C
 	accum = accum[2:]
@@ -559,7 +559,7 @@ func Unroll4WordsReverse(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride
 	return accum
 }
 
-func Unroll4WordsSwapFirst(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll4WordsSwapFirst(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll4WordsSwapFirst")
 	wIn[3] = uint16(accum[0]) | (uint16(accum[1]) << 8) // K
 	accum = accum[2:]
@@ -572,7 +572,7 @@ func Unroll4WordsSwapFirst(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stri
 	return accum
 }
 
-func Unroll4WordsSwap(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll4WordsSwap(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll4WordsSwap")
 	wIn[3] = uint16(accum[0]) | (uint16(accum[1]) << 8) // K
 	accum = accum[2:]
@@ -585,7 +585,7 @@ func Unroll4WordsSwap(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride ui
 	return accum
 }
 
-func Unroll4WordsSwapSwapFirst(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll4WordsSwapSwapFirst(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll4WordsSwapSwapFirst")
 	wIn[2] = uint16(accum[0]) | (uint16(accum[1]) << 8) // K
 	accum = accum[2:]
@@ -597,7 +597,7 @@ func Unroll4WordsSwapSwapFirst(info *cmsTRANSFORM, wIn []uint16, accum []uint8, 
 	accum = accum[2:]
 	return accum
 }
-func Unroll3Words(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll3Words(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll3Words")
 	wIn[0] = uint16(accum[0]) | (uint16(accum[1]) << 8) // C R
 	accum = accum[2:]
@@ -608,7 +608,7 @@ func Unroll3Words(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32
 	return accum
 }
 
-func Unroll3WordsSwap(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll3WordsSwap(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll3WordsSwap")
 	wIn[2] = uint16(accum[0]) | (uint16(accum[1]) << 8) // C R
 	accum = accum[2:]
@@ -619,7 +619,7 @@ func Unroll3WordsSwap(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride ui
 	return accum
 }
 
-func Unroll3WordsSkip1Swap(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll3WordsSkip1Swap(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll3WordsSkip1Swap")
 	accum = accum[2:]                                   // Skip A
 	wIn[2] = uint16(accum[0]) | (uint16(accum[1]) << 8) // R
@@ -631,7 +631,7 @@ func Unroll3WordsSkip1Swap(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stri
 	return accum
 }
 
-func Unroll3WordsSkip1SwapFirst(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll3WordsSkip1SwapFirst(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll3WordsSkip1SwapFirst")
 	accum = accum[2:]                                   // Skip A
 	wIn[0] = uint16(accum[0]) | (uint16(accum[1]) << 8) // R
@@ -643,7 +643,7 @@ func Unroll3WordsSkip1SwapFirst(info *cmsTRANSFORM, wIn []uint16, accum []uint8,
 	return accum
 }
 
-func Unroll1Word(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll1Word(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll1Words")
 	word := uint16(accum[0]) | (uint16(accum[1]) << 8)
 	wIn[0], wIn[1], wIn[2] = word, word, word // L duplicated to RGB
@@ -651,7 +651,7 @@ func Unroll1Word(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32)
 	return accum
 }
 
-func Unroll1WordReversed(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll1WordReversed(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll1WordsReversed")
 	word := REVERSE_FLAVOR_16(uint16(accum[0]) | (uint16(accum[1]) << 8))
 	wIn[0], wIn[1], wIn[2] = word, word, word // L reversed and duplicated to RGB
@@ -659,14 +659,14 @@ func Unroll1WordReversed(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride
 	return accum
 }
 
-func Unroll1WordSkip3(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll1WordSkip3(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll1WordSkip3")
 	word := uint16(accum[0]) | (uint16(accum[1]) << 8)
 	wIn[0], wIn[1], wIn[2] = word, word, word // L duplicated to RGB
 	accum = accum[8:]                         // Skip 3 words
 	return accum
 }
-func Unroll2Words(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func Unroll2Words(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("Unroll2Words")
 	wIn[0] = uint16(accum[0]) | (uint16(accum[1]) << 8) // ch1
 	accum = accum[2:]
@@ -675,7 +675,7 @@ func Unroll2Words(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32
 	return accum
 }
 
-func UnrollLabDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func UnrollLabDoubleTo16(mm mem.Manager, info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollLabDoubleTo16")
 	if T_PLANAR(info.InputFormat) != 0 {
 		if len(accum) < int(stride*2+1) {
@@ -709,7 +709,7 @@ func UnrollLabDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride
 	}
 }
 
-func UnrollLabFloatTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func UnrollLabFloatTo16(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollLabFloatTo16")
 	var Lab cmsCIELab
 
@@ -744,7 +744,7 @@ func UnrollLabFloatTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride 
 	}
 }
 
-func UnrollXYZDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func UnrollXYZDoubleTo16(mm mem.Manager, info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollXYZDoubleTo16")
 	var XYZ cmsCIEXYZ
 
@@ -776,7 +776,7 @@ func UnrollXYZDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride
 	}
 }
 
-func UnrollXYZFloatTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func UnrollXYZFloatTo16(mm mem.Manager, info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollXYZFloatTo16")
 	var XYZ cmsCIEXYZ
 
@@ -822,7 +822,7 @@ func IsInkSpace(Type uint32) bool {
 	}
 }
 
-func UnrollDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, Stride uint32) []uint8 {
+func UnrollDoubleTo16(mm mem.Manager, info *cmsTRANSFORM, wIn []uint16, accum []uint8, Stride uint32) []uint8 {
 	//fmt.Println("UnrollDoubleTo16")
 	nChan := T_CHANNELS(info.InputFormat)
 	DoSwap := T_DOSWAP(info.InputFormat)
@@ -877,7 +877,7 @@ func UnrollDoubleTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, Stride ui
 
 	return accum[(nChan+Extra)*8:]
 }
-func UnrollFloatTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, Stride uint32) []uint8 {
+func UnrollFloatTo16(mm mem.Manager, info *cmsTRANSFORM, wIn []uint16, accum []uint8, Stride uint32) []uint8 {
 	//fmt.Println("UnrollFloatTo16")
 	nChan := T_CHANNELS(info.InputFormat)
 	DoSwap := T_DOSWAP(info.InputFormat)
@@ -932,7 +932,7 @@ func UnrollFloatTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, Stride uin
 
 	return accum[(nChan+Extra)*4:]
 }
-func UnrollDouble1Chan(info *cmsTRANSFORM, wIn []uint16, accum []uint8, Stride uint32) []uint8 {
+func UnrollDouble1Chan(mm mem.Manager, info *cmsTRANSFORM, wIn []uint16, accum []uint8, Stride uint32) []uint8 {
 	//fmt.Println("UnrollDouble1Chan")
 	Inks := (*[1]float64)(unsafe.Pointer(&accum[0]))
 
@@ -955,7 +955,7 @@ func SwapFirstFloat(wIn []float32, nChan uint32) {
 	wIn[nChan-1] = tmp
 }
 
-func Unroll8ToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+func Unroll8ToFloat(mm mem.Manager, info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Unroll8ToFloat")
 	nChan := T_CHANNELS(info.InputFormat)
 	DoSwap := T_DOSWAP(info.InputFormat)
@@ -999,7 +999,7 @@ func Unroll8ToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uin
 
 	return accum[(nChan + Extra):]
 }
-func Unroll16ToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+func Unroll16ToFloat(mm mem.Manager, info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Unroll16ToFloat")
 	nChan := T_CHANNELS(info.InputFormat)
 	DoSwap := T_DOSWAP(info.InputFormat)
@@ -1043,7 +1043,7 @@ func Unroll16ToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride ui
 
 	return accum[(nChan+Extra)*2:]
 }
-func UnrollFloatsToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+func UnrollFloatsToFloat(mm mem.Manager, info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
 	//fmt.Println("UnrollFloatsToFloat")
 	nChan := T_CHANNELS(info.InputFormat)
 	DoSwap := T_DOSWAP(info.InputFormat)
@@ -1114,7 +1114,7 @@ func UnrollFloatsToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Strid
 	return accum[(nChan+Extra)*4:]
 }
 
-func UnrollDoublesToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+func UnrollDoublesToFloat(mm mem.Manager, info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
 	//fmt.Println("UnrollDoublesToFloat")
 	nChan := T_CHANNELS(info.InputFormat)
 	DoSwap := T_DOSWAP(info.InputFormat)
@@ -1184,7 +1184,7 @@ func UnrollDoublesToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stri
 	return accum[int((nChan+Extra)*8):]
 }
 
-func UnrollLabDoubleToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
+func UnrollLabDoubleToFloat(mm mem.Manager, info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollLabDoubleToFloat")
 
 	if T_PLANAR(info.InputFormat) != 0 {
@@ -1208,7 +1208,7 @@ func UnrollLabDoubleToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, st
 	return accum[int((3+extra)*8):]
 }
 
-func UnrollLabFloatToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
+func UnrollLabFloatToFloat(mm mem.Manager, info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollLabFloatToFloat")
 
 	if T_PLANAR(info.InputFormat) != 0 {
@@ -1229,7 +1229,7 @@ func UnrollLabFloatToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, str
 	return accum[int((3+extra)*4):]
 }
 
-func UnrollXYZDoubleToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
+func UnrollXYZDoubleToFloat(mm mem.Manager, info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollXYZDoubleToFloat")
 
 	if T_PLANAR(info.InputFormat) != 0 {
@@ -1250,7 +1250,7 @@ func UnrollXYZDoubleToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, st
 	return accum[int((3+extra)*8):]
 }
 
-func UnrollXYZFloatToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
+func UnrollXYZFloatToFloat(mm mem.Manager, info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollXYZFloatToFloat")
 
 	if T_PLANAR(info.InputFormat) != 0 {
@@ -1280,7 +1280,7 @@ func lab4toFloat(wIn []float32, lab4 [3]uint16) {
 	wIn[1] = (a + 128.0) / 255.0 // from -128..+127 to 0..1
 	wIn[2] = (b + 128.0) / 255.0
 }
-func UnrollLabV2_8ToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+func UnrollLabV2_8ToFloat(mm mem.Manager, info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
 	//fmt.Println("UnrollLabV2_8ToFloat")
 	lab4 := [3]uint16{
 		FromLabV2ToLabV4(FROM_8_TO_16(accum[0])),
@@ -1292,7 +1292,7 @@ func UnrollLabV2_8ToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stri
 
 	return accum[3:]
 }
-func UnrollALabV2_8ToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
+func UnrollALabV2_8ToFloat(mm mem.Manager, info *cmsTRANSFORM, wIn []float32, accum []uint8, Stride uint32) []uint8 {
 	//fmt.Println("UnrollALabV2_8ToFloat")
 	lab4 := [3]uint16{
 		FromLabV2ToLabV4(FROM_8_TO_16(accum[1])),
@@ -1305,7 +1305,7 @@ func UnrollALabV2_8ToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, Str
 	return accum[4:]
 }
 
-func UnrollLabV2_16ToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
+func UnrollLabV2_16ToFloat(mm mem.Manager, info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollLabV2_16ToFloat")
 	if len(accum) < 6 {
 		return accum // Not enough data
@@ -1323,7 +1323,7 @@ func UnrollLabV2_16ToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, str
 	return accum[6:]
 }
 
-func PackChunkyBytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func PackChunkyBytes(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("PackChunkyBytes")
 	nChan := T_CHANNELS(info.OutputFormat)
 	DoSwap := T_DOSWAP(info.OutputFormat)
@@ -1378,7 +1378,7 @@ func PackChunkyBytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride u
 
 	return output
 }
-func PackChunkyWords(info *cmsTRANSFORM, wOut []uint16, output []byte, stride uint32) []byte {
+func PackChunkyWords(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []byte, stride uint32) []byte {
 	//fmt.Println("PackChunkyWords")
 	nChan := T_CHANNELS(info.OutputFormat)
 	swapEndian := T_ENDIAN16(info.OutputFormat)
@@ -1458,7 +1458,7 @@ func PackChunkyWords(info *cmsTRANSFORM, wOut []uint16, output []byte, stride ui
 	return output[:len(packed)*2]
 }
 
-func PackPlanarBytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func PackPlanarBytes(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("PackPlanarBytes")
 	nChan := T_CHANNELS(info.OutputFormat)
 	DoSwap := T_DOSWAP(info.OutputFormat)
@@ -1503,7 +1503,7 @@ func PackPlanarBytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride u
 
 	return Init[1:]
 }
-func PackPlanarWords(info *cmsTRANSFORM, wOut []uint16, output []byte, stride uint32) []byte {
+func PackPlanarWords(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []byte, stride uint32) []byte {
 	//fmt.Println("PackPlanarWords")
 	nChan := T_CHANNELS(info.OutputFormat)
 	doSwap := T_DOSWAP(info.OutputFormat)
@@ -1563,7 +1563,7 @@ func PackPlanarWords(info *cmsTRANSFORM, wOut []uint16, output []byte, stride ui
 	return init[:bytesWritten]
 }
 
-func Pack6Bytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack6Bytes(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = FROM_16_TO_8(wOut[0])
 	output[1] = FROM_16_TO_8(wOut[1])
 	output[2] = FROM_16_TO_8(wOut[2])
@@ -1573,7 +1573,7 @@ func Pack6Bytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32
 
 	return output[6:]
 }
-func Pack6BytesSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack6BytesSwap(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = FROM_16_TO_8(wOut[5])
 	output[1] = FROM_16_TO_8(wOut[4])
 	output[2] = FROM_16_TO_8(wOut[3])
@@ -1584,7 +1584,7 @@ func Pack6BytesSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride ui
 	return output[6:]
 }
 
-func Pack6Words(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+func Pack6Words(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
 	//fmt.Println("Pack6Words")
 
 	if len(output) < 12 || len(wOut) < 6 {
@@ -1597,7 +1597,7 @@ func Pack6Words(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32
 
 	return output[12:]
 }
-func Pack6WordsSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+func Pack6WordsSwap(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
 	////fmt.Println("Pack6WordsSwap")
 	if len(output) < 12 || len(wOut) < 6 {
 		return output
@@ -1610,7 +1610,7 @@ func Pack6WordsSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride ui
 	return output[12:]
 }
 
-func Pack4Bytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack4Bytes(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	////fmt.Println("Pack4Bytes")
 	for i := 0; i < 4; i++ {
 		//fmt.Printf("wOut[i] %d\n", wOut[i])
@@ -1619,14 +1619,14 @@ func Pack4Bytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32
 	}
 	return output[4:]
 }
-func Pack4BytesReverse(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack4BytesReverse(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	////fmt.Println("Pack4BytesReverse")
 	for i := 0; i < 4; i++ {
 		output[i] = REVERSE_FLAVOR_8(FROM_16_TO_8(wOut[i]))
 	}
 	return output[4:]
 }
-func Pack4BytesSwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack4BytesSwapFirst(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = FROM_16_TO_8(wOut[3])
 	output[1] = FROM_16_TO_8(wOut[0])
 	output[2] = FROM_16_TO_8(wOut[1])
@@ -1634,13 +1634,13 @@ func Pack4BytesSwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stri
 
 	return output[4:]
 }
-func Pack4BytesSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack4BytesSwap(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	for i := 0; i < 4; i++ {
 		output[i] = FROM_16_TO_8(wOut[3-i])
 	}
 	return output[4:]
 }
-func Pack4BytesSwapSwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack4BytesSwapSwapFirst(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = FROM_16_TO_8(wOut[2])
 	output[1] = FROM_16_TO_8(wOut[1])
 	output[2] = FROM_16_TO_8(wOut[0])
@@ -1649,7 +1649,7 @@ func Pack4BytesSwapSwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, 
 	return output[4:]
 }
 
-func Pack4Words(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack4Words(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack4Words")
 	if len(output) < 8 || len(wOut) < 4 {
 		return output
@@ -1659,7 +1659,7 @@ func Pack4Words(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32
 	}
 	return output[8:]
 }
-func Pack4WordsReverse(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack4WordsReverse(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack4WordsReverse")
 	if len(output) < 8 || len(wOut) < 4 {
 		return output
@@ -1670,7 +1670,7 @@ func Pack4WordsReverse(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride
 	}
 	return output[8:]
 }
-func Pack4WordsSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack4WordsSwap(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack4WordsSwap")
 	if len(output) < 8 || len(wOut) < 4 {
 		return output
@@ -1680,7 +1680,7 @@ func Pack4WordsSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride ui
 	}
 	return output[8:]
 }
-func Pack4WordsBigEndian(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack4WordsBigEndian(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack4WordsBigEndian")
 	if len(output) < 8 || len(wOut) < 4 {
 		return output
@@ -1691,14 +1691,14 @@ func Pack4WordsBigEndian(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stri
 	return output[8:]
 }
 
-func PackLabV2_8(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func PackLabV2_8(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = FROM_16_TO_8(FromLabV4ToLabV2(wOut[0]))
 	output[1] = FROM_16_TO_8(FromLabV4ToLabV2(wOut[1]))
 	output[2] = FROM_16_TO_8(FromLabV4ToLabV2(wOut[2]))
 
 	return output[3:]
 }
-func PackALabV2_8(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func PackALabV2_8(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = 0 // Placeholder for alpha channel
 	output[1] = FROM_16_TO_8(FromLabV4ToLabV2(wOut[0]))
 	output[2] = FROM_16_TO_8(FromLabV4ToLabV2(wOut[1]))
@@ -1707,14 +1707,14 @@ func PackALabV2_8(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint
 	return output[4:]
 }
 
-func PackLabV2_16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func PackLabV2_16(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("PackLabV2_16")
 	binary.LittleEndian.PutUint16(output[0:2], FromLabV4ToLabV2(wOut[0]))
 	binary.LittleEndian.PutUint16(output[2:4], FromLabV4ToLabV2(wOut[1]))
 	binary.LittleEndian.PutUint16(output[4:6], FromLabV4ToLabV2(wOut[2]))
 	return output[6:]
 }
-func Pack3Bytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3Bytes(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack3Bytes")
 	/*	fmt.Println("wOut[0]", wOut[0])
 		fmt.Println("wOut[1]", wOut[1])
@@ -1728,7 +1728,7 @@ func Pack3Bytes(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32
 
 	return output[3:]
 }
-func Pack3BytesOptimized(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3BytesOptimized(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack3BytesOptimized")
 	output[0] = uint8(wOut[0] & 0xFF)
 	output[1] = uint8(wOut[1] & 0xFF)
@@ -1736,7 +1736,7 @@ func Pack3BytesOptimized(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stri
 
 	return output[3:]
 }
-func Pack3BytesSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3BytesSwap(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack3BytesSwap")
 	output[0] = FROM_16_TO_8(wOut[2])
 	output[1] = FROM_16_TO_8(wOut[1])
@@ -1744,7 +1744,7 @@ func Pack3BytesSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride ui
 
 	return output[3:]
 }
-func Pack3BytesSwapOptimized(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3BytesSwapOptimized(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack3BytesSwapOptimized")
 	output[0] = uint8(wOut[2] & 0xFF)
 	output[1] = uint8(wOut[1] & 0xFF)
@@ -1753,7 +1753,7 @@ func Pack3BytesSwapOptimized(info *cmsTRANSFORM, wOut []uint16, output []uint8, 
 	return output[3:]
 }
 
-func Pack3Words(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3Words(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack3Words")
 	if len(output) < 6 || len(wOut) < 3 {
 		return output
@@ -1763,7 +1763,7 @@ func Pack3Words(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32
 	binary.LittleEndian.PutUint16(output[4:], wOut[2])
 	return output[6:]
 }
-func Pack3WordsSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3WordsSwap(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack3WordsSwap")
 	if len(output) < 6 || len(wOut) < 3 {
 		return output
@@ -1773,7 +1773,7 @@ func Pack3WordsSwap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride ui
 	binary.LittleEndian.PutUint16(output[4:], wOut[0])
 	return output[6:]
 }
-func Pack3WordsBigEndian(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3WordsBigEndian(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack3WordsBigEndian")
 	if len(output) < 6 || len(wOut) < 3 {
 		return output
@@ -1784,7 +1784,7 @@ func Pack3WordsBigEndian(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stri
 	return output[6:]
 }
 
-func Pack3BytesAndSkip1(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3BytesAndSkip1(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = FROM_16_TO_8(wOut[0])
 	output[1] = FROM_16_TO_8(wOut[1])
 	output[2] = FROM_16_TO_8(wOut[2])
@@ -1792,7 +1792,7 @@ func Pack3BytesAndSkip1(info *cmsTRANSFORM, wOut []uint16, output []uint8, Strid
 
 	return output[4:]
 }
-func Pack3BytesAndSkip1Optimized(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3BytesAndSkip1Optimized(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = uint8(wOut[0] & 0xFF)
 	output[1] = uint8(wOut[1] & 0xFF)
 	output[2] = uint8(wOut[2] & 0xFF)
@@ -1800,7 +1800,7 @@ func Pack3BytesAndSkip1Optimized(info *cmsTRANSFORM, wOut []uint16, output []uin
 
 	return output[4:]
 }
-func Pack3BytesAndSkip1SwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3BytesAndSkip1SwapFirst(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = 0 // Skip first byte
 	output[1] = FROM_16_TO_8(wOut[0])
 	output[2] = FROM_16_TO_8(wOut[1])
@@ -1808,7 +1808,7 @@ func Pack3BytesAndSkip1SwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uin
 
 	return output[4:]
 }
-func Pack3BytesAndSkip1SwapFirstOptimized(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3BytesAndSkip1SwapFirstOptimized(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = 0 // Skip first byte
 	output[1] = uint8(wOut[0] & 0xFF)
 	output[2] = uint8(wOut[1] & 0xFF)
@@ -1816,7 +1816,7 @@ func Pack3BytesAndSkip1SwapFirstOptimized(info *cmsTRANSFORM, wOut []uint16, out
 
 	return output[4:]
 }
-func Pack3BytesAndSkip1Swap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3BytesAndSkip1Swap(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = 0 // Skip first byte
 	output[1] = FROM_16_TO_8(wOut[2])
 	output[2] = FROM_16_TO_8(wOut[1])
@@ -1824,7 +1824,7 @@ func Pack3BytesAndSkip1Swap(info *cmsTRANSFORM, wOut []uint16, output []uint8, S
 
 	return output[4:]
 }
-func Pack3BytesAndSkip1SwapOptimized(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3BytesAndSkip1SwapOptimized(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = 0 // Skip first byte
 	output[1] = uint8(wOut[2] & 0xFF)
 	output[2] = uint8(wOut[1] & 0xFF)
@@ -1833,7 +1833,7 @@ func Pack3BytesAndSkip1SwapOptimized(info *cmsTRANSFORM, wOut []uint16, output [
 	return output[4:]
 }
 
-func Pack3WordsAndSkip1(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3WordsAndSkip1(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack3WordsAndSkip1")
 	if len(output) < 8 || len(wOut) < 3 {
 		return output
@@ -1843,7 +1843,7 @@ func Pack3WordsAndSkip1(info *cmsTRANSFORM, wOut []uint16, output []uint8, Strid
 	binary.LittleEndian.PutUint16(output[4:], wOut[2])
 	return output[8:] // skip 1 word
 }
-func Pack3WordsAndSkip1Swap(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3WordsAndSkip1Swap(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack3WordsAndSkip1Swap")
 	if len(output) < 8 || len(wOut) < 3 {
 		return output
@@ -1855,7 +1855,7 @@ func Pack3WordsAndSkip1Swap(info *cmsTRANSFORM, wOut []uint16, output []uint8, S
 	binary.LittleEndian.PutUint16(output[4:], wOut[0])
 	return output[6:]
 }
-func Pack3WordsAndSkip1SwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3WordsAndSkip1SwapFirst(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack3WordsAndSkip1SwapFirst")
 	if len(output) < 8 || len(wOut) < 3 {
 		return output
@@ -1867,7 +1867,7 @@ func Pack3WordsAndSkip1SwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uin
 	binary.LittleEndian.PutUint16(output[4:], wOut[2])
 	return output[6:]
 }
-func Pack3WordsAndSkip1SwapSwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack3WordsAndSkip1SwapSwapFirst(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack3WordsAndSkip1SwapSwapFirst")
 	if len(output) < 8 || len(wOut) < 3 {
 		return output
@@ -1878,7 +1878,7 @@ func Pack3WordsAndSkip1SwapSwapFirst(info *cmsTRANSFORM, wOut []uint16, output [
 	return output[8:] // skip 1 word after writing
 }
 
-func Pack3BytesAndSkip1SwapSwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+func Pack3BytesAndSkip1SwapSwapFirst(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
 	output[0] = uint8(wOut[2] >> 8) // FROM_16_TO_8 in the C code.
 	output[1] = uint8(wOut[1] >> 8) // FROM_16_TO_8 in the C code.
 	output[2] = uint8(wOut[0] >> 8) // FROM_16_TO_8 in the C code.
@@ -1888,7 +1888,7 @@ func Pack3BytesAndSkip1SwapSwapFirst(info *cmsTRANSFORM, wOut []uint16, output [
 	// `info` and `stride` are unused, as in the C code.
 }
 
-func Pack3BytesAndSkip1SwapSwapFirstOptimized(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+func Pack3BytesAndSkip1SwapSwapFirstOptimized(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
 	output[0] = uint8(wOut[2] & 0xFF) // Extract the least significant byte.
 	output[1] = uint8(wOut[1] & 0xFF) // Extract the least significant byte.
 	output[2] = uint8(wOut[0] & 0xFF) // Extract the least significant byte.
@@ -1898,31 +1898,31 @@ func Pack3BytesAndSkip1SwapSwapFirstOptimized(info *cmsTRANSFORM, wOut []uint16,
 	// `info` and `stride` are unused, as in the C code.
 }
 
-func Pack1Byte(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack1Byte(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = FROM_16_TO_8(wOut[0])
 	return output[1:]
 }
-func Pack1ByteReversed(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack1ByteReversed(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = FROM_16_TO_8(REVERSE_FLAVOR_16(wOut[0]))
 	return output[1:]
 }
-func Pack1ByteSkip1(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack1ByteSkip1(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[0] = FROM_16_TO_8(wOut[0])
 	return output[2:] // Skip 1 byte
 }
-func Pack1ByteSkip1SwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack1ByteSkip1SwapFirst(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	output[1] = FROM_16_TO_8(wOut[0]) // Skip the first byte
 	return output[2:]
 }
 
-func Pack1Word(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack1Word(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	if len(output) < 2 || len(wOut) < 1 {
 		return output
 	}
 	binary.LittleEndian.PutUint16(output, wOut[0])
 	return output[2:]
 }
-func Pack1WordReversed(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack1WordReversed(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack1WordReversed")
 	if len(output) < 2 || len(wOut) < 1 {
 		return output
@@ -1931,7 +1931,7 @@ func Pack1WordReversed(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride
 	binary.LittleEndian.PutUint16(output, v)
 	return output[2:]
 }
-func Pack1WordBigEndian(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack1WordBigEndian(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack1WordBigEndian")
 	if len(output) < 2 || len(wOut) < 1 {
 		return output
@@ -1940,7 +1940,7 @@ func Pack1WordBigEndian(info *cmsTRANSFORM, wOut []uint16, output []uint8, Strid
 	binary.LittleEndian.PutUint16(output, v)
 	return output[2:]
 }
-func Pack1WordSkip1(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack1WordSkip1(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack1WordsSkip")
 	if len(output) < 4 || len(wOut) < 1 {
 		return output
@@ -1948,7 +1948,7 @@ func Pack1WordSkip1(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride ui
 	binary.LittleEndian.PutUint16(output, wOut[0])
 	return output[4:]
 }
-func Pack1WordSkip1SwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func Pack1WordSkip1SwapFirst(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("Pack1WordSkip1SwapFirst")
 	if len(output) < 4 || len(wOut) < 1 {
 		return output
@@ -1958,7 +1958,7 @@ func Pack1WordSkip1SwapFirst(info *cmsTRANSFORM, wOut []uint16, output []uint8, 
 	return output[2:]
 }
 
-func PackLabDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+func PackLabDoubleFrom16(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
 	//fmt.Println("PackLabDoubleFrom16")
 	var lab cmsCIELab
 	cmsLabEncoded2Float(&lab, &[3]uint16{wOut[0], wOut[1], wOut[2]})
@@ -1979,7 +1979,7 @@ func PackLabDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stri
 
 	return output[24+(T_EXTRA(info.OutputFormat)*8):]
 }
-func PackLabFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+func PackLabFloatFrom16(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
 	//fmt.Println("PackLabFloatFrom16")
 	var lab cmsCIELab
 	cmsLabEncoded2Float(&lab, &[3]uint16{wOut[0], wOut[1], wOut[2]})
@@ -2000,7 +2000,7 @@ func PackLabFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, strid
 
 	return output[12+(T_EXTRA(info.OutputFormat)*4):]
 }
-func PackXYZDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+func PackXYZDoubleFrom16(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
 	//fmt.Println("PackXYZDoubleFrom16")
 	var xyz cmsCIEXYZ
 	cmsXYZEncoded2Float(&xyz, &[3]uint16{wOut[0], wOut[1], wOut[2]})
@@ -2021,7 +2021,7 @@ func PackXYZDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stri
 
 	return output[24+(T_EXTRA(info.OutputFormat)*8):]
 }
-func PackXYZFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+func PackXYZFloatFrom16(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
 	//fmt.Println("PackXYZFloatFrom16")
 	var xyz cmsCIEXYZ
 	cmsXYZEncoded2Float(&xyz, &[3]uint16{wOut[0], wOut[1], wOut[2]})
@@ -2043,7 +2043,7 @@ func PackXYZFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, strid
 	return output[12+(T_EXTRA(info.OutputFormat)*4):]
 }
 
-func PackDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func PackDoubleFrom16(mm mem.Manager, info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("PackDoubleFrom16")
 	nChan := T_CHANNELS(info.OutputFormat)
 	DoSwap := T_DOSWAP(info.OutputFormat)
@@ -2068,7 +2068,7 @@ func PackDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride 
 	var v float64
 	size := 8 // float64 size in bytes
 
-	buf := mem.MakeSlice[float64](mem.Manager{}, (int(nChan)+int(Extra))*int(Stride)+1)
+	buf := mem.MakeSlice[float64](mm, (int(nChan)+int(Extra))*int(Stride)+1)
 
 	for i := uint32(0); i < nChan; i++ {
 		index := i
@@ -2103,7 +2103,7 @@ func PackDoubleFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride 
 	}
 	return output[(nChan+Extra)*uint32(size):]
 }
-func PackFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
+func PackFloatFrom16(mm mem.Manager,info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("PackFloatFrom16")
 	nChan := T_CHANNELS(info.OutputFormat)
 	DoSwap := T_DOSWAP(info.OutputFormat)
@@ -2128,7 +2128,7 @@ func PackFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride u
 	var v float64
 	size := 4 // float32 size in bytes
 
-	buf := mem.MakeSlice[float32](mem.Manager{}, (int(nChan)+int(Extra))*int(Stride)+1)
+	buf := mem.MakeSlice[float32](mm, (int(nChan)+int(Extra))*int(Stride)+1)
 
 	for i := uint32(0); i < nChan; i++ {
 		index := i
@@ -2163,7 +2163,7 @@ func PackFloatFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, Stride u
 	}
 	return output[(nChan+Extra)*uint32(size):]
 }
-func PackFloatsFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
+func PackFloatsFromFloat(mm mem.Manager,info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("PackFloatsFromFloat")
 	nChan := T_CHANNELS(info.OutputFormat)
 	DoSwap := T_DOSWAP(info.OutputFormat)
@@ -2186,7 +2186,7 @@ func PackFloatsFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Str
 	Stride /= PixelSize(info.OutputFormat)
 	size := 4 // float32
 
-	buf := mem.MakeSlice[float32](mem.Manager{}, (int(nChan)+int(Extra))*int(Stride)+1)
+	buf := mem.MakeSlice[float32](mm, (int(nChan)+int(Extra))*int(Stride)+1)
 
 	for i := uint32(0); i < nChan; i++ {
 		index := i
@@ -2221,7 +2221,7 @@ func PackFloatsFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Str
 	}
 	return output[(nChan+Extra)*uint32(size):]
 }
-func PackDoublesFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
+func PackDoublesFromFloat(mm mem.Manager,info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("PackDoublesFromFloat")
 	nChan := T_CHANNELS(info.OutputFormat)
 	DoSwap := T_DOSWAP(info.OutputFormat)
@@ -2244,7 +2244,7 @@ func PackDoublesFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, St
 	Stride /= PixelSize(info.OutputFormat)
 	size := 8 // float64
 
-	buf := mem.MakeSlice[float64](mem.Manager{}, (int(nChan)+int(Extra))*int(Stride)+1)
+	buf := mem.MakeSlice[float64](mm, (int(nChan)+int(Extra))*int(Stride)+1)
 
 	for i := uint32(0); i < nChan; i++ {
 		index := i
@@ -2279,7 +2279,7 @@ func PackDoublesFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, St
 	}
 	return output[(nChan+Extra)*uint32(size):]
 }
-func PackLabFloatFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
+func PackLabFloatFromFloat(mm mem.Manager,info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("PackLabFloatFromFloat")
 	L := wOut[0] * 100.0
 	a := wOut[1]*255.0 - 128.0
@@ -2289,7 +2289,7 @@ func PackLabFloatFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, S
 	if T_PLANAR(info.OutputFormat) != 0 {
 		Stride /= PixelSize(info.OutputFormat)
 
-		labBuf := mem.MakeSlice[float32](mem.Manager{}, int(3*Stride))
+		labBuf := mem.MakeSlice[float32](mm, int(3*Stride))
 		labBuf[0] = L
 		labBuf[Stride] = a
 		labBuf[Stride*2] = b
@@ -2304,7 +2304,7 @@ func PackLabFloatFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, S
 		return output[12+(T_EXTRA(info.OutputFormat)*4):]
 	}
 }
-func PackLabDoubleFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
+func PackLabDoubleFromFloat(mm mem.Manager,info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("PackLabDoubleFromFloat")
 	L := float64(wOut[0] * 100.0)
 	a := float64(wOut[1]*255.0 - 128.0)
@@ -2317,7 +2317,7 @@ func PackLabDoubleFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, 
 	if T_PLANAR(info.OutputFormat) != 0 {
 		Stride /= PixelSize(info.OutputFormat)
 
-		labBuf := mem.MakeSlice[float64](mem.Manager{}, int(3*Stride))
+		labBuf := mem.MakeSlice[float64](mm, int(3*Stride))
 		labBuf[0] = L
 		labBuf[Stride] = a
 		labBuf[Stride*2] = b
@@ -2332,7 +2332,7 @@ func PackLabDoubleFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, 
 		return output[24+(T_EXTRA(info.OutputFormat)*8):]
 	}
 }
-func PackXYZFloatFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
+func PackXYZFloatFromFloat(mm mem.Manager,info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("PackXZYFloatFromFloat")
 	X := float64(wOut[0]) * MAX_ENCODEABLE_XYZ
 	Y := float64(wOut[1]) * MAX_ENCODEABLE_XYZ
@@ -2342,7 +2342,7 @@ func PackXYZFloatFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, S
 	if T_PLANAR(info.OutputFormat) != 0 {
 		Stride /= PixelSize(info.OutputFormat)
 
-		xyzBuf := mem.MakeSlice[float32](mem.Manager{}, int(3*Stride))
+		xyzBuf := mem.MakeSlice[float32](mm, int(3*Stride))
 		xyzBuf[0] = float32(X)
 		xyzBuf[Stride] = float32(Y)
 		xyzBuf[Stride*2] = float32(Z)
@@ -2357,7 +2357,7 @@ func PackXYZFloatFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, S
 		return output[12+(T_EXTRA(info.OutputFormat)*4):]
 	}
 }
-func PackXYZDoubleFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
+func PackXYZDoubleFromFloat(mm mem.Manager,info *cmsTRANSFORM, wOut []float32, output []uint8, Stride uint32) []uint8 {
 	//fmt.Println("PackXYZDoubleFromFloat")
 	X := float64(wOut[0]) * MAX_ENCODEABLE_XYZ
 	Y := float64(wOut[1]) * MAX_ENCODEABLE_XYZ
@@ -2367,7 +2367,7 @@ func PackXYZDoubleFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, 
 	if T_PLANAR(info.OutputFormat) != 0 {
 		Stride /= PixelSize(info.OutputFormat)
 
-		xyzBuf := mem.MakeSlice[float64](mem.Manager{}, int(3*Stride))
+		xyzBuf := mem.MakeSlice[float64](mm, int(3*Stride))
 		xyzBuf[0] = X
 		xyzBuf[Stride] = Y
 		xyzBuf[Stride*2] = Z
@@ -2383,7 +2383,7 @@ func PackXYZDoubleFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, 
 	}
 }
 
-func UnrollHalfTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
+func UnrollHalfTo16(mm mem.Manager,info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollHalfTo16")
 	nChan := T_CHANNELS(info.InputFormat)
 	doSwap := T_DOSWAP(info.InputFormat)
@@ -2400,7 +2400,7 @@ func UnrollHalfTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint
 
 	stride /= PixelSize(info.InputFormat)
 	buf := bytes.NewReader(accum)
-	accumWords := mem.MakeSlice[uint16](mem.Manager{}, len(accum)/2)
+	accumWords := mem.MakeSlice[uint16](mm, len(accum)/2)
 	binary.Read(buf, binary.LittleEndian, &accumWords)
 
 	if extraFirst != 0 {
@@ -2436,7 +2436,7 @@ func UnrollHalfTo16(info *cmsTRANSFORM, wIn []uint16, accum []uint8, stride uint
 		return accum[(nChan+extra)*2:]
 	}
 }
-func UnrollHalfToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
+func UnrollHalfToFloat(mm mem.Manager,info *cmsTRANSFORM, wIn []float32, accum []uint8, stride uint32) []uint8 {
 	//fmt.Println("UnrollHalfToFloat")
 	nChan := T_CHANNELS(info.InputFormat)
 	doSwap := T_DOSWAP(info.InputFormat)
@@ -2453,7 +2453,7 @@ func UnrollHalfToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride 
 
 	stride /= PixelSize(info.InputFormat)
 	buf := bytes.NewReader(accum)
-	accumWords := mem.MakeSlice[uint16](mem.Manager{}, len(accum)/2)
+	accumWords := mem.MakeSlice[uint16](mm, len(accum)/2)
 	binary.Read(buf, binary.LittleEndian, &accumWords)
 
 	if extraFirst != 0 {
@@ -2490,7 +2490,7 @@ func UnrollHalfToFloat(info *cmsTRANSFORM, wIn []float32, accum []uint8, stride 
 		return accum[(nChan+extra)*2:]
 	}
 }
-func PackHalfFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
+func PackHalfFrom16(mm mem.Manager,info *cmsTRANSFORM, wOut []uint16, output []uint8, stride uint32) []uint8 {
 	//fmt.Println("PackHalfFrom16")
 	nChan := T_CHANNELS(info.OutputFormat)
 	doSwap := T_DOSWAP(info.OutputFormat)
@@ -2505,7 +2505,7 @@ func PackHalfFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride ui
 	}
 	stride /= PixelSize(info.OutputFormat)
 
-	outputWords := mem.MakeSlice[uint16](mem.Manager{}, int((nChan+extra)*uint32(stride)+1))
+	outputWords := mem.MakeSlice[uint16](mm, int((nChan+extra)*uint32(stride)+1))
 	var start uint32
 	if extraFirst != 0 {
 		start = extra
@@ -2537,7 +2537,7 @@ func PackHalfFrom16(info *cmsTRANSFORM, wOut []uint16, output []uint8, stride ui
 	binary.Write(&buf, binary.LittleEndian, outputWords)
 	return buf.Bytes()
 }
-func PackHalfFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, stride uint32) []uint8 {
+func PackHalfFromFloat(mm mem.Manager,info *cmsTRANSFORM, wOut []float32, output []uint8, stride uint32) []uint8 {
 	//fmt.Println("PackHalfFromFloat")
 	nChan := T_CHANNELS(info.OutputFormat)
 	doSwap := T_DOSWAP(info.OutputFormat)
@@ -2552,7 +2552,7 @@ func PackHalfFromFloat(info *cmsTRANSFORM, wOut []float32, output []uint8, strid
 	}
 	stride /= PixelSize(info.OutputFormat)
 
-	outputWords := mem.MakeSlice[uint16](mem.Manager{}, int((nChan+extra)*uint32(stride)+1))
+	outputWords := mem.MakeSlice[uint16](mm, int((nChan+extra)*uint32(stride)+1))
 	var start uint32
 	if extraFirst != 0 {
 		start = extra

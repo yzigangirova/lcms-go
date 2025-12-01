@@ -89,7 +89,7 @@ func ComputeKToLstar(mm mem.Manager, ContextID CmsContext,
 	}
 
 	out := cmsBuildTabulatedToneCurveFloat(mm, ContextID, nPoints, SampledPoints)
-	cmsDeleteTransform(mm, xform)
+	CmsDeleteTransform(xform)
 	return out
 }
 
@@ -245,7 +245,7 @@ func cmsDetectTAC(mm mem.Manager, hProfile CmsHPROFILE) float64 {
 		bp.MaxTAC = 0
 	}
 
-	cmsDeleteTransform(mm, bp.hRoundTrip)
+	CmsDeleteTransform(bp.hRoundTrip)
 
 	// Results in %
 	return float64(bp.MaxTAC)
@@ -455,13 +455,13 @@ func cmsCreateGamutCheckPipeline(mm mem.Manager,
 
 	// Free resources
 	if Chain.hInput != nil {
-		cmsDeleteTransform(mm, Chain.hInput)
+		CmsDeleteTransform(Chain.hInput)
 	}
 	if Chain.hForward != nil {
-		cmsDeleteTransform(mm, Chain.hForward)
+		CmsDeleteTransform(Chain.hForward)
 	}
 	if Chain.hReverse != nil {
-		cmsDeleteTransform(mm, Chain.hReverse)
+		CmsDeleteTransform(Chain.hReverse)
 	}
 
 	// Return the computed LUT
@@ -523,7 +523,7 @@ func cmsDetectRGBProfileGamma(mm mem.Manager, hProfile CmsHPROFILE, threshold fl
 	CmsDoTransform(mm, xform, rgb[:], XYZ[:], 256)
 
 	// Clean up the transform and XYZ profile
-	cmsDeleteTransform(mm, xform)
+	CmsDeleteTransform(xform)
 	CmsCloseProfile(mm, hXYZ)
 
 	// Normalize the Y component
@@ -538,7 +538,7 @@ func cmsDetectRGBProfileGamma(mm mem.Manager, hProfile CmsHPROFILE, threshold fl
 	}
 
 	// Estimate gamma
-	gamma = cmsEstimateGamma(YCurve, threshold)
+	gamma = cmsEstimateGamma(mm, YCurve, threshold)
 
 	// Free the tone curve and return the gamma value
 	CmsFreeToneCurve(YCurve)

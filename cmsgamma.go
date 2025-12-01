@@ -2,7 +2,6 @@ package golcms
 
 import (
 	"math"
-	"sync"
 
 	//"unsafe"
 
@@ -132,9 +131,9 @@ func GetParametricCurveByType(ContextID CmsContext, Type int, index *int) *cmsPa
 	return nil
 }
 
-func allocateEvals(contextID CmsContext, nSegments uint32) []cmsParametricCurveEvaluator {
+func allocateEvals(mm mem.Manager, contextID CmsContext, nSegments uint32) []cmsParametricCurveEvaluator {
 	// Allocate a slice of cmsParametricCurveEvaluator with length nSegments
-	evals := mem.MakeSlice[cmsParametricCurveEvaluator](mem.Manager{}, int(nSegments))
+	evals := mem.MakeSlice[cmsParametricCurveEvaluator](mm, int(nSegments))
 	return evals
 }
 
@@ -166,7 +165,7 @@ func AllocateToneCurveStruct(mm mem.Manager,
 	// Allocate segments and evaluators if needed
 	if nSegments > 0 {
 		p.Segments = mem.MakeSlice[cmsCurveSegment](mm, int(nSegments))
-		p.Evals = allocateEvals(ContextID, nSegments)
+		p.Evals = allocateEvals(mm, ContextID, nSegments)
 		if p.Evals == nil {
 			goto Error
 		}
@@ -315,8 +314,8 @@ func cmsJoinToneCurve(mm mem.Manager, ContextID CmsContext, X, Y *CmsToneCurve, 
 	// Iterate and compute
 	for i := uint32(0); i < nResultingPoints; i++ {
 		t := float32(i) / float32(nResultingPoints-1)
-		x := cmsEvalToneCurveFloat(X, t)
-		Res[i] = cmsEvalToneCurveFloat(Yreversed, x)
+		x := cmsEvalToneCurveFloat(mm, X, t)
+		Res[i] = cmsEvalToneCurveFloat(mm, Yreversed, x)
 	}
 
 	// Build the output tone curve
@@ -400,8 +399,33 @@ func cmsGetToneCurveParametricType(t *CmsToneCurve) int32 {
 	return t.Segments[0].Type
 }
 
+func cmsEvalToneCurve16(mm mem.Manager, curve *CmsToneCurve, v uint16) uint16 {
+	cmsAssert(curve != nil, "curve is nil")
+	//if f := curve.InterpParams.Interpolation.Lerp16Scalar; f != nil {
+	//return f(v, curve.InterpParams)
+	//}
+	sc := mm.Scratch()
+	sc.ToneInU16[0] = v
+	sc.ToneOutU16[0] = 0
+	curve.InterpParams.Interpolation.Lerp16(mm, sc.ToneInU16[:], sc.ToneOutU16[:], curve.InterpParams)
+	return sc.ToneOutU16[0]
+}
+
+// cmsEvalToneCurve16 evaluates a tone curve at a specific point (16-bit input and output).
+/*func cmsEvalToneCurve16(mm mem.Manager, curve *CmsToneCurve, v uint16) uint16 {
+	cmsAssert(curve != nil, "curve is nil")
+	lerp := curve.InterpParams.Interpolation.Lerp16 // capture method value once
+
+	var in1 [1]uint16
+	var out1 [1]uint16
+	in1[0] = v
+
+	lerp(mm, in1[:], out1[:], curve.InterpParams)
+	return out1[0]
+}*/
+
 // cmsEvalToneCurveFloat evaluates a tone curve at a specific point (float input and output).
-func cmsEvalToneCurveFloat(curve *CmsToneCurve, v float32) float32 {
+func cmsEvalToneCurveFloat(mm mem.Manager, curve *CmsToneCurve, v float32) float32 {
 	//fmt.Printf("cmsEvalToneCurveFloat %.7f\n", v)
 
 	cmsAssert(curve != nil, "ToneCurve cannot be nil")
@@ -409,49 +433,18 @@ func cmsEvalToneCurveFloat(curve *CmsToneCurve, v float32) float32 {
 	// Check if this is a limited-precision tone curve with 16-bit table.
 	if curve.nSegments == 0 {
 		inValue := uint16(cmsQuickSaturateWord(float64(v) * 65535.0))
-		outValue := cmsEvalToneCurve16(curve, inValue)
+		outValue := cmsEvalToneCurve16(mm, curve, inValue)
 		//fmt.Printf("returning out value %.7f\n", float32(outValue)/65535.0)
 		return float32(outValue) / 65535.0
 	}
 
 	//fmt.Printf("returning out value %.7f\n", float32(EvalSegmentedFn(curve, float64(v))))
-	return float32(EvalSegmentedFn(curve, float64(v)))
-}
-
-/*func cmsEvalToneCurve16(Curve *CmsToneCurve, v uint16) uint16 {
-	var out uint16
-
-	cmsAssert(Curve != nil, "curve is nil")
-	outSlice := []uint16{0} // Create a slice with an actual mutable value
-	Curve.InterpParams.Interpolation.Lerp16([]uint16{v}, outSlice, Curve.InterpParams)
-	out = outSlice[0] // Extract the modified value from the slice
-	return out
-}*/
-
-var toneBufferPool = sync.Pool{
-	New: func() any {
-		return &[2]uint16{0, 0} // [0]=input, [1]=output
-	},
-}
-
-// cmsEvalToneCurve16 evaluates a tone curve at a specific point (16-bit input and output).
-func cmsEvalToneCurve16(Curve *CmsToneCurve, v uint16) uint16 {
-	cmsAssert(Curve != nil, "curve is nil")
-
-	buf := toneBufferPool.Get().(*[2]uint16)
-	defer toneBufferPool.Put(buf)
-
-	buf[0] = v
-	buf[1] = 0
-
-	Curve.InterpParams.Interpolation.Lerp16(buf[0:1], buf[1:2], Curve.InterpParams)
-
-	return buf[1]
+	return float32(EvalSegmentedFn(mm, curve, float64(v)))
 }
 
 // cmsEstimateGamma estimates the gamma value of a tone curve using a least squares fitting method.
 // It calculates the best-fitting gamma by minimizing the sum of squared residuals.
-func cmsEstimateGamma(t *CmsToneCurve, Precision float64) float64 {
+func cmsEstimateGamma(mm mem.Manager, t *CmsToneCurve, Precision float64) float64 {
 	var gamma, sum, sum2, n, x, y, Std float64
 	var i uint32
 
@@ -462,7 +455,7 @@ func cmsEstimateGamma(t *CmsToneCurve, Precision float64) float64 {
 	// Exclude endpoints to avoid linear artifacts
 	for i = 1; i < (MAX_NODES_IN_CURVE - 1); i++ {
 		x = float64(i) / float64(MAX_NODES_IN_CURVE-1)
-		y = float64(cmsEvalToneCurveFloat(t, float32(x)))
+		y = float64(cmsEvalToneCurveFloat(mm, t, float32(x)))
 
 		// Avoid analyzing lower part (below 7%) to prevent artifacts due to linear ramps
 		if y > 0. && y < 1. && x > 0.07 {
@@ -538,7 +531,7 @@ func cmsBuildSegmentedToneCurve(mm mem.Manager, ContextID CmsContext, nSegments 
 
 	for i := uint32(0); i < nGridPoints; i++ {
 		R := float64(i) / float64(nGridPoints-1)
-		Val := EvalSegmentedFn(g, R)
+		Val := EvalSegmentedFn(mm, g, R)
 		// Round and saturate
 		g.Table16[i] = cmsQuickSaturateWord(Val * 65535.0)
 	}
@@ -789,7 +782,7 @@ func DefaultEvalParametricFn(Type int32, Params []float64, R float64) float64 {
 // Returns math.Inf(-1) if no valid segment is found.
 // If the function type is 0, performs interpolation on the table.
 
-func EvalSegmentedFn(g *CmsToneCurve, R float64) float64 {
+func EvalSegmentedFn(mm mem.Manager, g *CmsToneCurve, R float64) float64 {
 	//fmt.Println("start EvalSegmentedFn")
 	var Out float64
 	var Out32 float32
@@ -814,7 +807,7 @@ func EvalSegmentedFn(g *CmsToneCurve, R float64) float64 {
 
 				// Perform interpolation
 				out32Slice := []float32{Out32}
-				g.SegInterp[i].Interpolation.LerpFloat([]float32{R1}, out32Slice, g.SegInterp[i])
+				g.SegInterp[i].Interpolation.LerpFloat(mm, []float32{R1}, out32Slice, g.SegInterp[i])
 				Out = float64(out32Slice[0])
 			} else {
 				// Evaluate the function for the segment

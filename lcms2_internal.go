@@ -1,10 +1,9 @@
 package golcms
 
 import (
-	"arena"
+	//"arena"
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -206,7 +205,7 @@ func cmsLeaveCriticalSectionPrimitive(m *cmsMutex) int {
 
 // cmsTRANSFORM represents the translation of the C struct cmsTRANSFORM in Go.
 type cmsTRANSFORM struct {
-	Ar              *arena.Arena
+	mem_manager     mem.Manager
 	InputFormat     uint32                 // uint32
 	OutputFormat    uint32                 // uint32
 	Xform           cmsTransform2Fn        // cmsTransform2Fn (function pointer, requires C interop)
@@ -236,13 +235,6 @@ type cmsTRANSFORM struct {
 	WorkerFlags     uint32                 // uint32
 }
 
-func (tr *cmsTRANSFORM) DestroyArena() {
-	fmt.Println("DestroyArena")
-	if tr.Ar != nil {
-		fmt.Println("freeing arena")
-		tr.Ar.Free()
-	}
-}
 
 // Named color list internal representation
 type cmsNAMEDCOLOR struct {
@@ -300,6 +292,8 @@ type cmsStage struct {
 type cmsStageEvalFn func(mm mem.Manager, In []float32, Out []float32, mpe *cmsStage)
 type cmsStageDupElemFn func(mm mem.Manager, mpe *cmsStage) any
 type cmsStageFreeElemFn func(mm mem.Manager, mpe *cmsStage)
+type Lerp16Fn = func(mm mem.Manager, in, out []uint16, p *cmsInterpParams)
+
 
 type cmsPipeline struct {
 	Elements       *cmsStage // Points to elements chain
@@ -308,6 +302,9 @@ type cmsPipeline struct {
 
 	// Data & evaluators
 	Data any
+   // NEW: fast typed path (no interface{}, no closure)
+    fastEval16  Lerp16Fn
+    fastParams  *cmsInterpParams
 
 	Eval16Fn    cmsPipelineEval16Fn
 	EvalFloatFn cmsPipelineEvalFloatFn
