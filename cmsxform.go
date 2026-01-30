@@ -2,7 +2,7 @@ package golcms
 
 import (
 	//"errors"
-	"runtime"
+	"reflect"
 	"sync"
 	"unsafe"
 
@@ -212,102 +212,152 @@ func PixelSize(Format uint32) uint32 {
 // BytesPerPixel returns how many bytes a single *pixel* occupies
 // in memory for a given LCMS packed format. This is different from
 // PixelSize, which is bytes per *sample* (channel).
-func BytesPerPixel(fmt uint32) int {
-    // Number of color channels (RGB=3, CMYK=4, Gray=1, etc.)
-    nChan := int(T_CHANNELS(fmt))
-    if nChan == 0 {
-        nChan = 1
-    }
+func BytesPerPixel(fmt uint32) uint32 {
+	// Number of color channels (RGB=3, CMYK=4, Gray=1, etc.)
+	nChan := int(T_CHANNELS(fmt))
+	if nChan == 0 {
+		nChan = 1
+	}
 
-    // Extra channels (alpha, spot, etc.)
-    extra := int(T_EXTRA(fmt))
-    total := nChan + extra
-    if total <= 0 {
-        total = 1
-    }
+	// Extra channels (alpha, spot, etc.)
+	extra := int(T_EXTRA(fmt))
+	total := nChan + extra
+	if total <= 0 {
+		total = 1
+	}
 
-    // Bytes per sample (per channel)
-    b := int(T_BYTES(fmt))
-    switch b {
-    case 0:
-        // LCMS uses 0 for "double" formats – 8 bytes per sample.
-        // (You can refine this later if you support floats explicitly.)
-        b = 8
-    }
+	// Bytes per sample (per channel)
+	b := T_BYTES(fmt)
+	switch b {
+	case 0:
+		// LCMS uses 0 for "double" formats – 8 bytes per sample.
+		// (You can refine this later if you support floats explicitly.)
+		b = 8
+	}
 
-    // For now, only support chunky formats in the parallel path.
-    if T_PLANAR(fmt) != 0 {
-        panic("BytesPerPixel: planar formats not supported in parallel path yet")
-    }
+	// For now, only support chunky formats in the parallel path.
+	if T_PLANAR(fmt) != 0 {
+		panic("BytesPerPixel: planar formats not supported in parallel path yet")
+	}
 
-    return total * b
+	return uint32(total) * b
 }
 
 func CmsDoTransformParallel(
-	_ mem.Manager,
+	mm mem.Manager,
 	xform CmsHTRANSFORM,
-	in, out []byte,
-	pixels int,
+	inBuf, outBuf []byte,
+	pixelCount uint32,
 	workers int,
 ) {
-	if pixels <= 0 {
-		return
+	p, ok := xform.(*cmsTRANSFORM)
+	if !ok || p == nil {
+		panic("CmsDoTransformParallelBytes: Transform is not *cmsTRANSFORM")
 	}
-	if workers <= 0 {
-		workers = runtime.NumCPU()
+	if workers > int(pixelCount) {
+		workers = int(pixelCount)
 	}
-	if workers <= 1 || pixels == 1 {
-		// Fallback: single-threaded batch
-		// Use a local Manager for scratch:
-		m := mem.NewManager()
-		defer m.FreeAll()
-		CmsDoTransform(m, xform, in, out, uint32(pixels))
-		return
+	if workers < 1 {
+		panic("CmsDoTransformParallelBytes: invalid workers")
 	}
-	if workers > pixels {
-		workers = pixels
+	inPixSize := BytesPerPixel(p.InputFormat)
+	outPixSize := BytesPerPixel(p.OutputFormat)
+
+	if inPixSize <= 0 || outPixSize <= 0 {
+		panic("CmsDoTransformParallelBytes: invalid pixel size (InputFormat/OutputFormat)")
 	}
 
-	p := xform.(*cmsTRANSFORM)
-	inPixSize := int(BytesPerPixel(p.InputFormat))
-	outPixSize := int(BytesPerPixel(p.OutputFormat))
-
-	if len(in) < pixels*inPixSize || len(out) < pixels*outPixSize {
-		panic("CmsDoTransformParallel: buffers too small for given pixel count")
-	}
-
-	chunk := (pixels + workers - 1) / workers
+	chunk := (int(pixelCount) + workers - 1) / workers
 
 	var wg sync.WaitGroup
-	wg.Add(workers)
 
 	for w := 0; w < workers; w++ {
 		startPx := w * chunk
-		if startPx >= pixels {
-			wg.Done()
-			continue
+		if startPx >= int(pixelCount) {
+			break
 		}
 		endPx := startPx + chunk
-		if endPx > pixels {
-			endPx = pixels
+		if endPx > int(pixelCount) {
+			endPx = int(pixelCount)
 		}
 		nPix := endPx - startPx
+		if nPix <= 0 {
+			continue
+		}
 
-		inOff := startPx * inPixSize
-		outOff := startPx * outPixSize
+		inOff := startPx * int(inPixSize)
+		outOff := startPx * int(outPixSize)
 
-		inSlice := in[inOff : inOff+nPix*inPixSize]
-		outSlice := out[outOff : outOff+nPix*outPixSize]
+		inSlice := inBuf[inOff : inOff+nPix*int(inPixSize)]
+		outSlice := outBuf[outOff : outOff+nPix*int(outPixSize)]
 
-		wgPtr := &wg
+		wg.Add(1)
 		go func(inBuf, outBuf []byte, n uint32) {
-			defer wgPtr.Done()
+			defer wg.Done()
+			// Each goroutine gets its own Scratch via a frame:
+			mm.WithFrame(func(child mem.Manager) {
+				CmsDoTransform(child, xform, inBuf, outBuf, n)
+			})
+		}(inSlice, outSlice, uint32(nPix))
+	}
 
-			// Each goroutine gets its *own* Manager with its own Scratch.
-			m := mem.NewManager()
-			defer m.FreeAll()
+	wg.Wait()
+}
 
-			CmsDoTransform(m, xform, inBuf, outBuf, n)
+func CmsDoTransformParallelBytes(mm mem.Manager,
+	xform CmsHTRANSFORM,
+	inBuf, outBuf []byte,
+	pixelCount uint32,
+	workers int,
+) {
+
+	p, ok := xform.(*cmsTRANSFORM)
+	if !ok || p == nil {
+		panic("CmsDoTransformParallelBytes: Transform is not *cmsTRANSFORM")
+	}
+	if workers > int(pixelCount) {
+		workers = int(pixelCount)
+	}
+	if workers < 1 {
+		panic("CmsDoTransformParallelBytes: invalid workers")
+	}
+	inPixSize := BytesPerPixel(p.InputFormat)
+	outPixSize := BytesPerPixel(p.OutputFormat)
+	if inPixSize <= 0 || outPixSize <= 0 {
+		panic("CmsDoTransformParallelBytes: invalid pixel size (InputFormat/OutputFormat)")
+	}
+
+	chunk := (int(pixelCount) + workers - 1) / workers // ceiling division
+
+	var wg sync.WaitGroup
+
+	for w := 0; w < workers; w++ {
+		startPx := w * chunk
+		if startPx >= int(pixelCount) {
+			break
+		}
+		endPx := startPx + chunk
+		if endPx > int(pixelCount) {
+			endPx = int(pixelCount)
+		}
+		nPix := endPx - startPx
+		if nPix <= 0 {
+			continue
+		}
+
+		inOff := startPx * int(inPixSize)
+		outOff := startPx * int(outPixSize)
+
+		inSlice := inBuf[inOff : inOff+nPix*int(inPixSize)]
+		outSlice := outBuf[outOff : outOff+nPix*int(outPixSize)]
+
+		wg.Add(1)
+		go func(inChunk, outChunk []byte, n uint32) {
+			defer wg.Done()
+			// Each goroutine uses a child Manager (frame) derived from mm.
+			mm.WithFrame(func(child mem.Manager) {
+				CmsDoTransformBytes(child, xform, inChunk, outChunk, n)
+			})
 		}(inSlice, outSlice, uint32(nPix))
 	}
 
@@ -339,6 +389,74 @@ func CmsDoTransform(mm mem.Manager, Transform CmsHTRANSFORM, InputBuffer, Output
 	// Perform the transformation
 	p.Xform(mm, p, InputBuffer, OutputBuffer, Size, 1, &stride)
 
+	//fmt.Println("end CmsDoTransform")
+
+}
+
+var (
+	fnFloatXFORMPtr              = reflect.ValueOf(FloatXFORM).Pointer()
+	fnCachedXFORMPtr             = reflect.ValueOf(CachedXFORM).Pointer()
+	fnCachedXFORMGamutCheckPtr   = reflect.ValueOf(CachedXFORMGamutCheck).Pointer()
+	fnPrecalculatedXFORMPtr      = reflect.ValueOf(PrecalculatedXFORM).Pointer()
+	fnPrecalculatedXFORMGamutPtr = reflect.ValueOf(PrecalculatedXFORMGamutCheck).Pointer()
+	fnNullXFORMPtr               = reflect.ValueOf(NullXFORM).Pointer()
+	fnNullFloatXFORMPtr          = reflect.ValueOf(NullFloatXFORM).Pointer()
+)
+
+// cmsDoTransform applies a transformation to the input buffer and writes the result to the output buffer.
+func CmsDoTransformBytes(mm mem.Manager, Transform CmsHTRANSFORM, InputBuffer, OutputBuffer []byte, Size uint32) {
+
+	//fmt.Printf("start CmsDoTransform\n")
+
+	p, ok := Transform.(*cmsTRANSFORM) // Cast the generic Transform to the specific type cmsTRANSFORM
+	if !ok {
+		panic("p is not of the type cmsTransform")
+	}
+	//the main memory manager is stored inside cmsTransform.  The separate memory manager for each
+	//cmsDoTransform may be provided for concurrent transforming
+	if mm.IsZero() {
+		mm = p.mem_manager
+	}
+	var stride cmsStride
+
+	// Initialize stride parameters
+	stride.BytesPerLineIn = 0 // Not used
+	stride.BytesPerLineOut = 0
+	stride.BytesPerPlaneIn = Size * PixelSize(p.InputFormat)
+	stride.BytesPerPlaneOut = Size * PixelSize(p.OutputFormat)
+
+	// Perform the transformation
+	// Identify which XFORM is assigned via its code pointer
+	fnPtr := reflect.ValueOf(p.Xform).Pointer()
+
+	switch fnPtr {
+	case fnFloatXFORMPtr:
+		FloatXFORMBytes(mm, p, InputBuffer, OutputBuffer, Size, 1, &stride)
+
+	case fnCachedXFORMPtr:
+		CachedXFORMBytes(mm, p, InputBuffer, OutputBuffer, Size, 1, &stride)
+
+	case fnCachedXFORMGamutCheckPtr:
+		CachedXFORMGamutCheckBytes(mm, p, InputBuffer, OutputBuffer, Size, 1, &stride)
+
+	case fnPrecalculatedXFORMPtr:
+		PrecalculatedXFORMBytes(mm, p, InputBuffer, OutputBuffer, Size, 1, &stride)
+
+	case fnPrecalculatedXFORMGamutPtr:
+		PrecalculatedXFORMGamutCheckBytes(mm, p, InputBuffer, OutputBuffer, Size, 1, &stride)
+
+	case fnNullXFORMPtr:
+		NullXFORMBytes(mm, p, InputBuffer, OutputBuffer, Size, 1, &stride)
+
+	case fnNullFloatXFORMPtr:
+		NullFloatXFORMBytes(mm, p, InputBuffer, OutputBuffer, Size, 1, &stride)
+
+	default:
+		// Plugin or unknown transform: fall back to the generic any-based XFORM
+		//p.Xform(mm, p, InputBuffer, OutputBuffer, Size, 1, &stride)
+		panic("no byteform function variant for xform")
+
+	}
 	//fmt.Println("end CmsDoTransform")
 
 }
@@ -532,6 +650,84 @@ func FloatXFORM(mm mem.Manager,
 
 }
 
+func FloatXFORMBytes(mm mem.Manager,
+	p *cmsTRANSFORM,
+	in, out []byte,
+	PixelsPerLine, LineCount uint32,
+	Stride *cmsStride,
+) {
+
+	//fmt.Println("FloatXFORM")
+
+	sc := mm.Scratch()
+	fIn := sc.WInF32
+	fOut := sc.WOutF32
+	var OutOfGamut float32
+	var strideIn, strideOut uint32
+	var inBytes, outBytes []byte
+	// Type assertion for input and output
+	var accum, output []byte
+
+	inBytes = in
+	outBytes = out
+
+	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
+
+	strideIn, strideOut = 0, 0
+
+	for i := uint32(0); i < LineCount; i++ {
+		//  Use slices with offsets instead of unsafe
+		accum = inBytes[strideIn:]
+		output = outBytes[strideOut:]
+
+		for j := uint32(0); j < PixelsPerLine; j++ {
+			//  Process input correctly using slice indexing
+			accum = p.FromInputFloat(mm, p, fIn[:], accum, Stride.BytesPerPlaneIn)
+
+			//  Replace unsafe pointer arithmetic for `OutOfGamut`
+			outOfGamutSlice := []float32{OutOfGamut}
+
+			if p.GamutCheck != nil {
+				//  Use slice indexing instead of pointer casting
+				cmsPipelineEvalFloat(mm, fIn[:], outOfGamutSlice, p.GamutCheck)
+
+				if outOfGamutSlice[0] > 0.0 {
+					//  Mark all output channels as out of gamut efficiently
+					for c := range fOut {
+						fOut[c] = -1.0
+					}
+				} else {
+					//  Evaluate the pipeline normally
+					cmsPipelineEvalFloat(mm, fIn[:], fOut[:], p.Lut)
+				}
+			} else {
+				//  No gamut check; evaluate pipeline directly
+				/*fmt.Printf("fIn[0] %.7f\n", fIn[0])
+				fmt.Printf("fIn[1] %.7f\n", fIn[1])
+				fmt.Printf("fIn[2] %.7f\n", fIn[2])*/
+
+				cmsPipelineEvalFloat(mm, fIn[:], fOut[:], p.Lut)
+			}
+
+			//  Process output correctly
+			//	fmt.Println("fOut[:] ", fOut[:])
+
+			output = p.ToOutputFloat(mm, p, fOut[:], output, Stride.BytesPerPlaneOut)
+		}
+
+		//  Update strides correctly
+		strideIn += Stride.BytesPerLineIn
+		strideOut += Stride.BytesPerLineOut
+
+		//fmt.Println("outBytes ", outBytes)
+		/*fmt.Printf("outBytes[0] %d\n", outBytes[0])
+		fmt.Printf("outBytes[1] %d\n", outBytes[1])
+		fmt.Printf("outBytes[2] %d\n", outBytes[2])*/
+	}
+	//copy(out, outBytes)
+
+}
+
 func NullFloatXFORM(mm mem.Manager,
 	p *cmsTRANSFORM,
 	in, out any,
@@ -624,6 +820,47 @@ func NullFloatXFORM(mm mem.Manager,
 	}
 }
 
+func NullFloatXFORMBytes(mm mem.Manager,
+	p *cmsTRANSFORM,
+	in, out []byte,
+	PixelsPerLine, LineCount uint32,
+	Stride *cmsStride,
+) {
+	//fmt.Println("NullXFORM ")
+
+	sc := mm.Scratch()
+	fIn := sc.WInF32
+	var strideIn, strideOut uint32
+	var accum, output []byte
+	var inBytes, outBytes []byte
+	// Type assertion for input and output
+	// Type assertion and conversion for input
+	inBytes = in
+
+	outBytes = out
+
+	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
+
+	strideIn, strideOut = 0, 0
+
+	for i := uint32(0); i < LineCount; i++ {
+		//  Use slices with offsets instead of unsafe
+		accum = inBytes[strideIn:]
+		output = outBytes[strideOut:]
+
+		for j := uint32(0); j < PixelsPerLine; j++ {
+			//  Process input correctly using slice indexing
+			accum = p.FromInputFloat(mm, p, fIn[:], accum, Stride.BytesPerPlaneIn)
+			output = p.ToOutputFloat(mm, p, fIn[:], output, Stride.BytesPerPlaneOut)
+		}
+
+		//  Update strides correctly
+		strideIn += Stride.BytesPerLineIn
+		strideOut += Stride.BytesPerLineOut
+	}
+	//	copy(out, outBytes)
+}
+
 func NullXFORM(mm mem.Manager,
 	p *cmsTRANSFORM,
 	in, out any,
@@ -712,6 +949,46 @@ func NullXFORM(mm mem.Manager,
 	default:
 		panic("Unsupported type in NullXFORM output finalization")
 	}
+}
+
+func NullXFORMBytes(mm mem.Manager,
+	p *cmsTRANSFORM,
+	in, out []byte,
+	PixelsPerLine, LineCount uint32,
+	Stride *cmsStride,
+) {
+	sc := mm.Scratch()
+	wIn := sc.WInU16
+	var strideIn, strideOut uint32
+	var accum, output []byte
+	var inBytes, outBytes []byte
+	// Type assertion for input and output
+	// Type assertion and conversion for input
+	inBytes = in
+
+	outBytes = out
+
+	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
+
+	strideIn, strideOut = 0, 0
+
+	for i := uint32(0); i < LineCount; i++ {
+		//  Use slices with offsets instead of unsafe
+		accum = inBytes[strideIn:]
+		output = outBytes[strideOut:]
+
+		for j := uint32(0); j < PixelsPerLine; j++ {
+			//  Process input correctly using slice indexing
+			accum = p.FromInput(mm, p, wIn[:], accum, Stride.BytesPerPlaneIn)
+			output = p.ToOutput(mm, p, wIn[:], output, Stride.BytesPerPlaneOut)
+		}
+
+		//  Update strides correctly
+		strideIn += Stride.BytesPerLineIn
+		strideOut += Stride.BytesPerLineOut
+	}
+	//copy(v, outBytes)
+
 }
 
 // eval16 dispatches to the zero-closure fast path when available.
@@ -817,6 +1094,51 @@ func PrecalculatedXFORM(mm mem.Manager,
 	default:
 		panic("Unsupported type in PrecalculatedXFORMoutput finalization")
 	}
+}
+
+func PrecalculatedXFORMBytes(mm mem.Manager,
+	p *cmsTRANSFORM,
+	in, out []byte,
+	PixelsPerLine, LineCount uint32,
+	Stride *cmsStride,
+) {
+	//("PrecalculatedXFORM ")
+
+	sc := mm.Scratch()
+	wIn := sc.WInU16
+	wOut := sc.WOutU16
+	var strideIn, strideOut uint32
+	var accum, output []byte
+	var inBytes, outBytes []byte
+	inBytes = in
+
+	outBytes = out
+
+	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
+
+	strideIn, strideOut = 0, 0
+
+	for i := uint32(0); i < LineCount; i++ {
+		// Accumulator slices for this line
+		accum = inBytes[strideIn:]
+		output = outBytes[strideOut:]
+
+		for j := uint32(0); j < PixelsPerLine; j++ {
+			// Process input
+			accum = p.FromInput(mm, p, wIn[:], accum, Stride.BytesPerPlaneIn)
+			// Evaluate LUT
+			eval16(mm, p.Lut, wIn[:], wOut[:])
+
+			// Process output
+			output = p.ToOutput(mm, p, wOut[:], output, Stride.BytesPerPlaneOut)
+		}
+
+		// Update strides
+		strideIn += Stride.BytesPerLineIn
+		strideOut += Stride.BytesPerLineOut
+	}
+	//	copy(v, outBytes)
+
 }
 
 // Auxiliary: Handle precalculated gamut check. The retrieval of context may be alittle bit slow, but this function is not critical.
@@ -931,6 +1253,48 @@ func PrecalculatedXFORMGamutCheck(mm mem.Manager,
 	default:
 		panic("Unsupported type in PrecalculatedXFORMGamutCheck output finalization")
 	}
+}
+
+func PrecalculatedXFORMGamutCheckBytes(mm mem.Manager,
+	p *cmsTRANSFORM,
+	in, out []byte,
+	PixelsPerLine, LineCount uint32,
+	Stride *cmsStride,
+) {
+	//fmt.Println("PrecalculatedXFORMGamutCheck ")
+
+	sc := mm.Scratch()
+	wIn := sc.WInU16
+	wOut := sc.WOutU16
+	var strideIn, strideOut uint32
+	var accum, output []byte
+	var inBytes, outBytes []byte
+	inBytes = in
+
+	outBytes = out
+
+	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
+
+	strideIn, strideOut = 0, 0
+
+	for i := uint32(0); i < LineCount; i++ {
+		// Use slices with offsets instead of large allocation
+		accum = inBytes[strideIn:]
+		output = outBytes[strideOut:]
+
+		for j := uint32(0); j < PixelsPerLine; j++ {
+			// Correctly advance accum and output slices
+			accum = p.FromInput(mm, p, wIn[:], accum, Stride.BytesPerPlaneIn)
+			TransformOnePixelWithGamutCheck(mm, p, wIn[:], wOut[:])
+			output = p.ToOutput(mm, p, wOut[:], output, Stride.BytesPerPlaneOut)
+		}
+
+		// Update strides correctly
+		strideIn += Stride.BytesPerLineIn
+		strideOut += Stride.BytesPerLineOut
+	}
+	//	copy(v, outBytes)
+
 }
 func CachedXFORM(
 	mm mem.Manager,
@@ -1073,6 +1437,104 @@ func CachedXFORM(
 		v.L, v.a, v.b = lab.L, lab.a, lab.b
 	}
 }
+func CachedXFORMBytes(
+	mm mem.Manager,
+	p *cmsTRANSFORM,
+	in, out []byte,
+	PixelsPerLine, LineCount uint32,
+	Stride *cmsStride,
+) {
+	// --- Scratch once
+	sc := mm.Scratch()
+	wIn := sc.WInU16 // len >= cmsMAXCHANNELS (16)
+	wOut := sc.WOutU16
+
+	// --- Derive channel counts (input side is what the cache compares)
+	nIn := channelsOf(p.EntryColorSpace) // Gray=1, RGB/Lab/XYZ=3, CMYK=4, else clamp [1..16]
+	if nIn < 1 {
+		nIn = 1
+	} else if nIn > 16 {
+		nIn = 16
+	}
+	var inBytes, outBytes []byte
+	inBytes = in
+	outBytes = out
+
+	// --- Handle extra channels once
+	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
+
+	// --- Local copies / aliases to avoid repeated indirections
+	cache := p.Cache
+	fromIn := p.FromInput
+	toOut := p.ToOutput
+	eval := eval16
+
+	// Fast local stride vars (bytes)
+	var strideIn, strideOut uint32
+	if Stride != nil {
+		strideIn = Stride.BytesPerLineIn
+		strideOut = Stride.BytesPerLineOut
+	} else {
+		// Fallback: planes are contiguous if Stride is nil (rare path)
+		strideIn, strideOut = 0, 0
+	}
+
+	// --- Inner loops: tight, branch-light
+	for i := uint32(0); i < LineCount; i++ {
+
+		// Slice windows for this scanline
+		accum := inBytes[strideIn:]
+		output := outBytes[strideOut:]
+
+		for j := uint32(0); j < PixelsPerLine; j++ {
+			// Decode one pixel to wIn; accum advanced by BytesPerPlaneIn
+			accum = fromIn(mm, p, wIn[:], accum, Stride.BytesPerPlaneIn)
+
+			// Check cache on the *actual* channels only
+			hit := true
+			// manual unroll gives a tiny edge for RGB/CMYK common cases
+			switch nIn {
+			case 1:
+				hit = (wIn[0] == cache.CacheIn[0])
+			case 3:
+				hit = (wIn[0] == cache.CacheIn[0] &&
+					wIn[1] == cache.CacheIn[1] &&
+					wIn[2] == cache.CacheIn[2])
+			case 4:
+				hit = (wIn[0] == cache.CacheIn[0] &&
+					wIn[1] == cache.CacheIn[1] &&
+					wIn[2] == cache.CacheIn[2] &&
+					wIn[3] == cache.CacheIn[3])
+			default:
+				for k := 0; k < nIn; k++ {
+					if wIn[k] != cache.CacheIn[k] {
+						hit = false
+						break
+					}
+				}
+			}
+
+			if hit {
+				// Copy cached output (only relevant lanes; copying 16 is cheap and branchless)
+				copy(wOut[:], cache.CacheOut[:])
+			} else {
+				// Evaluate LUT
+				eval(mm, p.Lut, wIn[:], wOut[:])
+				// Update cache for next pixel
+				copy(cache.CacheIn[:nIn], wIn[:nIn])
+				copy(cache.CacheOut[:], wOut[:])
+			}
+
+			// Encode one pixel from wOut; output advanced by BytesPerPlaneOut
+			output = toOut(mm, p, wOut[:], output, Stride.BytesPerPlaneOut)
+		}
+
+		// Advance to next line
+		strideIn += Stride.BytesPerLineIn
+		strideOut += Stride.BytesPerLineOut
+	}
+
+}
 
 // channelsOf returns the canonical number of components for a color space signature.
 func channelsOf(sig cmsColorSpaceSignature) int {
@@ -1202,6 +1664,70 @@ func CachedXFORMGamutCheck(mm mem.Manager,
 	default:
 		panic("Unsupported type in CachedXFORMGamutCheck output finalization")
 	}
+}
+
+func CachedXFORMGamutCheckBytes(mm mem.Manager,
+	p *cmsTRANSFORM,
+	in, out []byte,
+	PixelsPerLine, LineCount uint32,
+	Stride *cmsStride,
+) {
+	//fmt.Println("CachedXFORMGamutCheck ")
+
+	sc := mm.Scratch()
+	wIn := sc.WInU16
+	wOut := sc.WOutU16
+	var strideIn, strideOut uint32
+	var cache cmsCACHE
+	var accum, output []byte
+	var inBytes, outBytes []byte
+	inBytes = in
+
+	outBytes = out
+
+	cmsHandleExtraChannels(p, in, out, PixelsPerLine, LineCount, Stride)
+
+	// Copy cache
+	cache = p.Cache
+
+	strideIn, strideOut = 0, 0
+
+	for i := uint32(0); i < LineCount; i++ {
+		//  Use slices with offsets instead of unsafe
+		accum = inBytes[strideIn:]
+		output = outBytes[strideOut:]
+
+		for j := uint32(0); j < PixelsPerLine; j++ {
+			//  Correctly advance accum using slices
+			accum = p.FromInput(mm, p, wIn[:], accum, Stride.BytesPerPlaneIn)
+
+			//  Use cache for performance optimization
+			// Use cache to avoid redundant calculations
+			equal := true
+			for i := 0; i < 16; i++ {
+				if wIn[i] != cache.CacheIn[i] {
+					equal = false
+					break
+				}
+			}
+			if equal {
+				copy(wOut[:], cache.CacheOut[:])
+			} else {
+				TransformOnePixelWithGamutCheck(mm, p, wIn[:], wOut[:])
+				copy(cache.CacheIn[:], wIn[:])
+				copy(cache.CacheOut[:], wOut[:])
+			}
+
+			//  Correctly advance output using slices
+			output = p.ToOutput(mm, p, wOut[:], output, Stride.BytesPerPlaneOut)
+		}
+
+		//  Update strides correctly
+		strideIn += Stride.BytesPerLineIn
+		strideOut += Stride.BytesPerLineOut
+	}
+	//		copy(v, outBytes)
+
 }
 
 // Transform plug-ins ----------------------------------------------------------------------------------------------------

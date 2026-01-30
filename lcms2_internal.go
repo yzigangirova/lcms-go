@@ -208,7 +208,7 @@ type cmsTRANSFORM struct {
 	mem_manager     mem.Manager
 	InputFormat     uint32                 // uint32
 	OutputFormat    uint32                 // uint32
-	Xform           cmsTransform2Fn        // cmsTransform2Fn (function pointer, requires C interop)
+	Xform           cmsTransform2Fn        // cmsTransform2Fn 
 	FromInput       cmsFormatter16         // cmsFormatter16
 	ToOutput        cmsFormatter16         // cmsFormatter16
 	FromInputFloat  cmsFormatterFloat      // cmsFormatterFloat
@@ -228,9 +228,9 @@ type cmsTRANSFORM struct {
 	RenderingIntent uint32                 // uint32
 	ContextID       CmsContext             // CmsContext
 	UserData        any                    // void*
-	FreeUserData    cmsFreeUserDataFn      // cmsFreeUserDataFn (function pointer, requires C interop)
-	OldXform        cmsTransformFn         // cmsTransformFn (function pointer, requires C interop)
-	Worker          cmsTransform2Fn        // cmsTransform2Fn (function pointer, requires C interop)
+	FreeUserData    cmsFreeUserDataFn      // cmsFreeUserDataFn 
+	OldXform        cmsTransformFn         // cmsTransformFn 
+	Worker          cmsTransform2Fn        // cmsTransform2Fn 
 	MaxWorkers      int32                  // int32
 	WorkerFlags     uint32                 // uint32
 }
